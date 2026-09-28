@@ -34,6 +34,23 @@ jobs:
             echo "Add the 'clinician-reviewed' label after the clinical reviewer signs off (see CLAUDE.md)."; exit 1
           fi
 
+  mobile:
+    # Flutter app: static analysis plus widget tests (layout on small and standard phones,
+    # safety behaviours, and safety wording kept in step with the backend and crisis register).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
   evals:
     # Manual: runs the real model. Needs repo secrets. Upload the grading pack for the clinician.
     if: github.event_name == 'workflow_dispatch'

@@ -1,0 +1,66 @@
+name: your_counselor
+description: "Your Counselor: clinical reference and documentation aid for registered mental-health professionals."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.4
+
+dependencies:
+  cupertino_icons: ^1.0.9
+  flutter:
+    sdk: flutter
+  go_router: ^18.0.1
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/brand/
+
+  # Fonts are bundled so the app never fetches them at runtime.
+  # Static weights were cut from the Google Fonts variable files (OFL, see assets/fonts/OFL.txt).
+  fonts:
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Nunito-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Nunito-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Nunito-Black.ttf
+          weight: 900
+    - family: NunitoSans
+      fonts:
+        - asset: assets/fonts/NunitoSans-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NunitoSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NunitoSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/NunitoSans-Bold.ttf
+          weight: 700
+
+# `dart run flutter_launcher_icons` regenerates the Android and iOS launcher icons.
+# iOS icons must be opaque, so the mark sits on white.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/brand/app_icon.png
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/brand/app_icon_foreground.png
+  web:
+    generate: true
+    image_path: assets/brand/app_icon.png
+    background_color: "#FFFFFF"
+    theme_color: "#6A11BA"
