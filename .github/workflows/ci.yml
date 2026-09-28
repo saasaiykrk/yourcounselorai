@@ -1,0 +1,54 @@
+name: ci
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, labeled, unlabeled]
+  push:
+    branches: [main]
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      # Core safety tests are stdlib-only on purpose: they run even if dependencies break.
+      - run: python -m unittest discover -s tests -t . -v
+      - name: Skill integrity
+        run: |
+          python - <<'PY'
+          from app.prompt import load_skill
+          s = load_skill("skill/clinical-assist")
+          assert s.version != "unknown", "skill version missing from SKILL.md"
+          print("skill", s.version, "prompt_hash", s.prompt_hash, "cards", len(s.card_index))
+          PY
+      - name: Guard — safety files changed need the clinician-review label
+        if: github.event_name == 'pull_request'
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(skill/|app/inspector.py|app/deid.py|app/prompt.py|fixtures/)' || true)
+          if [ -n "$CHANGED" ] && [[ "$LABELS" != *"clinician-reviewed"* ]]; then
+            echo "Safety-relevant files changed:"; echo "$CHANGED"
+            echo "Add the 'clinician-reviewed' label after the clinical reviewer signs off (see CLAUDE.md)."; exit 1
+          fi
+
+  evals:
+    # Manual: runs the real model. Needs repo secrets. Upload the grading pack for the clinician.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python -m evals.run_evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
+          WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
+          ICD_RELEASE: ${{ vars.ICD_RELEASE }}
+      - uses: actions/upload-artifact@v4
+        with: { name: eval-grading-pack, path: evals/out }

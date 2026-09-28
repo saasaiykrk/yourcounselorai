@@ -1,0 +1,225 @@
+"""
+HTTP API (FastAPI). The phone talks ONLY to this service; it never holds the
+Anthropic key, the WHO key or the database key.
+
+Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
+  GET  /healthz
+  GET  /v1/me                         → profile, level, verification status
+  POST /v1/profile                    → role + registration number at signup (status=pending)
+  POST /v1/consult                    → one consult turn (inspected before return)
+  POST /v1/incidents                  → "Report a problem" button on any reply
+  PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
+
+DEV_MODE=1 (local only): accepts a `Bearer dev-L1|dev-L2|dev-L3` token as a
+verified clinician, skips the database, exposes POST /dev/clean, and — if no
+ANTHROPIC_API_KEY is set — uses a fake model that returns a canned reply. This
+is what harness/server.js talks to. DEV_MODE must be OFF in production.
+
+⚠ Scaffold: the HTTP + DB layers are written to spec but not executed in the
+build environment. The pure-Python core (cleaner, inspector, prompt, pipeline)
+is unit-tested (tests/).
+"""
+from __future__ import annotations
+
+import pathlib
+import uuid
+from datetime import date
+
+from fastapi import Depends, FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
+
+from . import db, deid
+from .icd import ICD11Client, OfflineICD11
+from .pipeline import DeidRejected, ModelResult, Pipeline
+from .prompt import load_skill
+from .secrets import load_config
+
+CFG = load_config()
+SKILL = load_skill(CFG.skill_dir)
+ICD = (ICD11Client(CFG.who_icd_client_id, CFG.who_icd_client_secret, CFG.icd_release)
+       if CFG.icd_enabled else OfflineICD11())
+
+
+class _FakeDevModel:
+    """Keyless local model: returns a canned, inspector-valid Mode A reply so the
+    plumbing can be tested end to end without an Anthropic key."""
+    model = "dev-fake"
+
+    def __init__(self, skill_dir: str):
+        p = pathlib.Path("fixtures/golden/mode_a_panic.md")
+        self._canned = p.read_text() if p.exists() else "<!--yc mode=Q gate=none ceiling=NA level=L2-->\nDev fake model: no canned reply found."
+
+    def run(self, system, messages, tools, tool_handler) -> ModelResult:
+        return ModelResult(text=self._canned, model=self.model, usage={"input_tokens": 0, "output_tokens": 0})
+
+
+if CFG.dev_mode and not CFG.anthropic_api_key:
+    MODEL = _FakeDevModel(CFG.skill_dir)
+else:
+    from .claude_client import AnthropicClient
+    MODEL = AnthropicClient(CFG.anthropic_api_key, CFG.claude_model)
+
+PIPELINE = Pipeline(SKILL, MODEL, ICD)
+
+if not CFG.dev_mode:
+    import jwt  # PyJWT
+    JWKS = jwt.PyJWKClient(CFG.supabase_jwks_url)
+
+app = FastAPI(title="YourCounselor backend", version=SKILL.version)
+
+# In-memory clinician for DEV_MODE so no database is needed locally.
+_DEV_CLINICIAN = {"id": "dev-clinician", "level": "L2", "verification_status": "verified",
+                  "consent_version": "beta-draft-1", "is_admin": True}
+
+
+# --- auth -------------------------------------------------------------------
+def current_user(authorization: str = Header(...)) -> dict:
+    token = authorization.removeprefix("Bearer ").strip()
+    if CFG.dev_mode and token.startswith("dev-"):
+        return {"id": "dev-clinician", "dev_level": token.split("-", 1)[1] if "-" in token else "L2"}
+    import jwt
+    try:
+        key = JWKS.get_signing_key_from_jwt(token).key
+        claims = jwt.decode(token, key, algorithms=["RS256", "ES256"], audience="authenticated")
+    except Exception:
+        raise HTTPException(401, "invalid token")
+    return {"id": claims["sub"]}
+
+
+def verified_clinician(user: dict = Depends(current_user)) -> dict:
+    if CFG.dev_mode and user["id"] == "dev-clinician":
+        return {**_DEV_CLINICIAN, "level": user.get("dev_level", "L2") if user.get("dev_level") in ("L1", "L2", "L3") else "L2"}
+    c = db.get_clinician(user["id"])
+    if not c or c["verification_status"] != "verified" or c["level"] not in ("L1", "L2", "L3"):
+        raise HTTPException(403, "registration not yet verified")
+    if not c["consent_version"]:
+        raise HTTPException(403, "consent not recorded")
+    return c
+
+
+def admin(user: dict = Depends(current_user)) -> dict:
+    if CFG.dev_mode and user["id"] == "dev-clinician":
+        return _DEV_CLINICIAN
+    c = db.get_clinician(user["id"])
+    if not c or not c.get("is_admin"):
+        raise HTTPException(403, "admin only")
+    return c
+
+
+# --- schemas ----------------------------------------------------------------
+class ProfileIn(BaseModel):
+    role: str = Field(pattern="^(counsellor_trainee|psychologist|psychiatrist)$")
+    registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
+    registration_number: str | None = Field(default=None, max_length=40)
+    consent_version: str = Field(max_length=20)
+
+
+class ConsultIn(BaseModel):
+    text: str = Field(min_length=3, max_length=12000)
+    mode: str = Field(default="auto", pattern="^(auto|A|B|C|D|E|F|G)$")
+    conversation_id: uuid.UUID | None = None
+    deid_attested: bool
+    client_redaction_counts: dict[str, int] = {}
+    level: str | None = Field(default=None, pattern="^(L1|L2|L3)$")   # honoured only in DEV_MODE
+
+
+class IncidentIn(BaseModel):
+    turn_id: uuid.UUID
+    category: str = Field(pattern="^(unsafe|wrong_clinical|missing_safety|identifier_leak|crisis_number|other)$")
+    note: str = Field(default="", max_length=2000)
+
+
+class VerifyIn(BaseModel):
+    level: str = Field(pattern="^(L1|L2|L3)$")
+    verification_status: str = Field(pattern="^(verified|rejected)$")
+    evidence_note: str = Field(max_length=500)
+
+
+class CleanIn(BaseModel):
+    text: str = Field(max_length=12000)
+
+
+# --- routes -----------------------------------------------------------------
+@app.get("/healthz")
+def healthz():
+    return {"ok": True, "skill_version": SKILL.version, "prompt_hash": SKILL.prompt_hash,
+            "model": MODEL.model, **CFG.public()}
+
+
+@app.get("/v1/me")
+def me(user: dict = Depends(current_user)):
+    if CFG.dev_mode and user["id"] == "dev-clinician":
+        return _DEV_CLINICIAN
+    return db.get_clinician(user["id"]) or {"id": user["id"], "verification_status": "none"}
+
+
+@app.post("/v1/profile")
+def profile(body: ProfileIn, user: dict = Depends(current_user)):
+    db.upsert_clinician_profile(user["id"], body.model_dump())
+    return {"verification_status": "pending"}
+
+
+@app.post("/v1/consult")
+def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
+    if not body.deid_attested:
+        raise HTTPException(422, "de-identification attestation required")
+    level = c["level"]
+    if CFG.dev_mode and body.level:
+        level = body.level
+
+    if CFG.dev_mode:
+        conv_id, history = uuid.uuid4(), []
+    else:
+        if db.turns_today(c["id"]) >= CFG.daily_turn_limit:
+            raise HTTPException(429, "daily limit reached")
+        conv_id = body.conversation_id or db.new_conversation(c["id"])
+        try:
+            history = db.history(conv_id, c["id"])
+        except PermissionError:
+            raise HTTPException(404, "conversation not found")
+
+    try:
+        r = PIPELINE.run(body.text, level=level, requested_mode=body.mode, history=history,
+                         today=date.today().isoformat())
+    except DeidRejected as e:
+        if not CFG.dev_mode:
+            db.log_deid_rejection(c["id"], e.counts)
+        raise HTTPException(422, {"error": "identifiers_detected", "types": sorted(e.counts)})
+
+    if CFG.dev_mode:
+        turn_id = uuid.uuid4()
+    else:
+        turn_id = db.log_turn(conv_id, c["id"], level, body, r)
+        if r.status == "blocked":
+            db.auto_incident(turn_id, r.reports[-1])
+
+    return {"turn_id": str(turn_id), "conversation_id": str(conv_id), "status": r.status,
+            "text": r.display_text, "skill_version": r.skill_version, "report": r.reports[-1]}
+
+
+@app.post("/v1/incidents")
+def incident(body: IncidentIn, c: dict = Depends(verified_clinician)):
+    if CFG.dev_mode:
+        return {"ok": True, "dev": True}
+    try:
+        db.create_incident(body.turn_id, c["id"], body.category, body.note)
+    except PermissionError:
+        raise HTTPException(404, "turn not found")
+    return {"ok": True}
+
+
+@app.patch("/v1/admin/clinicians/{clinician_id}")
+def verify(clinician_id: uuid.UUID, body: VerifyIn, a: dict = Depends(admin)):
+    db.set_verification(clinician_id, body.level, body.verification_status, body.evidence_note, a["id"])
+    return {"ok": True}
+
+
+# --- dev-only helper --------------------------------------------------------
+@app.post("/dev/clean")
+def dev_clean(body: CleanIn):
+    """Preview what the cleaner would redact. DEV_MODE only."""
+    if not CFG.dev_mode:
+        raise HTTPException(404, "not found")
+    r = deid.clean(body.text)
+    return {"redactions": [{"type": x.type, "start": x.start, "end": x.end} for x in r.redactions],
+            "warnings": r.warnings, "cleaned": r.text, "is_clean": r.is_clean}
