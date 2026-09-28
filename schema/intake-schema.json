@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "YourCounselor intake schema",
+  "version": "1.0.0",
+  "source": "clinical-assist skill, Core 1 ASM-01 (intake) + ASM-05 (MSE) + Part C3 audit",
+  "_about": "Drives the app's structured intake form and defines what may be sent to the AI. TWO LAYERS: the full record (with `pii:true` fields) is stored ONLY on the clinician's device / their own record system; the de-identified projection (fields with `send_to_ai:true`) is what the cleaner checks and the backend forwards to Claude. A field is sent to the AI only if send_to_ai=true AND it is not pii. The cleaner (app/deid.py) is the backstop: even a send_to_ai field is scrubbed of any stray identifier before it leaves the phone.",
+  "rules": {
+    "pii_never_leaves_device": true,
+    "safety_trigger": "Any positive answer in `safety` launches the risk pathway (Core 1 ASM-06) and, in the AI call, the app forwards a risk flag so Gate 1 logic applies.",
+    "minors": "If age < 18: parental/guardian consent AND child assent are both required; safeguarding fields become mandatory (Core 2 CHD-12/13/14)."
+  },
+  "sections": [
+    {
+      "id": "about_you",
+      "title": "About you",
+      "note": "Almost all PII. Kept on device; the AI receives only age, gender, preferred language and coarse region.",
+      "fields": [
+        {"key": "full_name", "type": "string", "pii": true, "send_to_ai": false},
+        {"key": "record_id", "type": "string", "auto": true, "pii": true, "send_to_ai": false},
+        {"key": "assigned_clinician", "type": "string", "pii": true, "send_to_ai": false},
+        {"key": "intake_date", "type": "date", "pii": false, "send_to_ai": true},
+        {"key": "date_of_birth", "type": "date", "pii": true, "send_to_ai": false},
+        {"key": "age", "type": "integer", "auto": true, "pii": false, "send_to_ai": true},
+        {"key": "gender", "type": "enum", "options": ["Woman", "Man", "Non-binary", "Self-describe", "Prefer not to say"], "pii": false, "send_to_ai": true},
+        {"key": "address", "type": "string", "pii": true, "send_to_ai": false},
+        {"key": "city_state", "type": "string", "pii": false, "send_to_ai": true, "note": "coarse location only (city/state) is allowed"},
+        {"key": "pin_code", "type": "string", "pii": true, "send_to_ai": false},
+        {"key": "phone_numbers", "type": "array", "pii": true, "send_to_ai": false},
+        {"key": "email", "type": "string", "pii": true, "send_to_ai": false},
+        {"key": "preferred_language", "type": "string", "pii": false, "send_to_ai": true},
+        {"key": "emergency_contact", "type": "object", "pii": true, "send_to_ai": false}
+      ]
+    },
+    {
+      "id": "referral",
+      "title": "How you came to us",
+      "fields": [
+        {"key": "referral_source", "type": "enum", "options": ["Self", "Doctor", "School/college", "Court", "Employer", "Other"], "pii": false, "send_to_ai": true},
+        {"key": "referral_question", "type": "text", "pii": false, "send_to_ai": true, "note": "clean free text before sending"}
+      ]
+    },
+    {
+      "id": "main_concern",
+      "title": "Main concern",
+      "fields": [
+        {"key": "concern_text", "type": "text", "pii": false, "send_to_ai": true},
+        {"key": "onset", "type": "string", "pii": false, "send_to_ai": true},
+        {"key": "duration", "type": "string", "pii": false, "send_to_ai": true},
+        {"key": "triggers", "type": "text", "pii": false, "send_to_ai": true},
+        {"key": "impact_0_10", "type": "integer", "min": 0, "max": 10, "pii": false, "send_to_ai": true}
+      ]
+    },
+    {
+      "id": "areas_of_concern",
+      "title": "Areas of concern (tick any)",
+      "type": "multiselect_grouped",
+      "note": "Source: ASM-01. Any Safety tick sets safety.positive=true.",
+      "groups": {
+        "emotional": ["low mood", "hopelessness/worthlessness", "worry/nervousness", "fears", "mood swings", "high/excited mood", "anger outbursts", "grief/loss", "low self-worth"],
+        "thinking_perception": ["intrusive/repetitive thoughts", "repetitive actions", "hearing/seeing things others don't", "unusual beliefs", "trouble concentrating"],
+        "behaviour_habits": ["restlessness/hyperactivity", "alcohol/drug use", "eating difficulties", "troubling urges/habits"],
+        "body_sleep": ["low energy", "trouble falling asleep", "waking in the night", "nightmares", "ongoing pain", "seizures", "coordination difficulties", "hearing/eyesight problems", "medication problems"],
+        "life_relationships": ["relationship difficulties", "parenting concerns", "loneliness/withdrawal", "study/work performance", "learning difficulties"],
+        "past_experiences": ["distressing/traumatic events", "abuse or neglect"],
+        "safety": ["thoughts of ending life / past attempts", "hurting yourself", "thoughts of harming someone else"]
+      },
+      "send_to_ai": true, "pii": false
+    },
+    {
+      "id": "history_of_presenting",
+      "title": "History of presenting illness",
+      "note": "Structured to Core 1 ASM-04 / C3.2.",
+      "fields": [
+        {"key": "onset_type", "type": "enum", "options": ["acute", "insidious", "unknown"], "send_to_ai": true, "pii": false},
+        {"key": "course", "type": "enum", "options": ["continuous", "episodic", "fluctuating", "unknown"], "send_to_ai": true, "pii": false},
+        {"key": "frequency", "type": "string", "send_to_ai": true, "pii": false},
+        {"key": "severity", "type": "string", "send_to_ai": true, "pii": false},
+        {"key": "sleep_appetite_energy_libido", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "functioning_impact", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "negative_history_checked", "type": "multiselect", "options": ["mania", "psychosis", "substance use", "organic features"], "send_to_ai": true, "pii": false}
+      ]
+    },
+    {
+      "id": "treatment_history",
+      "title": "Mental-health & treatment history",
+      "fields": [
+        {"key": "past_outpatient", "type": "array", "send_to_ai": true, "pii": false, "note": "dates/diagnosis/age/type; strip provider names (pii)"},
+        {"key": "past_inpatient", "type": "array", "send_to_ai": true, "pii": false},
+        {"key": "past_self_harm_attempts", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "family_mental_health", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "current_medicines", "type": "array", "send_to_ai": true, "pii": false, "note": "names only, for the medical rule-out; the AI never advises on them"}
+      ]
+    },
+    {
+      "id": "physical_health",
+      "title": "Physical health",
+      "fields": [
+        {"key": "conditions_ticklist", "type": "multiselect", "options": ["heart disease", "high blood pressure", "stroke", "diabetes", "thyroid disorder", "asthma", "cancer", "tuberculosis", "liver disease", "bowel disease", "autoimmune", "MS", "Parkinson's", "Huntington's", "dementia", "fibromyalgia", "obesity", "intellectual disability", "other"], "send_to_ai": true, "pii": false},
+        {"key": "pain_0_10", "type": "integer", "min": 0, "max": 10, "send_to_ai": true, "pii": false},
+        {"key": "last_checkup", "type": "string", "send_to_ai": true, "pii": false},
+        {"key": "doctor_name", "type": "string", "pii": true, "send_to_ai": false}
+      ]
+    },
+    {
+      "id": "substances",
+      "title": "Alcohol & drugs",
+      "fields": [
+        {"key": "others_worried", "type": "boolean", "send_to_ai": true, "pii": false},
+        {"key": "self_worried", "type": "boolean", "send_to_ai": true, "pii": false},
+        {"key": "tolerance", "type": "boolean", "send_to_ai": true, "pii": false},
+        {"key": "cravings_withdrawal", "type": "boolean", "send_to_ai": true, "pii": false},
+        {"key": "intoxicated_per_month", "type": "integer", "send_to_ai": true, "pii": false},
+        {"key": "family_history", "type": "boolean", "send_to_ai": true, "pii": false},
+        {"key": "caffeine_nicotine", "type": "text", "send_to_ai": true, "pii": false, "note": "important when somatic anxiety is present"}
+      ]
+    },
+    {
+      "id": "personal_family",
+      "title": "Growing up, family & context",
+      "fields": [
+        {"key": "growing_up", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "family_now", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "who_lives_with_you", "type": "array", "send_to_ai": true, "pii": false, "note": "relationship + age only; strip names (pii)"},
+        {"key": "current_pressures", "type": "multiselect", "options": ["housing", "money", "little support", "other"], "send_to_ai": true, "pii": false},
+        {"key": "strengths", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "beliefs_meaning", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "explanatory_model", "type": "text", "send_to_ai": true, "pii": false, "note": "what the client/family believe is wrong — key for cultural formulation"}
+      ]
+    },
+    {
+      "id": "mse",
+      "title": "Mental State Examination (clinician-completed)",
+      "note": "Source: Core 1 ASM-05 / C3.3. Descriptive, not diagnostic. All send_to_ai.",
+      "send_to_ai": true, "pii": false,
+      "fields": [
+        {"key": "appearance_behaviour", "type": "text"},
+        {"key": "speech", "type": "text"},
+        {"key": "mood_subjective", "type": "text"},
+        {"key": "affect_objective", "type": "text"},
+        {"key": "thought_stream_form", "type": "text"},
+        {"key": "thought_content", "type": "text", "note": "must include explicit SI/HI assessment"},
+        {"key": "thought_possession", "type": "text"},
+        {"key": "perception", "type": "text"},
+        {"key": "cognition", "type": "text", "note": "state what was tested"},
+        {"key": "judgment", "type": "text"},
+        {"key": "insight", "type": "text"},
+        {"key": "reliability", "type": "text"},
+        {"key": "mse_date", "type": "date"}
+      ]
+    },
+    {
+      "id": "safety",
+      "title": "Safety",
+      "critical": true,
+      "fields": [
+        {"key": "positive", "type": "boolean", "send_to_ai": true, "pii": false, "note": "true if any safety concern reported OR any safety tick above"},
+        {"key": "detail", "type": "text", "send_to_ai": true, "pii": false},
+        {"key": "risk_status", "type": "enum", "options": ["asked_absent", "present", "not_yet_asked"], "send_to_ai": true, "pii": false, "note": "forwarded to the AI so Section 2 / Gate 1 logic is correct"}
+      ]
+    },
+    {
+      "id": "consent",
+      "title": "Consent",
+      "fields": [
+        {"key": "assessment_treatment", "type": "boolean", "pii": false, "send_to_ai": false},
+        {"key": "recording", "type": "boolean", "pii": false, "send_to_ai": false},
+        {"key": "data_sharing_choices", "type": "object", "pii": false, "send_to_ai": false},
+        {"key": "ai_deid_consent", "type": "boolean", "pii": false, "send_to_ai": false, "note": "clinician attests the case is de-identified before sending (maps to /v1/consult deid_attested)"},
+        {"key": "consent_version", "type": "string", "pii": false, "send_to_ai": false},
+        {"key": "guardian_consent", "type": "boolean", "pii": false, "send_to_ai": false, "note": "required if age < 18"},
+        {"key": "child_assent", "type": "boolean", "pii": false, "send_to_ai": false, "note": "required if age < 18"}
+      ]
+    }
+  ],
+  "ai_payload_builder": {
+    "note": "How the app turns the intake into the de-identified text the backend receives.",
+    "steps": [
+      "Collect the full intake on device.",
+      "Project only fields with send_to_ai=true and pii=false into a compact clinical summary string.",
+      "Run app/deid.py (Kotlin port) over that string; show redactions + possible-name chips.",
+      "Require the ai_deid_consent tick.",
+      "POST to /v1/consult with {text, mode, deid_attested:true, client_redaction_counts}. The server re-cleans and rejects on any hit."
+    ]
+  }
+}

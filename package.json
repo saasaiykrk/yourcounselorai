@@ -1,0 +1,13 @@
+{
+  "name": "yourcounselor-dev-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local browser test console for the YourCounselor Python backend. Not deployed. Holds no secrets.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "harness": "node harness/server.js",
+    "backend:dev": "DEV_MODE=1 uvicorn app.main:app --port 8000 --reload"
+  },
+  "_readme": "Run the backend (npm run backend:dev, needs the Python deps from requirements.txt) then the console (npm run harness) and open http://localhost:5173. The harness proxies /v1 and /healthz to the backend and injects a dev token; the browser holds no key. The real app is Android talking to the Python backend directly — this is a developer convenience only.",
+  "dependencies": {}
+}
