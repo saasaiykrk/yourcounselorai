@@ -17,14 +17,13 @@ from __future__ import annotations
 import re
 import time
 
-import httpx
-
 TOKEN_URL = "https://icdaccessmanagement.who.int/connect/token"
 BASE = "https://id.who.int/icd/release/11/{release}/mms"
 
 
 class ICD11Client:
     def __init__(self, client_id: str, client_secret: str, release: str, timeout: float = 10.0):
+        import httpx  # imported lazily so the stdlib-only unit tests don't need it
         self.client_id, self.client_secret, self.release = client_id, client_secret, release
         self._token: str | None = None
         self._token_exp = 0.0
