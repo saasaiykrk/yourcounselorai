@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/auth/auth_service.dart';
+import 'core/config.dart';
 import 'core/theme/app_theme.dart';
 import 'router.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(YourCounselorApp(router: buildRouter()));
+  AppConfig.validate();
+  await initAuthBackend();
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  runApp(ProviderScope(child: YourCounselorApp(router: buildRouter())));
 }
 
 class YourCounselorApp extends StatelessWidget {

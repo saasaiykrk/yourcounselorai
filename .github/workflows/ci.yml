@@ -28,7 +28,7 @@ jobs:
         env:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
-          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(skill/|app/inspector.py|app/deid.py|app/prompt.py|fixtures/)' || true)
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -E '^(skill/|app/inspector.py|app/deid.py|app/prompt.py|fixtures/|mobile/lib/core/deid/)' || true)
           if [ -n "$CHANGED" ] && [[ "$LABELS" != *"clinician-reviewed"* ]]; then
             echo "Safety-relevant files changed:"; echo "$CHANGED"
             echo "Add the 'clinician-reviewed' label after the clinical reviewer signs off (see CLAUDE.md)."; exit 1
@@ -47,9 +47,35 @@ jobs:
         with:
           flutter-version: "3.47.5"
           channel: stable
+      - name: Cleaner parity data matches app/deid.py
+        working-directory: .
+        run: python3 mobile/tool/deid_parity.py --check
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # Compiles the native Android code too (MainActivity.kt: screenshot blocking).
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: flutter build apk --debug
+
+  mobile-ios:
+    # Manual only (macOS minutes cost more): compiles the iOS app, including
+    # SceneDelegate.swift's app-switcher blur. No signing, so no secrets.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.5"
+          channel: stable
+      - run: flutter pub get
+      - run: flutter build ios --debug --no-codesign
 
   evals:
     # Manual: runs the real model. Needs repo secrets. Upload the grading pack for the clinician.

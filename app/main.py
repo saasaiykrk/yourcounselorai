@@ -67,6 +67,17 @@ if not CFG.dev_mode:
 
 app = FastAPI(title="YourCounselor backend", version=SKILL.version)
 
+if CFG.dev_mode:
+    # Local only: lets the Flutter app run in a browser (`flutter run -d chrome`)
+    # against this dev server. Phones don't need CORS; production never enables it.
+    from fastapi.middleware.cors import CORSMiddleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
 # In-memory clinician for DEV_MODE so no database is needed locally.
 _DEV_CLINICIAN = {"id": "dev-clinician", "level": "L2", "verification_status": "verified",
                   "consent_version": "beta-draft-1", "is_admin": True}

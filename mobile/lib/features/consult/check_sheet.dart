@@ -1,51 +1,90 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/content/safety_content.dart';
-import '../../core/demo/preview_data.dart';
+import '../../core/deid/cleaner.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
+import 'consult_controller.dart';
 
-/// "Check before sending": shows what the cleaner removed, asks about
-/// uncertain names, and keeps Send disabled until the clinician attests.
-Future<void> showCheckSheet(BuildContext context, {required String text, required ConsultMode mode}) {
-  return showModalBottomSheet<void>(
+/// "Check before sending": runs the cleaner on the phone, shows what was
+/// removed, asks about possible names, and keeps Send disabled until the
+/// clinician attests that no identifiers remain.
+///
+/// Returns true when the consult was sent (the caller then clears its draft).
+Future<bool> showCheckSheet(BuildContext context, {required String text, required ConsultMode mode}) async {
+  final sent = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     useSafeArea: true,
     builder: (_) => CheckSheet(text: text, mode: mode),
   );
+  return sent ?? false;
 }
 
 enum _NameDecision { undecided, remove, keep }
 
-class CheckSheet extends StatefulWidget {
+const _typeLabels = <String, (String, String)>{
+  'PHONE': ('phone number', 'phone numbers'),
+  'EMAIL': ('email address', 'email addresses'),
+  'URL': ('web link', 'web links'),
+  'HANDLE': ('social handle', 'social handles'),
+  'ID': ('ID number', 'ID numbers'),
+  'DOB': ('date of birth', 'dates of birth'),
+  'ADDRESS': ('address', 'addresses'),
+  'PINCODE': ('PIN code', 'PIN codes'),
+  'NAME': ('name', 'names'),
+  'ORG': ('workplace or school', 'workplaces or schools'),
+};
+
+final _tag = RegExp(r'\[(?:EMAIL|URL|HANDLE|ID|DOB|PHONE|ADDRESS|PINCODE|NAME|ORG)\]');
+
+class CheckSheet extends ConsumerStatefulWidget {
   const CheckSheet({super.key, required this.text, required this.mode});
 
   final String text;
   final ConsultMode mode;
 
   @override
-  State<CheckSheet> createState() => _CheckSheetState();
+  ConsumerState<CheckSheet> createState() => _CheckSheetState();
 }
 
-class _CheckSheetState extends State<CheckSheet> {
-  var _decision = _NameDecision.undecided;
+class _CheckSheetState extends ConsumerState<CheckSheet> {
+  late final CleanResult _result = clean(widget.text);
+  late final Map<String, _NameDecision> _names = {for (final n in _result.warnings) n: _NameDecision.undecided};
   var _attested = false;
+
+  /// The text that will be sent: cleaned, plus any possible names the clinician removed.
+  String get _outgoing {
+    var text = _result.text;
+    for (final e in _names.entries) {
+      if (e.value == _NameDecision.remove) text = removeName(text, e.key);
+    }
+    return text;
+  }
+
+  /// Counts by type only, including names the clinician removed.
+  Map<String, int> get _counts {
+    final counts = Map<String, int>.from(_result.counts);
+    final extraNames = '[NAME]'.allMatches(_outgoing).length - '[NAME]'.allMatches(_result.text).length;
+    if (extraNames > 0) counts['NAME'] = (counts['NAME'] ?? 0) + extraNames;
+    return counts;
+  }
 
   void _send() {
     final router = GoRouter.of(context);
-    Navigator.of(context).pop();
+    ref.read(consultControllerProvider.notifier).send(text: _outgoing, mode: widget.mode, redactionCounts: _counts);
+    Navigator.of(context).pop(true);
     router.push('/drafting');
   }
 
   @override
   Widget build(BuildContext context) {
-    // Preview data until the Dart port of app/deid.py lands (plan Step 3).
-    final preview = previewCleaner(removePossibleName: _decision == _NameDecision.remove);
-    final name = previewCleaner(removePossibleName: false).possibleName;
+    final counts = _counts;
+    final total = counts.values.fold(0, (a, b) => a + b);
 
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.9),
@@ -60,7 +99,7 @@ class _CheckSheetState extends State<CheckSheet> {
                 const Expanded(child: Text('Check before sending', style: AppText.sheetTitle)),
                 IconButton(
                   tooltip: 'Close and edit',
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(context).pop(false),
                   icon: const Icon(Icons.close_rounded),
                 ),
               ],
@@ -73,27 +112,35 @@ class _CheckSheetState extends State<CheckSheet> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'We removed ${preview.removedTotal} items',
+                    total == 0 ? 'We found nothing to remove' : 'We removed $total ${total == 1 ? 'item' : 'items'}',
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final e in preview.removed.entries) StatusPill('${e.value} ${e.key}', tone: Tone.check),
-                    ],
-                  ),
+                  if (counts.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        for (final e in counts.entries) StatusPill(_describe(e.key, e.value), tone: Tone.check),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   AppCard(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     child: Text.rich(
-                      TextSpan(children: [for (final s in preview.segments) _segment(s)]),
+                      TextSpan(children: _spans(_outgoing)),
                       style: const TextStyle(fontSize: 15, height: 1.7, color: AppColors.ink),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  _NameQuestion(name: name, decision: _decision, onDecide: (d) => setState(() => _decision = d)),
+                  for (final name in _names.keys) ...[
+                    const SizedBox(height: 14),
+                    _NameQuestion(
+                      name: name,
+                      decision: _names[name]!,
+                      onDecide: (d) => setState(() => _names[name] = d),
+                    ),
+                  ],
                   const SizedBox(height: 14),
                   Material(
                     color: AppColors.lavender,
@@ -126,38 +173,68 @@ class _CheckSheetState extends State<CheckSheet> {
     );
   }
 
-  InlineSpan _segment(CleanSegment s) {
-    if (s.isTag) {
-      return WidgetSpan(
-        alignment: PlaceholderAlignment.middle,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          decoration: BoxDecoration(color: AppColors.checkBg, borderRadius: BorderRadius.circular(6)),
-          child: Text(
-            s.text,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.checkInk,
-              letterSpacing: 0.3,
-            ),
+  static String _describe(String type, int n) {
+    final (one, many) = _typeLabels[type] ?? ('identifier', 'identifiers');
+    return '$n ${n == 1 ? one : many}';
+  }
+
+  /// Tags get a tinted chip; undecided or kept possible names are underlined.
+  List<InlineSpan> _spans(String text) {
+    final flagged = [
+      for (final e in _names.entries)
+        if (e.value != _NameDecision.remove) e.key,
+    ];
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m in _tag.allMatches(text)) {
+      spans.addAll(_plain(text.substring(last, m.start), flagged));
+      spans.add(_tagChip(m.group(0)!));
+      last = m.end;
+    }
+    spans.addAll(_plain(text.substring(last), flagged));
+    return spans;
+  }
+
+  static List<InlineSpan> _plain(String text, List<String> flagged) {
+    if (flagged.isEmpty || text.isEmpty) return [TextSpan(text: text)];
+    final pattern = RegExp('(?<![A-Za-z])(${flagged.map(RegExp.escape).join('|')})(?![A-Za-z])');
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final m in pattern.allMatches(text)) {
+      spans.add(TextSpan(text: text.substring(last, m.start)));
+      spans.add(
+        TextSpan(
+          text: m.group(0),
+          style: const TextStyle(
+            decoration: TextDecoration.underline,
+            decorationStyle: TextDecorationStyle.dashed,
+            decorationColor: AppColors.checkDot,
+            decorationThickness: 2,
           ),
         ),
       );
+      last = m.end;
     }
-    if (s.possibleName) {
-      return TextSpan(
-        text: s.text,
-        style: const TextStyle(
-          decoration: TextDecoration.underline,
-          decorationStyle: TextDecorationStyle.dashed,
-          decorationColor: AppColors.checkDot,
-          decorationThickness: 2,
-        ),
-      );
-    }
-    return TextSpan(text: s.text);
+    spans.add(TextSpan(text: text.substring(last)));
+    return spans;
   }
+
+  static InlineSpan _tagChip(String tag) => WidgetSpan(
+    alignment: PlaceholderAlignment.middle,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(color: AppColors.checkBg, borderRadius: BorderRadius.circular(6)),
+      child: Text(
+        tag,
+        style: const TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w700,
+          color: AppColors.checkInk,
+          letterSpacing: 0.3,
+        ),
+      ),
+    ),
+  );
 }
 
 class _NameQuestion extends StatelessWidget {
@@ -181,9 +258,11 @@ class _NameQuestion extends StatelessWidget {
                   children: [
                     const Icon(Icons.help_outline_rounded, size: 19, color: AppColors.checkInk),
                     const SizedBox(width: 8),
-                    Text(
-                      'Is “$name” a name?',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.checkInk),
+                    Expanded(
+                      child: Text(
+                        'Is “$name” a name?',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.checkInk),
+                      ),
                     ),
                   ],
                 ),

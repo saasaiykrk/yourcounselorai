@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/content/safety_content.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/layout.dart';
+import 'consult_controller.dart';
 
 /// "Report a problem" on any reply. Categories match the backend's
 /// `/v1/incidents` values.
@@ -16,15 +18,16 @@ Future<void> showReportSheet(BuildContext context) {
   );
 }
 
-class ReportSheet extends StatefulWidget {
+class ReportSheet extends ConsumerStatefulWidget {
   const ReportSheet({super.key});
 
   @override
-  State<ReportSheet> createState() => _ReportSheetState();
+  ConsumerState<ReportSheet> createState() => _ReportSheetState();
 }
 
-class _ReportSheetState extends State<ReportSheet> {
+class _ReportSheetState extends ConsumerState<ReportSheet> {
   ReportCategory? _category;
+  bool _busy = false;
   final _note = TextEditingController();
 
   @override
@@ -33,12 +36,23 @@ class _ReportSheetState extends State<ReportSheet> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Thank you. Our clinical safety team will review this reply.')),
-    );
+    setState(() => _busy = true);
+    try {
+      await ref.read(consultControllerProvider.notifier).report(category: _category!, note: _note.text.trim());
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Thank you. Our clinical safety team will review this reply.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Couldn't send the report. Check your connection and try again.")),
+      );
+    }
   }
 
   @override
@@ -96,7 +110,7 @@ class _ReportSheetState extends State<ReportSheet> {
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(20, 8, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
-            child: FilledButton(onPressed: _category == null ? null : _send, child: const Text('Send report')),
+            child: FilledButton(onPressed: _category == null || _busy ? null : _send, child: const Text('Send report')),
           ),
         ],
       ),
