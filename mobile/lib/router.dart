@@ -37,9 +37,15 @@ GoRouter buildRouter({String initialLocation = '/'}) {
       GoRoute(path: '/reply', builder: (_, _) => const ReplyScreen()),
       GoRoute(path: '/safety', builder: (_, _) => const SafetyScreen()),
       GoRoute(path: '/held-back', builder: (_, _) => const HeldBackScreen()),
-      GoRoute(path: '/identifiers', builder: (_, _) => const IdentifiersScreen()),
+      GoRoute(
+        path: '/identifiers',
+        builder: (_, state) => IdentifiersScreen(types: state.extra as List<String>? ?? const ['ID']),
+      ),
       GoRoute(path: '/limit', builder: (_, _) => const LimitScreen()),
-      GoRoute(path: '/offline', builder: (_, _) => const OfflineScreen()),
+      GoRoute(
+        path: '/offline',
+        builder: (_, state) => OfflineScreen(error: state.extra),
+      ),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
     ],
   );

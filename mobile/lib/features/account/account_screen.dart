@@ -1,21 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api/api_models.dart';
 import '../../core/config.dart';
+import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../consult/consult_controller.dart';
 
-class AccountScreen extends StatelessWidget {
+const _roles = {
+  'counsellor_trainee': 'Counsellor or trainee',
+  'psychologist': 'Psychologist',
+  'psychiatrist': 'Psychiatrist',
+};
+
+class AccountScreen extends ConsumerWidget {
   const AccountScreen({super.key});
 
-  @override
-  Widget build(BuildContext context) {
-    const used = 12;
-    const limit = AppConfig.dailyConsultLimit;
+  Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+    // Wipe the in-memory consult and reply before leaving.
+    ref.read(consultControllerProvider.notifier).clear();
+    await ref.read(authServiceProvider).signOut();
+    ref.invalidate(meProvider);
+    if (context.mounted) context.go('/welcome');
+  }
 
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(meProvider);
     return Scaffold(
       body: PageBody(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
@@ -23,41 +39,15 @@ class AccountScreen extends StatelessWidget {
         children: [
           const PageHeading('Account'),
           AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Psychologist', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                          Text('RCI · [registration number]', style: AppText.caption),
-                        ],
-                      ),
-                    ),
-                    StatusPill('Verified · L2', icon: Icons.check_rounded),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                const Row(
-                  children: [
-                    Expanded(child: Text('Consults in the last 24 hours', style: AppText.smallMuted)),
-                    Text('$used / $limit', style: TextStyle(fontWeight: FontWeight.w700)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: const LinearProgressIndicator(
-                    value: used / limit,
-                    minHeight: 6,
-                    color: AppColors.royalPurple,
-                    backgroundColor: AppColors.lineSoft,
-                  ),
-                ),
-              ],
+            child: me.when(
+              data: (m) => _Profile(me: m),
+              loading: () => const SizedBox(height: 48, child: Center(child: CircularProgressIndicator())),
+              error: (_, _) => Row(
+                children: [
+                  const Expanded(child: Text("Couldn't load your profile.", style: AppText.smallMuted)),
+                  TextButton(onPressed: () => ref.invalidate(meProvider), child: const Text('Retry')),
+                ],
+              ),
             ),
           ),
           _LinkGroup(
@@ -71,7 +61,7 @@ class AccountScreen extends StatelessWidget {
             ],
           ),
           OutlinedButton(
-            onPressed: () => context.go('/welcome'),
+            onPressed: () => _signOut(context, ref),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.crisis,
               side: const BorderSide(color: AppColors.inputBorder, width: 1.5),
@@ -79,15 +69,46 @@ class AccountScreen extends StatelessWidget {
             ),
             child: const Text('Sign out'),
           ),
-          const Column(
+          Column(
             children: [
-              BrandMark(size: 36),
-              SizedBox(height: 4),
-              Text('Version 1.0.0 (preview) · Knowledge base 2.1.1', style: AppText.caption),
+              const BrandMark(size: 36),
+              const SizedBox(height: 4),
+              Text('Version 1.0.0 · ${AppConfig.mode.name} build', style: AppText.caption),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+class _Profile extends StatelessWidget {
+  const _Profile({required this.me});
+
+  final Me me;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = _roles[me.role] ?? 'Clinician';
+    final status = me.isVerified ? 'Verified · ${me.level}' : (me.isRejected ? 'Not verified' : 'Being checked');
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(role, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              if (me.registrationBody != null && me.registrationBody != 'none')
+                Text('${me.registrationBody} registration', style: AppText.caption),
+            ],
+          ),
+        ),
+        StatusPill(
+          status,
+          icon: me.isVerified ? Icons.check_rounded : Icons.schedule_rounded,
+          tone: me.isVerified ? Tone.brand : Tone.check,
+        ),
+      ],
     );
   }
 }

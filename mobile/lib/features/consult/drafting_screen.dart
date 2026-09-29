@@ -1,28 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config.dart';
+import '../../core/content/safety_content.dart';
+import '../../core/demo/preview_data.dart';
+import '../../core/deid/cleaner.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/layout.dart';
+import 'consult_controller.dart';
 
 /// Waiting state while the server drafts and safety-checks the reply.
-/// Nothing is shown to the clinician until the inspector has passed it,
-/// so this screen shows progress rather than streamed text.
-class DraftingScreen extends StatefulWidget {
-  const DraftingScreen({super.key, this.autoAdvance = true});
-
-  /// Preview only: walk through the steps and open the sample reply.
-  final bool autoAdvance;
+/// Nothing reaches the clinician until the inspector has passed it, so this
+/// screen shows progress, never streamed text. When the consult finishes it
+/// replaces itself with the reply, the safety pathway, or the right error.
+class DraftingScreen extends ConsumerStatefulWidget {
+  const DraftingScreen({super.key});
 
   @override
-  State<DraftingScreen> createState() => _DraftingScreenState();
+  ConsumerState<DraftingScreen> createState() => _DraftingScreenState();
 }
 
-class _DraftingScreenState extends State<DraftingScreen> {
+class _DraftingScreenState extends ConsumerState<DraftingScreen> {
   static const _labels = [
-    'Identifiers checked again on our server',
+    'Sent securely, identifiers checked again',
     'Drafting with the clinical knowledge base',
     'Safety checks on the draft',
     'Ready for your review',
@@ -31,19 +35,39 @@ class _DraftingScreenState extends State<DraftingScreen> {
   Timer? _ticker;
   int _elapsed = 0;
   int _current = 1;
+  bool _left = false;
 
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {
-        _elapsed++;
-        if (widget.autoAdvance && _elapsed == 3) _current = 2;
-        if (widget.autoAdvance && _elapsed == 5) _current = 3;
-      });
-      if (widget.autoAdvance && _elapsed == 6) {
-        _ticker?.cancel();
-        context.pushReplacement('/reply');
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => setState(() => _elapsed++));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final state = ref.read(consultControllerProvider);
+      if (state is ConsultIdle && AppConfig.previewMode) {
+        // Opened directly (design preview): run the sample case.
+        final sample = clean(kSampleCase);
+        ref
+            .read(consultControllerProvider.notifier)
+            .send(text: sample.text, mode: ConsultMode.fullPlan, redactionCounts: sample.counts);
+      } else {
+        _maybeFinish(state);
+      }
+    });
+  }
+
+  void _maybeFinish(ConsultState state) {
+    if (_left || state is ConsultSending || state is ConsultIdle) return;
+    _left = true;
+    _ticker?.cancel();
+    setState(() => _current = _labels.length);
+    final (route, extra) = routeForOutcome(state);
+    Future<void>.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      if (route == '/sign-in' || route == '/pending') {
+        context.go(route);
+      } else {
+        context.pushReplacement(route, extra: extra);
       }
     });
   }
@@ -56,13 +80,16 @@ class _DraftingScreenState extends State<DraftingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(consultControllerProvider, (_, next) => _maybeFinish(next));
+    final state = ref.watch(consultControllerProvider);
+    final modeLabel = state is ConsultSending ? state.mode.label : 'Consult';
     final clock = '${_elapsed ~/ 60}:${(_elapsed % 60).toString().padLeft(2, '0')}';
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text(
-          'Full plan',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.muted),
+        title: Text(
+          modeLabel,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.muted),
         ),
         actions: [
           Padding(
@@ -87,7 +114,7 @@ class _DraftingScreenState extends State<DraftingScreen> {
         children: [
           const PageHeading(
             'Drafting your work-up',
-            message: "Full plans take 1–2 minutes. You'll only see it after it passes the safety checks.",
+            message: "A full plan can take 1–2 minutes. You'll only see it after it passes the safety checks.",
           ),
           Semantics(
             label: 'Step ${_current + 1} of ${_labels.length}',

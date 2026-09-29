@@ -24,7 +24,7 @@ This is the backend for YourCounselor, a clinical consultation aid for registere
 8. Crisis numbers come only from `skill/clinical-assist/references/crisis-resources.md`.
 
 ## Files that need the `clinician-reviewed` label (CI enforces this)
-`skill/**`, `app/inspector.py`, `app/deid.py`, `app/prompt.py`, `fixtures/**`
+`skill/**`, `app/inspector.py`, `app/deid.py`, `app/prompt.py`, `fixtures/**`, `mobile/lib/core/deid/**` (the app's port of the cleaner)
 
 ## Commands
 - Unit tests (stdlib only; always run them): `python -m unittest discover -s tests -t . -v`

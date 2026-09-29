@@ -1,64 +1,99 @@
 # Your Counselor: Flutter app (Android and iPhone)
 
-The phone app for Your Counselor. This is the **design build**: every screen from the approved design board is built with the real brand, fonts and logo, but it uses sample content and is **not connected to the server yet**. A "Preview build" notice on the consult screen says so.
+The phone app for Your Counselor. It signs clinicians in, cleans case text on the phone, sends it to the Your Counselor backend, and shows the safety-checked reply.
 
-## What's in here
+## How it's built
+
+```
+Screens (lib/features/…)          what the clinician sees and taps
+   │  read and watch
+State (Riverpod)                  consult_controller.dart: idle → sending → reply or error
+   │  call
+Repositories (core/repositories)  one function per action: send consult, report, profile
+   │  use
+Services                          api/api_client.dart (backend) · auth/auth_service.dart (sign-in)
+                                  deid/cleaner.dart (on-phone de-identification)
+```
 
 | Folder | What it holds |
 |---|---|
-| `lib/core/theme/` | Brand colours (`app_colors.dart`) and the app theme: fonts, buttons, fields |
-| `lib/core/content/safety_content.dart` | Disclaimer, crisis numbers, consult modes, report categories, all mirrored from the backend |
-| `lib/core/widgets/` | Shared pieces: logo, cards, status labels, crisis numbers card, step list |
-| `lib/core/demo/preview_data.dart` | Sample case and reply used until the real cleaner and API are wired in |
-| `lib/features/` | The screens: onboarding, consult (check panel, drafting, reply, report), safety and error states, account |
-| `lib/router.dart` | Every screen's address (for example `/consult`, `/reply`) |
-| `assets/` | Logo, app icon, and the Nunito fonts (bundled, never downloaded at runtime) |
-| `test/` | Tests (see below) |
+| `lib/core/deid/cleaner.dart` | **Safety file.** Dart port of `app/deid.py`. Changes need the `clinician-reviewed` label |
+| `lib/core/api/` | Backend client, JSON models, and every error the server can return |
+| `lib/core/auth/` | Email-code sign-in (Supabase), with the session in encrypted phone storage |
+| `lib/core/providers.dart` | Which real or preview implementation each mode uses |
+| `lib/core/security/` | Screenshot blocking on case screens (Android) and app-switcher blur (iPhone) |
+| `lib/core/content/safety_content.dart` | Disclaimer, crisis numbers, modes, report categories, all checked against the backend by tests |
+| `lib/features/` | Screens: onboarding, consult (check panel, drafting, reply, report), safety and error states, account |
+| `tool/deid_parity.py` | Regenerates `test/data/deid_parity.json` from the Python cleaner |
 
-Tip: in the app, **Account → Design preview: all screens** jumps to any screen.
+## Three ways to run it
 
-## Run it on your phone (first time)
+| Mode | Command | What happens |
+|---|---|---|
+| **Preview** (default) | `flutter run` | Sample data; nothing leaves the phone. For design review. Account → *Design preview* lists every screen. Type "wants to end it" in a case to see the risk screen. |
+| **Dev** | see below | Real backend on your computer in dev mode (fake AI, no database, no keys). Any email and any 6 digits sign in. |
+| **Live** | see below | Real sign-in and real backend. Needs your Supabase project and a deployed backend. |
 
-1. Install **Flutter** by following flutter.dev → "Get started" for your computer (Windows or Mac).
-2. **Android:** install **Android Studio**. On your phone, turn on *Developer options → USB debugging* and plug it in.
-   **iPhone:** you need a Mac with **Xcode**; see the Flutter iOS setup page.
-3. Download this project from GitHub, open a terminal in the `mobile` folder, and run:
-   ```bash
-   flutter pub get      # download the packages the app uses
-   flutter devices      # your phone should appear in this list
-   flutter run          # build and open the app on your phone
-   ```
-4. Anything wrong? Run `flutter doctor`; it lists what still needs setting up.
+**Dev mode:**
+```bash
+# terminal 1, repository root
+pip install -r requirements.txt
+DEV_MODE=1 uvicorn app.main:app --port 8000
 
-To look at it in a browser instead: `flutter run -d chrome`.
+# terminal 2, mobile/
+flutter run --dart-define=APP_MODE=dev --dart-define=BACKEND_URL=http://10.0.2.2:8000   # Android emulator
+flutter run --dart-define=APP_MODE=dev --dart-define=BACKEND_URL=http://localhost:8000  # iPhone simulator or Chrome
+```
+Plain `http` is allowed only to your own computer, and only in debug builds.
+
+**Live mode:**
+```bash
+flutter run --release \
+  --dart-define=APP_MODE=live \
+  --dart-define=BACKEND_URL=https://<your Cloud Run address> \
+  --dart-define=SUPABASE_URL=https://<project>.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=<publishable key>
+```
+The Supabase *publishable* key is public by design; no secret ever goes in the app. The Supabase project must:
+- use **asymmetric JWT signing keys**, because the backend checks tokens with JWKS;
+- have an email template that includes `{{ .Token }}`, so clinicians get a 6-digit code rather than a link;
+- use **custom SMTP** for beta volume.
 
 ## Checks
 
 ```bash
-flutter analyze   # code problems
-flutter test      # all tests
+flutter analyze
+flutter test                                    # 153 tests
+python3 tool/deid_parity.py --check             # run from the repo root as: python3 mobile/tool/deid_parity.py --check
+YC_BACKEND_URL=http://127.0.0.1:8000 flutter test test/backend_integration_test.dart   # with the dev backend running
 ```
 
-The tests:
-- draw every screen on a small (360×640) and a standard (390×844) phone, and fail if anything overflows;
-- check the safety behaviours: Send stays locked until "no identifiers" is ticked, a report needs a category, and professional details need consent and a registration number;
-- fail if the app's crisis numbers, disclaimer, report categories or consult modes ever drift from the backend and the crisis register (`skill/clinical-assist/references/crisis-resources.md`).
+What the tests cover:
+- **Cleaner:** every shared vector in `fixtures/deid_vectors.json`, plus an exact match with the Python cleaner on 49 cases.
+- **Safety wording:** crisis numbers against the crisis register, the disclaimer against the inspector, and categories and modes against the API.
+- **Every screen:** drawn on a small and a standard phone with no overflow, and the email-code box readable by screen readers.
+- **Every consult outcome:** delivered, safety gate, held back, identifier found, daily limit, offline, timeout, signed out, not verified.
+- **Privacy rules:**
+  - the phone number and names never reach the request;
+  - the draft is wiped after a delivered reply but kept after a failure;
+  - follow-ups continue the same conversation.
+- **Against the real dev backend:** the integration tests.
 
-GitHub runs the same checks on every pull request (the `mobile` job in `.github/workflows/ci.yml`).
+GitHub runs analyze, tests, the parity check and an Android build on every pull request. The iPhone build runs when you start the workflow by hand (Actions → ci → Run workflow).
 
-## App icon
+## Privacy and safety in the app
 
-The icons come from `assets/brand/app_icon.png`, with the mark on white because the iPhone App Store doesn't allow see-through icons. After changing the logo, run `dart run flutter_launcher_icons`.
+- **No keys in the app.** The sign-in session is kept in the Keychain (iPhone) or Keystore-backed storage (Android).
+- **Case text and replies live in memory only.**
+  - They are never written to disk.
+  - The draft is cleared once a reply is delivered.
+  - Everything is wiped on sign-out.
+- **Keyboard learning and suggestions are off** in case fields.
+- **Send is locked** until the clinician ticks "no identifiers". The server cleans the text again anyway.
+- **Screen protection:** Android blocks screenshots and recording on case screens; iPhone blurs the app in the app switcher (iOS can't block screenshots).
+- **Android backups are off**, and nothing is sent to crash or analytics tools.
 
-## Already in place
-
-- Case text is never saved on the phone, and keyboard learning and suggestions are off in case fields.
-- Android backups are switched off (`allowBackup="false"`).
-- No keys or secrets anywhere in the app.
-
-## Still to come (from the build plan)
-
-1. **The real cleaner:** a Dart port of `app/deid.py` that must pass every case in `fixtures/deid_vectors.json`. It's a safety file, so it needs the clinician-reviewed label.
-2. **Sign-in and API client:** Supabase email code, then `/v1/profile`, `/v1/me`, `/v1/consult` and `/v1/incidents`, with a 300-second timeout.
-3. **Screen protection:** block screenshots on case screens (Android `FLAG_SECURE`) and blur the app in the iPhone app switcher.
-4. **Reply rendering:** show the server's markdown reply, including tables, in the reply screen.
+## Before the beta
+1. **Live test on real phones:** the Android and iPhone native code (screen protection) has not yet run on a device.
+2. **Supabase set-up** as above, and the backend deployed (plan Step 8).
+3. **Psychologist review** of `lib/core/deid/cleaner.dart` (a safety file), and the open cleaner and inspector findings in the pull request.

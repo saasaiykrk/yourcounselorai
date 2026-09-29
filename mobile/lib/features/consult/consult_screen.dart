@@ -1,28 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
 import '../../core/content/safety_content.dart';
 import '../../core/demo/preview_data.dart';
+import '../../core/providers.dart';
+import '../../core/security/screen_protection.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
 import 'check_sheet.dart';
+import 'consult_controller.dart';
 
-class ConsultScreen extends StatefulWidget {
+class ConsultScreen extends ConsumerStatefulWidget {
   const ConsultScreen({super.key});
 
   @override
-  State<ConsultScreen> createState() => _ConsultScreenState();
+  ConsumerState<ConsultScreen> createState() => _ConsultScreenState();
 }
 
-class _ConsultScreenState extends State<ConsultScreen> {
+class _ConsultScreenState extends ConsumerState<ConsultScreen> {
   // Case text lives only in memory and is never written to disk.
   final _text = TextEditingController(text: AppConfig.previewMode ? kSampleCase : '');
   ConsultMode _mode = ConsultMode.auto;
 
   bool get _canSend => _text.text.trim().length >= AppConfig.minCaseLength;
+
+  Future<void> _check() => showCheckSheet(context, text: _text.text, mode: _mode);
 
   @override
   void dispose() {
@@ -32,75 +38,90 @@ class _ConsultScreenState extends State<ConsultScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: PageBody(
-        gap: 16,
-        actions: [
-          FilledButton.icon(
-            onPressed: _canSend ? () => showCheckSheet(context, text: _text.text, mode: _mode) : null,
-            iconAlignment: IconAlignment.end,
-            icon: const Icon(Icons.arrow_forward_rounded),
-            label: const Text('Check & send'),
-          ),
-        ],
-        children: [
-          const _Header(),
-          if (AppConfig.previewMode)
-            const NoticeBanner(
-              icon: Icons.visibility_outlined,
-              tone: Tone.neutral,
-              text: 'Preview build: sample case, not connected to the server.',
+    // The draft stays in memory (never on disk) until a reply is delivered, so a
+    // failed send can be retried; then it is wiped (SPEC-week1 §3.1).
+    ref.listen(consultControllerProvider, (_, next) {
+      if (next is ConsultReplied && next.reply.delivered) setState(_text.clear);
+    });
+    return ProtectedScreen(
+      child: Scaffold(
+        body: PageBody(
+          gap: 16,
+          actions: [
+            FilledButton.icon(
+              onPressed: _canSend ? _check : null,
+              iconAlignment: IconAlignment.end,
+              icon: const Icon(Icons.arrow_forward_rounded),
+              label: const Text('Check & send'),
             ),
-          const PageHeading(
-            'New consult',
-            message: 'Describe the case. Leave out names, contact details and ID numbers.',
-          ),
-          _CaseField(controller: _text, onChanged: () => setState(() {})),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('What do you need?', style: AppText.label),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 44,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  clipBehavior: Clip.none,
-                  itemCount: ConsultMode.values.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (context, i) {
-                    final mode = ConsultMode.values[i];
-                    return _ModeChip(
-                      label: mode.label,
-                      selected: mode == _mode,
-                      onTap: () => setState(() => _mode = mode),
-                    );
-                  },
-                ),
+          ],
+          children: [
+            const _Header(),
+            if (AppConfig.previewMode)
+              const NoticeBanner(
+                icon: Icons.visibility_outlined,
+                tone: Tone.neutral,
+                text: 'Preview build: sample case, not connected to the server.',
               ),
-              const SizedBox(height: 10),
-              Text(_mode.hint, style: AppText.smallMuted),
-            ],
-          ),
-        ],
+            const PageHeading(
+              'New consult',
+              message: 'Describe the case. Leave out names, contact details and ID numbers.',
+            ),
+            _CaseField(controller: _text, onChanged: () => setState(() {})),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('What do you need?', style: AppText.label),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 44,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    itemCount: ConsultMode.values.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final mode = ConsultMode.values[i];
+                      return _ModeChip(
+                        label: mode.label,
+                        selected: mode == _mode,
+                        onTap: () => setState(() => _mode = mode),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(_mode.hint, style: AppText.smallMuted),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _Header extends StatelessWidget {
+const _roleLabels = {'counsellor_trainee': 'Trainee', 'psychologist': 'Psychologist', 'psychiatrist': 'Psychiatrist'};
+
+class _Header extends ConsumerWidget {
   const _Header();
 
   @override
-  Widget build(BuildContext context) {
-    return const SizedBox(
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The level shown is the server-verified one; the app never decides it.
+    final me = ref.watch(meProvider).value;
+    final label = [
+      if (me?.role != null) _roleLabels[me!.role] ?? me.role!,
+      if (me?.level != null) me!.level!,
+    ].join(' · ');
+    return SizedBox(
       height: 48,
       child: Row(
         children: [
-          BrandMark(size: 34),
-          SizedBox(width: 8),
-          Expanded(child: BrandWordmark()),
-          StatusPill('Psychologist · L2', icon: Icons.verified_user_outlined),
+          const BrandMark(size: 34),
+          const SizedBox(width: 8),
+          const Expanded(child: BrandWordmark()),
+          if (label.isNotEmpty) StatusPill(label, icon: Icons.verified_user_outlined),
         ],
       ),
     );

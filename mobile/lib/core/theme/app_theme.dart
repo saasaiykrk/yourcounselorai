@@ -52,6 +52,9 @@ abstract final class AppText {
   );
 }
 
+/// Bundled fonts for symbols Nunito lacks, so replies look the same on every phone.
+const kSymbolFallbacks = ['NotoMath', 'NotoSymbols', 'NotoGreek'];
+
 ThemeData buildAppTheme() {
   const scheme = ColorScheme(
     brightness: Brightness.light,
@@ -85,6 +88,7 @@ ThemeData buildAppTheme() {
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.background,
     fontFamily: 'NunitoSans',
+    fontFamilyFallback: kSymbolFallbacks,
     textTheme: const TextTheme(
       bodyLarge: AppText.body,
       bodyMedium: AppText.small,
