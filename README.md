@@ -4,6 +4,9 @@ Backend, safety core, clinical knowledge base, test cases, and a local test cons
 
 **Stack: hybrid.** The safety-critical backend is **Python/FastAPI** (the cleaner and inspector are written and covered by tests). A thin **Node/HTML** console (`harness/`) is a local developer convenience only — the real app is Android talking to the Python backend directly.
 
+## Phone app
+The Flutter app for Android and iPhone lives in [`mobile/`](mobile/README.md). It is currently a design build with sample data, not yet connected to this backend.
+
 ## Read in this order
 1. **`BRIEF.md`** — one page, non-technical. Give this to a business stakeholder.
 2. **`docs/SPEC-week1.md`** — the Week 1 build spec (what to build, in what order, with done-criteria).
