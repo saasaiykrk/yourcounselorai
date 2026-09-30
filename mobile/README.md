@@ -49,12 +49,10 @@ Plain `http` is allowed only to your own computer, and only in debug builds.
 **Live mode:**
 ```bash
 flutter run --release \
-  --dart-define=APP_MODE=live \
-  --dart-define=BACKEND_URL=https://<your Cloud Run address> \
-  --dart-define=SUPABASE_URL=https://<project>.supabase.co \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=<publishable key>
+  --dart-define-from-file=config/live.json \
+  --dart-define=BACKEND_URL=https://<your Cloud Run address>
 ```
-The Supabase *publishable* key is public by design; no secret ever goes in the app. The Supabase project must:
+`config/live.json` holds the Supabase project address and its *publishable* key. Both are public by design, so they can live in git; no secret ever goes in the app. Admin tasks (first admin, approving clinicians) are in `db/admin.sql`. The Supabase project must:
 - use **asymmetric JWT signing keys**, because the backend checks tokens with JWKS;
 - have an email template that includes `{{ .Token }}`, so clinicians get a 6-digit code rather than a link;
 - use **custom SMTP** for beta volume.
