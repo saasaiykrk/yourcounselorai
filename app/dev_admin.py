@@ -68,3 +68,72 @@ class DevAdminStore:
                 i.update(status=body.status, reviewer_note=body.reviewer_note)
                 return True
         return False
+
+
+class DevHistoryStore:
+    """DEV_MODE consult history: real dev consults are recorded here, plus a
+    couple of invented ones so the History screens have something to show."""
+
+    def __init__(self) -> None:
+        self._convs: dict[str, dict] = {}
+        self._seed("dev-clinician", "aaaaaaaa-0000-4000-8000-000000000001", "Sleep and low mood",
+                   [("A", "34F, low mood for 3 months, poor sleep, lost interest in work. Full plan please.", 30)])
+        self._seed("dev-clinician", "aaaaaaaa-0000-4000-8000-000000000002", None,
+                   [("B", "19M, panic attacks before exams, no medical history. Quick review.", 6),
+                    ("B", "Follow-up: attacks now twice a week. What to add?", 5)])
+        self._seed("22222222-2222-4222-8222-222222222222", "aaaaaaaa-0000-4000-8000-000000000003", None,
+                   [("C", "40M, irritability and poor concentration for 2 months. Differentials?", 50)])
+
+    def _seed(self, owner, cid, title, turns):
+        self._convs[cid] = {"id": cid, "clinician_id": owner, "title": title, "hidden_at": None,
+                            "created_at": _ago(turns[0][2]), "turns": []}
+        for mode, text, hours in turns:
+            self._convs[cid]["turns"].append({
+                "id": str(uuid.uuid4()), "created_at": _ago(hours), "requested_mode": mode, "level": "L2",
+                "input_deid": text, "status": "delivered",
+                "output_shown": "### 1. Case History & MSE Audit\n(sample reply for local testing)"})
+
+    def record(self, owner: str, conv_id: str, mode: str, level: str, text: str, shown: str, status: str) -> None:
+        conv = self._convs.setdefault(conv_id, {"id": conv_id, "clinician_id": owner, "title": None,
+                                                "hidden_at": None, "created_at": _ago(0), "turns": []})
+        conv["turns"].append({"id": str(uuid.uuid4()), "created_at": _ago(0), "requested_mode": mode, "level": level,
+                              "input_deid": text, "output_shown": shown, "status": status})
+
+    def _summary(self, c: dict) -> dict:
+        t = c["turns"]
+        return {"id": c["id"], "title": c["title"], "created_at": c["created_at"], "hidden_at": c["hidden_at"],
+                "last_at": t[-1]["created_at"], "turns": len(t), "preview": t[0]["input_deid"][:160],
+                "modes": sorted({x["requested_mode"] for x in t}), "last_status": t[-1]["status"]}
+
+    def list(self, owner: str, q: str | None, mode: str | None, include_hidden: bool = False) -> list[dict]:
+        rows = []
+        for c in self._convs.values():
+            if c["clinician_id"] != owner or not c["turns"] or (c["hidden_at"] and not include_hidden):
+                continue
+            if q and q.lower() not in (c["title"] or "").lower() and not any(
+                    q.lower() in t["input_deid"].lower() for t in c["turns"]):
+                continue
+            if mode and not any(t["requested_mode"] == mode for t in c["turns"]):
+                continue
+            rows.append(self._summary(c))
+        return sorted(rows, key=lambda r: r["last_at"], reverse=True)
+
+    def get(self, conv_id: str, owner: str | None = None) -> dict | None:
+        c = self._convs.get(conv_id)
+        if not c or (owner is not None and (c["clinician_id"] != owner or c["hidden_at"])):
+            return None
+        return copy.deepcopy(c)
+
+    def rename(self, conv_id: str, owner: str, title: str | None) -> bool:
+        c = self._convs.get(conv_id)
+        if not c or c["clinician_id"] != owner or c["hidden_at"]:
+            return False
+        c["title"] = title
+        return True
+
+    def hide(self, conv_id: str, owner: str) -> bool:
+        c = self._convs.get(conv_id)
+        if not c or c["clinician_id"] != owner or c["hidden_at"]:
+            return False
+        c["hidden_at"] = _ago(0)
+        return True

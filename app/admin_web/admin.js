@@ -66,6 +66,8 @@ async function signOut(message) {
     }).catch(() => {});
   }
   $("clinician-list").replaceChildren();
+  $("consult-list").replaceChildren();
+  $("consult-detail").replaceChildren();
   $("incident-list").replaceChildren();
   $("incident-detail").replaceChildren();
   $("incident-detail").hidden = true;
@@ -203,6 +205,9 @@ async function enter() {
 
 // --- tabs -------------------------------------------------------------------
 function selectTab(name) {
+  showConsults(false);
+  $("consult-list").replaceChildren();
+  $("consult-detail").replaceChildren();
   for (const t of ["clinicians", "incidents"]) {
     $("tab-" + t).setAttribute("aria-selected", String(t === name));
     $("panel-" + t).hidden = t !== name;
@@ -247,6 +252,10 @@ function clinicianItem(c, status) {
     el("div", { class: "meta", text: (ROLE[c.role] || c.role) + " · " + reg }),
     el("div", { class: "meta", text: "Registered " + when(c.created_at) +
       (c.verification_note ? " · Note: " + c.verification_note : "") }));
+  if (status === "verified") {
+    item.append(el("div", { class: "actions" },
+      el("button", { type: "button", class: "link", text: "Consults ›", onclick: () => openConsults(c) })));
+  }
   if (status === "pending") {
     item.append(el("div", { class: "actions" },
       el("button", { type: "button", class: "ok", text: "Approve…", onclick: () => decide(c, "verified") }),
@@ -287,6 +296,58 @@ function decide(c, decision) {
     });
   };
   dlg.showModal();
+}
+
+// --- a clinician's consults (every view is recorded by the backend) ------------
+const MODE = { A: "Full plan", B: "Quick review", C: "Differential", D: "Session plan", E: "Diagnosis review",
+               F: "Notes", G: "Audit only", auto: "Auto" };
+
+function showConsults(on) {
+  $("panel-clinicians").hidden = on;
+  $("panel-consults").hidden = !on;
+}
+
+async function openConsults(c) {
+  showConsults(true);
+  $("consults-who").textContent = c.email || c.id;
+  const list = $("consult-list");
+  $("consult-detail").hidden = true;
+  list.replaceChildren(el("p", { class: "muted", text: "Loading…" }));
+  try {
+    const { consults } = await api("GET", "/v1/admin/clinicians/" + encodeURIComponent(c.id) + "/consults");
+    if (!consults.length) { list.replaceChildren(el("div", { class: "empty", text: "No consults yet." })); return; }
+    list.replaceChildren(...consults.map((x) => el("button", {
+      type: "button", class: "item clickable", onclick: () => openConsult(x.id),
+    },
+    el("div", { class: "head" }, el("span", { class: "title", text: x.title || x.preview }),
+      x.hidden_at ? el("span", { class: "pill", text: "Deleted by clinician" })
+        : x.last_status === "blocked" ? el("span", { class: "pill check", text: "Held back" }) : null),
+    el("div", { class: "meta", text: when(x.last_at || x.created_at) + " · " +
+      (x.modes || []).map((m) => MODE[m] || m).join(", ") + (x.turns > 1 ? " · " + x.turns + " messages" : "") }))));
+  } catch (err) {
+    if (err.message !== "signed-out") list.replaceChildren(el("p", { class: "error", text: "Couldn't load consults." }));
+  }
+}
+
+async function openConsult(id) {
+  const box = $("consult-detail");
+  box.hidden = false;
+  box.replaceChildren(el("p", { class: "muted", text: "Loading…" }));
+  try {
+    const d = await api("GET", "/v1/admin/consults/" + encodeURIComponent(id));
+    const parts = [el("h2", { text: d.title || "Consult" })];
+    if (d.hidden_at) parts.push(el("p", { class: "muted small", text: "Deleted from the clinician's history " + when(d.hidden_at) }));
+    d.turns.forEach((t, i) => {
+      parts.push(el("h3", { text: (i === 0 ? "Case" : "Follow-up") + " · " + (MODE[t.requested_mode] || t.requested_mode) +
+        " · " + t.level + " · " + when(t.created_at) }));
+      parts.push(el("pre", { text: t.input_deid }));
+      parts.push(el("h3", { text: t.status === "delivered" ? "Reply as shown" : "Reply (held back by the safety check)" }));
+      parts.push(el("pre", { text: t.output_shown }));
+    });
+    box.replaceChildren(...parts);
+  } catch (e) {
+    if (e.message !== "signed-out") box.replaceChildren(el("p", { class: "error", text: "Couldn't load this consult." }));
+  }
 }
 
 // --- reports ------------------------------------------------------------------
@@ -367,6 +428,7 @@ async function start() {
   $("clinician-status").addEventListener("change", loadClinicians);
   $("incident-status").addEventListener("change", loadIncidents);
   $("refresh-clinicians").addEventListener("click", () => { loadClinicians(); loadCounts(); });
+  $("consults-back").addEventListener("click", () => selectTab("clinicians"));
   $("refresh-incidents").addEventListener("click", () => { loadIncidents(); loadCounts(); });
   for (const evt of ["click", "keydown"]) document.addEventListener(evt, () => { if (session()) touch(); });
 

@@ -6,6 +6,7 @@ import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
 import 'features/consult/reply_screen.dart';
 import 'features/gallery/gallery_screen.dart';
+import 'features/history/history_screen.dart';
 import 'features/home/home_shell.dart';
 import 'features/onboarding/onboarding_screens.dart';
 import 'features/states/state_screens.dart';
@@ -30,6 +31,9 @@ GoRouter buildRouter({String initialLocation = '/'}) {
             routes: [GoRoute(path: '/consult', builder: (_, _) => const ConsultScreen())],
           ),
           StatefulShellBranch(
+            routes: [GoRoute(path: '/history', builder: (_, _) => const HistoryScreen())],
+          ),
+          StatefulShellBranch(
             routes: [GoRoute(path: '/account', builder: (_, _) => const AccountScreen())],
           ),
         ],
@@ -48,7 +52,22 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         builder: (_, state) => OfflineScreen(error: state.extra),
       ),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
+      GoRoute(
+        path: '/history/consult',
+        builder: (_, state) => HistoryConsultScreen(consultId: state.extra as String? ?? ''),
+      ),
       GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
+      GoRoute(
+        path: '/admin/consults',
+        builder: (_, state) {
+          final (id, email) = state.extra as (String, String)? ?? ('', '');
+          return AdminConsultsScreen(clinicianId: id, email: email);
+        },
+      ),
+      GoRoute(
+        path: '/admin/consult',
+        builder: (_, state) => AdminConsultScreen(consultId: state.extra as String? ?? ''),
+      ),
       GoRoute(
         path: '/admin/report',
         builder: (_, state) => AdminReportScreen(incidentId: state.extra as String? ?? ''),

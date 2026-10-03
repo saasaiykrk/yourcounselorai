@@ -55,8 +55,8 @@ def new_conversation(cid) -> uuid.UUID:
 def history(conv_id, cid, max_turns: int = 6) -> list[dict]:
     """Prior turns as Messages-API history (owner-checked). Blocked turns are skipped."""
     with _conn() as c:
-        owner = c.execute("select clinician_id from conversations where id=%s", (str(conv_id),)).fetchone()
-        if not owner or str(owner["clinician_id"]) != str(cid):
+        owner = c.execute("select clinician_id, hidden_at from conversations where id=%s", (str(conv_id),)).fetchone()
+        if not owner or str(owner["clinician_id"]) != str(cid) or owner["hidden_at"] is not None:
             raise PermissionError("conversation not owned by clinician")
         rows = c.execute("""select input_deid, output_raw from turns where conversation_id=%s and status='delivered'
                             order by created_at desc limit %s""", (str(conv_id), max_turns)).fetchall()
@@ -148,3 +148,68 @@ def update_incident(incident_id, status: str, reviewer_note: str, admin_id) -> b
         c.execute("insert into admin_audit (actor_id, action, target_id, detail) values (%s,'incident',%s,%s)",
                   (str(admin_id), str(incident_id), json.dumps({"status": status, "note": reviewer_note})))
         return True
+
+
+# --- consult history ----------------------------------------------------------------
+def _like(q: str) -> str:
+    return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def list_history(cid, q: str | None = None, mode: str | None = None, limit: int = 50,
+                 include_hidden: bool = False) -> list[dict]:
+    """A clinician's consults, newest activity first. Hidden ones only when include_hidden (admin)."""
+    where, args = ["c.clinician_id = %s"], [str(cid)]
+    if not include_hidden:
+        where.append("c.hidden_at is null")
+    if q:
+        where.append("""(c.title ilike %s or exists (select 1 from turns s where s.conversation_id = c.id
+                                                       and s.input_deid ilike %s))""")
+        args += [_like(q), _like(q)]
+    if mode:
+        where.append("exists (select 1 from turns m where m.conversation_id = c.id and m.requested_mode = %s)")
+        args.append(mode)
+    args.append(limit)
+    with _conn() as c:
+        return c.execute(
+            f"""select c.id, c.title, c.created_at, c.hidden_at, max(t.created_at) as last_at, count(t.id) as turns,
+                       left((array_agg(t.input_deid order by t.created_at))[1], 160) as preview,
+                       array_agg(distinct t.requested_mode) as modes,
+                       (array_agg(t.status order by t.created_at desc))[1] as last_status
+                from conversations c join turns t on t.conversation_id = c.id
+                where {" and ".join(where)}
+                group by c.id order by last_at desc limit %s""", args).fetchall()
+
+
+def get_conversation(conv_id, cid=None) -> dict | None:
+    """One consult with its turns. With cid: owner-checked and hidden ones excluded (clinician view)."""
+    with _conn() as c:
+        conv = c.execute("select id, clinician_id, title, created_at, hidden_at from conversations where id = %s",
+                         (str(conv_id),)).fetchone()
+        if not conv:
+            return None
+        if cid is not None and (str(conv["clinician_id"]) != str(cid) or conv["hidden_at"] is not None):
+            return None
+        conv["turns"] = c.execute(
+            """select id, created_at, requested_mode, level, input_deid, output_shown, status
+               from turns where conversation_id = %s order by created_at""", (str(conv_id),)).fetchall()
+        return conv
+
+
+def rename_conversation(conv_id, cid, title: str | None) -> bool:
+    with _conn() as c:
+        return c.execute("""update conversations set title = %s
+                            where id = %s and clinician_id = %s and hidden_at is null returning id""",
+                         (title, str(conv_id), str(cid))).fetchone() is not None
+
+
+def hide_conversation(conv_id, cid) -> bool:
+    with _conn() as c:
+        return c.execute("""update conversations set hidden_at = now()
+                            where id = %s and clinician_id = %s and hidden_at is null returning id""",
+                         (str(conv_id), str(cid))).fetchone() is not None
+
+
+def audit(admin_id, action: str, target_id, detail: dict) -> None:
+    with _conn() as c:
+        c.execute("insert into admin_audit (actor_id, action, target_id, detail) values (%s,%s,%s,%s)",
+                  (str(admin_id), action, str(target_id), json.dumps(detail)))

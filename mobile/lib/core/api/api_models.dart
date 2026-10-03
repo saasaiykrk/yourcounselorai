@@ -222,3 +222,88 @@ class AdminIncident {
 
   bool get automatic => source == 'inspector';
 }
+
+// --- consult history -------------------------------------------------------------
+
+/// One past consult in a History list. Text is the de-identified case as sent.
+class ConsultSummary {
+  const ConsultSummary({
+    required this.id,
+    required this.preview,
+    required this.turns,
+    required this.modes,
+    this.title,
+    this.lastStatus,
+    this.createdAt,
+    this.lastAt,
+    this.hiddenAt,
+  });
+
+  factory ConsultSummary.fromJson(Map<String, dynamic> j) => ConsultSummary(
+    id: '${j['id']}',
+    title: j['title'] as String?,
+    preview: j['preview'] as String? ?? '',
+    turns: (j['turns'] as num?)?.toInt() ?? 0,
+    modes: [for (final m in (j['modes'] as List? ?? const [])) '$m'],
+    lastStatus: j['last_status'] as String?,
+    createdAt: _date(j['created_at']),
+    lastAt: _date(j['last_at']),
+    hiddenAt: _date(j['hidden_at']),
+  );
+
+  final String id;
+  final String? title;
+  final String preview;
+  final int turns;
+  final List<String> modes;
+  final String? lastStatus;
+  final DateTime? createdAt;
+  final DateTime? lastAt;
+
+  /// Only in admin views: when the clinician removed it from their History.
+  final DateTime? hiddenAt;
+}
+
+class ConsultTurn {
+  const ConsultTurn({
+    required this.input,
+    required this.reply,
+    required this.mode,
+    required this.status,
+    this.createdAt,
+  });
+
+  factory ConsultTurn.fromJson(Map<String, dynamic> j) => ConsultTurn(
+    input: j['input_deid'] as String? ?? '',
+    reply: j['output_shown'] as String? ?? '',
+    mode: j['requested_mode'] as String? ?? '',
+    status: j['status'] as String? ?? '',
+    createdAt: _date(j['created_at']),
+  );
+
+  final String input;
+  final String reply;
+  final String mode;
+  final String status;
+  final DateTime? createdAt;
+
+  bool get delivered => status == 'delivered';
+}
+
+class ConsultDetail {
+  const ConsultDetail({required this.id, required this.turns, this.title, this.createdAt, this.hiddenAt});
+
+  factory ConsultDetail.fromJson(Map<String, dynamic> j) => ConsultDetail(
+    id: '${j['id']}',
+    title: j['title'] as String?,
+    createdAt: _date(j['created_at']),
+    hiddenAt: _date(j['hidden_at']),
+    turns: [for (final t in (j['turns'] as List? ?? const [])) ConsultTurn.fromJson(t as Map<String, dynamic>)],
+  );
+
+  final String id;
+  final String? title;
+  final DateTime? createdAt;
+  final DateTime? hiddenAt;
+  final List<ConsultTurn> turns;
+}

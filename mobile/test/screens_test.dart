@@ -29,6 +29,7 @@ const _routes = [
   '/limit',
   '/offline',
   '/account',
+  '/history',
   '/gallery',
 ];
 

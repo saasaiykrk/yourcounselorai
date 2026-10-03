@@ -71,6 +71,18 @@
         <div id="clinician-list" class="list"></div>
       </div>
 
+      <div id="panel-consults" hidden>
+        <div class="toolbar">
+          <button type="button" class="link" id="consults-back">‹ Back to registrations</button>
+          <span class="muted small" id="consults-who"></span>
+        </div>
+        <p class="notice">Admin view: opening consults is recorded in the audit log. Use it for safety review only.</p>
+        <div class="split">
+          <div id="consult-list" class="list"></div>
+          <div id="consult-detail" class="card detail" hidden></div>
+        </div>
+      </div>
+
       <div id="panel-incidents" role="tabpanel" hidden>
         <div class="toolbar">
           <label>Show

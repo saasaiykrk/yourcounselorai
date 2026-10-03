@@ -27,6 +27,7 @@ class GalleryScreen extends StatelessWidget {
     ('Safety & errors', '14 · Daily limit', '/limit'),
     ('Safety & errors', '15 · Connection problem', '/offline'),
     ('Account', '16 · Account', '/account'),
+    ('History', '17 · History', '/history'),
   ];
 
   @override
