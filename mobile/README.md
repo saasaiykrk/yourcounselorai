@@ -104,4 +104,7 @@ The app is built and released by its owner; CI/CD only deploys the backend. On e
 ## Before the beta
 1. **Live test on real phones:** the Android and iPhone native code (screen protection) has not yet run on a device.
 2. **Supabase set-up** as above, and the backend deployed (plan Step 8).
-3. **Psychologist review** of `lib/core/deid/cleaner.dart` (a safety file), and the open cleaner and inspector findings in the pull request.
+3. **Legal review** of the Clinician Terms and Data Processing Agreement. The app shows beta-draft summaries
+   from `lib/core/content/legal_content.dart`; replace them with the reviewed text and bump `consentVersion`
+   in `lib/core/config.dart` so everyone accepts the new version.
+4. **Psychologist review** of `lib/core/deid/cleaner.dart` (a safety file), and the open cleaner and inspector findings in the pull request.

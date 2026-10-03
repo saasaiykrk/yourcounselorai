@@ -254,10 +254,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         gap: 24,
         actions: [
           _BusyButton(label: 'Send code', busy: _busy, onPressed: _valid ? _send : null),
-          const Text(
-            'By continuing you agree to the Clinician Terms.',
-            textAlign: TextAlign.center,
-            style: AppText.caption,
+          Center(
+            child: TextButton(
+              onPressed: () => context.push('/terms'),
+              child: const Text('By continuing you agree to the Clinician Terms.', textAlign: TextAlign.center),
+            ),
           ),
         ],
         children: [
@@ -572,6 +573,13 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
               'is processed by an AI provider outside India.',
               style: TextStyle(fontSize: 14, height: 1.45),
             ),
+          ),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(onPressed: () => context.push('/terms'), child: const Text('Read the Clinician Terms')),
+              TextButton(onPressed: () => context.push('/dpa'), child: const Text('Read the DPA')),
+            ],
           ),
           _ErrorText(_error),
         ],

@@ -11,6 +11,7 @@ import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
 import '../consult/consult_controller.dart';
+import 'info_screen.dart';
 
 const _roles = {
   'counsellor_trainee': 'Counsellor or trainee',
@@ -53,11 +54,11 @@ class AccountScreen extends ConsumerWidget {
           _LinkGroup(
             links: [
               if (me.value?.isAdmin == true) ('Admin: registrations and reports', () => context.push('/admin')),
-              ('How we protect client data', () {}),
+              ('How we protect client data', () => context.push('/privacy')),
               ('Crisis numbers', () => context.push('/safety')),
-              ('Clinician Terms', () {}),
-              ('Data Processing Agreement', () {}),
-              ('Contact the clinical safety team', () {}),
+              ('Clinician Terms', () => context.push('/terms')),
+              ('Data Processing Agreement', () => context.push('/dpa')),
+              ('Contact the clinical safety team', () => contactSafetyTeam(context)),
               if (AppConfig.previewMode) ('Design preview: all screens', () => context.push('/gallery')),
             ],
           ),
