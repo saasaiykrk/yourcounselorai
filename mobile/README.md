@@ -90,6 +90,12 @@ GitHub runs analyze, tests, the parity check and an Android build on every pull 
   - They are never written to disk.
   - The draft is cleared once a reply is delivered.
   - Everything is wiped on sign-out.
+- **History** (past consults) is read from the server each time the tab opens and is never stored on the phone.
+  - Clinicians see only their own consults. Labels go through the same identifier check as case text.
+  - "Delete" hides a consult from History; the de-identified copy stays on the server for safety review
+    until the 12-month retention ends.
+  - Admins can open any clinician's consults from the Admin area; every view is recorded in `admin_audit`.
+  - Needs `db/migrations/002_consult_history.sql` run once in Supabase.
 - **Keyboard learning and suggestions are off** in case fields.
 - **Send is locked** until the clinician ticks "no identifiers". The server cleans the text again anyway.
 - **Screen protection:** Android blocks screenshots and recording on case screens; iPhone blurs the app in the app switcher (iOS can't block screenshots).

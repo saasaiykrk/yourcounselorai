@@ -47,6 +47,7 @@ button { font: inherit; cursor: pointer; }
 .pill { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--lav); color: var(--royal); white-space: nowrap; }
 .pill.check { background: var(--check-bg); color: var(--check-fg); }
 .pill.crisis { background: var(--crisis-bg); color: var(--crisis-fg); }
+.notice { background: var(--check-bg); color: var(--check-fg); border-radius: 12px; padding: 10px 12px; font-size: 14px; font-weight: 600; margin: 0 0 12px; }
 .empty { color: var(--muted); padding: 24px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 14px; align-items: start; }
 .detail pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: 13px/1.5 ui-monospace, Menlo, monospace; max-height: 320px; overflow: auto; }

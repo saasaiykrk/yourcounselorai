@@ -24,8 +24,11 @@ create table clinicians (
 create table conversations (
   id            uuid primary key default gen_random_uuid(),
   clinician_id  uuid not null references clinicians(id),
+  title         text check (char_length(title) <= 60),   -- clinician's label; passes the identifier check
+  hidden_at     timestamptz,                              -- deleted from History; kept for audit until retention
   created_at    timestamptz not null default now()
 );
+create index conversations_clinician_idx on conversations (clinician_id, created_at desc);
 
 create table turns (
   id                      uuid primary key default gen_random_uuid(),
@@ -51,6 +54,7 @@ create table turns (
 );
 create index on turns (clinician_id, created_at);
 create index on turns (status);
+create index turns_conversation_idx on turns (conversation_id, created_at);
 
 create table incidents (
   id            uuid primary key default gen_random_uuid(),
