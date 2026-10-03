@@ -50,7 +50,7 @@ Plain `http` is allowed only to your own computer, and only in debug builds.
 ```bash
 flutter run --release --dart-define-from-file=config/live.json
 ```
-No Flutter on your computer? Every CI run builds this live app for Android: open the run under **Actions → ci**, download **yourcounselor-live-android** from *Artifacts*, unzip it and install on the phone (allow "install unknown apps" when asked):
+No Flutter on your computer? Start **Actions → ci → Run workflow** (manual; the app isn't built on pull requests) and, when it finishes, download **yourcounselor-live-android** from *Artifacts*, unzip it and install on the phone (allow "install unknown apps" when asked):
 - `app-arm64-v8a-release.apk` for almost every phone from the last ~8 years;
 - `app-armeabi-v7a-release.apk` only if that one says "problem parsing the package" on an old 32-bit phone.
 
@@ -81,7 +81,7 @@ What the tests cover:
   - follow-ups continue the same conversation.
 - **Against the real dev backend:** the integration tests.
 
-GitHub runs analyze, tests, the parity check and an Android build on every pull request. The iPhone build runs when you start the workflow by hand (Actions → ci → Run workflow).
+The app is built and released by its owner; CI/CD only deploys the backend. On every pull request GitHub runs just the quick cleaner parity check (`tool/deid_parity.py --check`). Analysis, tests and the Android and iPhone builds run only when you start them by hand (Actions → ci → Run workflow), so run `flutter analyze` and `flutter test` locally before releasing.
 
 ## Privacy and safety in the app
 

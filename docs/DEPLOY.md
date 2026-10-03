@@ -1,7 +1,7 @@
 # Deploying the backend (CI/CD)
 
 ```
-pull request ──► ci (tests, Android build) ──► merge to main ──► ci on main
+pull request ──► ci (backend tests) ──► merge to main ──► ci on main
                                                                    │ green
                                                                    ▼
                                        deploy: Cloud Run revision ─► /health check ─► live
@@ -10,7 +10,12 @@ pull request ──► ci (tests, Android build) ──► merge to main ──�
                                                      traffic goes back to the previous revision
 ```
 
-- **ci** (`.github/workflows/ci.yml`) runs on every pull request and on `main`.
+- **ci** (`.github/workflows/ci.yml`) runs on every pull request and on `main`: backend tests, the API
+  tests, skill integrity, the cleaner parity check and the safety-file label guard. The mobile app is
+  **not** built or tested here; it is released separately by its owner (its jobs only run by hand).
+- **Scope of CD:** the backend only, which is the API plus the `/admin` web page. A merge that changes nothing
+  under `app/`, `skill/`, `requirements.txt`, `Dockerfile` or `.gcloudignore` (e.g. app-only or docs-only)
+  does not redeploy.
 - **deploy** (`.github/workflows/deploy.yml`) runs only after `ci` passes on `main`, or by hand
   (Actions → deploy → Run workflow). It builds the `Dockerfile` with Cloud Build, rolls out a new
   revision of `yourcounselor-api` in `asia-south1`, and checks `/health`:

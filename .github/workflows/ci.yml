@@ -32,6 +32,10 @@ jobs:
           sys.exit(f"missing {missing}: API tests would be skipped" if missing else 0)
           PY
           python -m unittest tests.test_admin_api tests.test_history_api -v
+      # The app's port of the cleaner must match app/deid.py (a CLAUDE.md safety file). This is a
+      # quick Python check of the committed parity data; it does not build or test the app.
+      - name: Cleaner parity data matches app/deid.py
+        run: python3 mobile/tool/deid_parity.py --check
       - name: Guard — safety files changed need the clinician-review label
         if: github.event_name == 'pull_request'
         env:
@@ -44,8 +48,9 @@ jobs:
           fi
 
   mobile:
-    # Flutter app: static analysis plus widget tests (layout on small and standard phones,
-    # safety behaviours, and safety wording kept in step with the backend and crisis register).
+    # Manual only: the mobile app is built and released by the app owner, not by CI/CD.
+    # Run it from Actions → ci → Run workflow for analysis, widget tests and a test APK.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -56,9 +61,6 @@ jobs:
         with:
           flutter-version: "3.47.5"
           channel: stable
-      - name: Cleaner parity data matches app/deid.py
-        working-directory: .
-        run: python3 mobile/tool/deid_parity.py --check
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
