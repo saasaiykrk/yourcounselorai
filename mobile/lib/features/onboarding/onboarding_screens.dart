@@ -27,7 +27,7 @@ String routeForProfile(Me me) {
 String _messageFor(Object error) => switch (error) {
   AuthFailure(:final message) => message,
   NetworkProblem() => "Couldn't reach Your Counselor. Check your connection and try again.",
-  _ => 'Something went wrong. Please try again.',
+  _ => 'Something went wrong. Please try again. (${error.runtimeType})',
 };
 
 class SplashScreen extends ConsumerStatefulWidget {
