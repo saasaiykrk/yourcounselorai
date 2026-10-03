@@ -3,7 +3,8 @@ HTTP API (FastAPI). The phone talks ONLY to this service; it never holds the
 Anthropic key, the WHO key or the database key.
 
 Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
-  GET  /healthz
+  GET  /healthz   (local; Cloud Run's front end reserves paths ending in "z")
+  GET  /health    (same response; use this one on *.run.app)
   GET  /v1/me                         → profile, level, verification status
   POST /v1/profile                    → role + registration number at signup (status=pending)
   POST /v1/consult                    → one consult turn (inspected before return)
@@ -152,6 +153,7 @@ class CleanIn(BaseModel):
 
 # --- routes -----------------------------------------------------------------
 @app.get("/healthz")
+@app.get("/health")
 def healthz():
     return {"ok": True, "skill_version": SKILL.version, "prompt_hash": SKILL.prompt_hash,
             "model": MODEL.model, **CFG.public()}
