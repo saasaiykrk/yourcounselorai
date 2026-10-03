@@ -1,5 +1,6 @@
 {
   "APP_MODE": "live",
   "SUPABASE_URL": "https://cowsagjvvmllhdjsydyp.supabase.co",
-  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_fr3ncQeT4OZQKEMfickh3Q_f46-KQmL"
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_fr3ncQeT4OZQKEMfickh3Q_f46-KQmL",
+  "BACKEND_URL": "https://yourcounselor-api-504294667459.asia-south1.run.app"
 }
