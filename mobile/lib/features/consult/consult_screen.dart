@@ -109,20 +109,33 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // The level shown is the server-verified one; the app never decides it.
+    // Only the level fits beside the wordmark on narrow phones; the role is on Account.
     final me = ref.watch(meProvider).value;
-    final label = [
-      if (me?.role != null) _roleLabels[me!.role] ?? me.role!,
-      if (me?.level != null) me!.level!,
-    ].join(' · ');
-    return SizedBox(
-      height: 48,
-      child: Row(
-        children: [
-          const BrandMark(size: 34),
-          const SizedBox(width: 8),
-          const Expanded(child: BrandWordmark()),
-          if (label.isNotEmpty) StatusPill(label, icon: Icons.verified_user_outlined),
-        ],
+    final level = me?.level;
+    final role = me?.role == null ? null : _roleLabels[me!.role] ?? me.role!;
+    // Keep the header one line high even with very large system text.
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: 1.15,
+      child: SizedBox(
+        height: 48,
+        child: Row(
+          children: [
+            const BrandMark(size: 30),
+            const SizedBox(width: 8),
+            // The wordmark never wraps; it shrinks a little if the row is tight.
+            const Expanded(
+              child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: BrandWordmark()),
+            ),
+            if (level != null) ...[
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Verified ${role ?? 'clinician'}, level $level',
+                excludeSemantics: true,
+                child: StatusPill(level, icon: Icons.verified_user_outlined),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
