@@ -35,13 +35,16 @@ def upsert_clinician_profile(cid, p: dict) -> None:
             (str(cid), p["role"], p["registration_body"], p.get("registration_number"), p["consent_version"]))
 
 
-def set_verification(cid, level, status, note, admin_id) -> None:
+def set_verification(cid, level, status, note, admin_id) -> bool:
     with _conn() as c:
-        c.execute("""update clinicians set level=%s, verification_status=%s, verification_note=%s,
-                     verified_by=%s, verified_at=now() where id=%s""",
-                  (level if status == "verified" else None, status, note, str(admin_id), str(cid)))
+        row = c.execute("""update clinicians set level=%s, verification_status=%s, verification_note=%s,
+                     verified_by=%s, verified_at=now() where id=%s returning id""",
+                        (level if status == "verified" else None, status, note, str(admin_id), str(cid))).fetchone()
+        if not row:
+            return False
         c.execute("insert into admin_audit (actor_id, action, target_id, detail) values (%s,'verify',%s,%s)",
                   (str(admin_id), str(cid), json.dumps({"level": level, "status": status, "note": note})))
+        return True
 
 
 def new_conversation(cid) -> uuid.UUID:
@@ -100,3 +103,48 @@ def create_incident(turn_id, cid, category, note) -> None:
 def log_deid_rejection(cid, counts: dict) -> None:
     with _conn() as c:
         c.execute("insert into deid_rejections (clinician_id, types) values (%s,%s)", (str(cid), json.dumps(counts)))
+
+
+# --- admin (reads and updates for the admin panel; every write is audited) ---------------
+_CLINICIAN_COLS = """c.id, u.email, c.role, c.registration_body, c.registration_number, c.level,
+                     c.verification_status, c.verification_note, c.verified_at, c.is_admin, c.created_at"""
+
+
+def list_clinicians(status: str, limit: int = 200) -> list[dict]:
+    with _conn() as c:
+        return c.execute(
+            f"""select {_CLINICIAN_COLS} from clinicians c join auth.users u on u.id = c.id
+                where c.verification_status = %s order by c.created_at limit %s""",
+            (status, limit)).fetchall()
+
+
+_INCIDENT_COLS = """i.id, i.turn_id, i.source, i.category, i.note, i.status, i.reviewer_note, i.created_at,
+                    t.level, t.status as turn_status, t.requested_mode, t.skill_version"""
+
+
+def list_incidents(status: str | None, limit: int = 200) -> list[dict]:
+    with _conn() as c:
+        where, args = ("where i.status = %s", (status, limit)) if status else ("", (limit,))
+        return c.execute(
+            f"""select {_INCIDENT_COLS} from incidents i join turns t on t.id = i.turn_id
+                {where} order by i.created_at desc limit %s""", args).fetchall()
+
+
+def get_incident(incident_id) -> dict | None:
+    """One incident with its turn: the de-identified input, the reply as shown, and the inspector reports."""
+    with _conn() as c:
+        return c.execute(
+            f"""select {_INCIDENT_COLS}, t.input_deid, t.output_shown, t.inspector_reports, t.attempts
+                from incidents i join turns t on t.id = i.turn_id where i.id = %s""",
+            (str(incident_id),)).fetchone()
+
+
+def update_incident(incident_id, status: str, reviewer_note: str, admin_id) -> bool:
+    with _conn() as c:
+        row = c.execute("update incidents set status=%s, reviewer_note=%s where id=%s returning id",
+                        (status, reviewer_note, str(incident_id))).fetchone()
+        if not row:
+            return False
+        c.execute("insert into admin_audit (actor_id, action, target_id, detail) values (%s,'incident',%s,%s)",
+                  (str(admin_id), str(incident_id), json.dumps({"status": status, "note": reviewer_note})))
+        return True

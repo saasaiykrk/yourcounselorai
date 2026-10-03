@@ -23,6 +23,15 @@ jobs:
           assert s.version != "unknown", "skill version missing from SKILL.md"
           print("skill", s.version, "prompt_hash", s.prompt_hash, "cards", len(s.card_index))
           PY
+      - name: API tests (admin panel; needs the app's dependencies)
+        run: |
+          pip install -r requirements.txt
+          python - <<'PY'
+          import importlib.util, sys
+          missing = [m for m in ("fastapi", "httpx", "psycopg") if not importlib.util.find_spec(m)]
+          sys.exit(f"missing {missing}: API tests would be skipped" if missing else 0)
+          PY
+          python -m unittest tests.test_admin_api -v
       - name: Guard — safety files changed need the clinician-review label
         if: github.event_name == 'pull_request'
         env:
