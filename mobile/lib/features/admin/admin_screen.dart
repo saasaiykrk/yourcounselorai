@@ -11,6 +11,7 @@ import '../../core/security/screen_protection.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
+import '../history/history_screen.dart';
 
 /// Admin area: approve or reject registrations, and triage "Report a problem"
 /// items and held-back replies. Reached from Account, shown only to admins;
@@ -162,6 +163,9 @@ class _RegistrationsTabState extends ConsumerState<_RegistrationsTab> {
                         clinician: c,
                         onApprove: c.verificationStatus == 'pending' ? () => _decide(c, approve: true) : null,
                         onReject: c.verificationStatus == 'pending' ? () => _decide(c, approve: false) : null,
+                        onConsults: c.verificationStatus == 'verified'
+                            ? () => context.push('/admin/consults', extra: (c.id, c.email))
+                            : null,
                       ),
                     ),
                 ],
@@ -175,11 +179,12 @@ class _RegistrationsTabState extends ConsumerState<_RegistrationsTab> {
 }
 
 class _ClinicianCard extends StatelessWidget {
-  const _ClinicianCard({required this.clinician, this.onApprove, this.onReject});
+  const _ClinicianCard({required this.clinician, this.onApprove, this.onReject, this.onConsults});
 
   final AdminClinician clinician;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onConsults;
 
   @override
   Widget build(BuildContext context) {
@@ -212,6 +217,14 @@ class _ClinicianCard extends StatelessWidget {
             'Registered ${_when(c.createdAt)}${c.verificationNote != null ? ' · ${c.verificationNote}' : ''}',
             style: AppText.caption,
           ),
+          if (onConsults != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: onConsults,
+              icon: const Icon(Icons.history_rounded, size: 18),
+              label: const Text('Consults'),
+            ),
+          ],
           if (onApprove != null || onReject != null) ...[
             const SizedBox(height: 12),
             Row(
@@ -649,6 +662,129 @@ class _Problem extends StatelessWidget {
           ),
           TextButton(onPressed: onRetry, child: const Text('Try again')),
         ],
+      ),
+    );
+  }
+}
+
+// --- a clinician's consults (admin; every view is recorded in admin_audit) ------
+
+const _auditNotice = NoticeBanner(
+  icon: Icons.visibility_outlined,
+  text: 'Admin view: opening consults is recorded in the audit log. Use it for safety review only.',
+  tone: Tone.check,
+);
+
+class AdminConsultsScreen extends ConsumerStatefulWidget {
+  const AdminConsultsScreen({super.key, required this.clinicianId, required this.email});
+
+  final String clinicianId;
+  final String email;
+
+  @override
+  ConsumerState<AdminConsultsScreen> createState() => _AdminConsultsScreenState();
+}
+
+class _AdminConsultsScreenState extends ConsumerState<AdminConsultsScreen> {
+  late Future<List<ConsultSummary>> _future = _load();
+
+  Future<List<ConsultSummary>> _load() => ref.read(adminRepositoryProvider).clinicianConsults(widget.clinicianId);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.email, overflow: TextOverflow.ellipsis)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        children: [
+          _auditNotice,
+          const SizedBox(height: 12),
+          FutureBuilder<List<ConsultSummary>>(
+            future: _future,
+            builder: (context, snap) {
+              if (snap.connectionState != ConnectionState.done) {
+                return const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snap.hasError) {
+                return _Problem(
+                  _errorText(snap.error!),
+                  onRetry: () {
+                    setState(() {
+                      _future = _load();
+                    });
+                  },
+                );
+              }
+              final list = snap.data!;
+              if (list.isEmpty) return const _Empty('No consults yet.');
+              return Column(
+                children: [
+                  for (final c in list)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: ConsultSummaryCard(
+                        consult: c,
+                        onTap: () => context.push('/admin/consult', extra: c.id),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One consult as an admin sees it. Screenshot-protected; the backend records the view.
+class AdminConsultScreen extends ConsumerStatefulWidget {
+  const AdminConsultScreen({super.key, required this.consultId});
+
+  final String consultId;
+
+  @override
+  ConsumerState<AdminConsultScreen> createState() => _AdminConsultScreenState();
+}
+
+class _AdminConsultScreenState extends ConsumerState<AdminConsultScreen> {
+  late final Future<ConsultDetail> _future = ref.read(adminRepositoryProvider).consult(widget.consultId);
+
+  @override
+  Widget build(BuildContext context) {
+    return ProtectedScreen(
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Consult')),
+        body: FutureBuilder<ConsultDetail>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snap.hasError) return _Problem(_errorText(snap.error!), onRetry: () => context.pop());
+            final d = snap.data!;
+            return ConsultTurnsView(
+              detail: d,
+              header: Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _auditNotice,
+                    if (d.title != null) ...[const SizedBox(height: 12), Text(d.title!, style: AppText.sectionTitle)],
+                    if (d.hiddenAt != null) ...[
+                      const SizedBox(height: 8),
+                      Text('Deleted from the clinician\'s history ${historyWhen(d.hiddenAt)}', style: AppText.caption),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

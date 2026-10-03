@@ -59,5 +59,6 @@ String describeIdentifierType(String type) => switch (type) {
   'PINCODE' => 'PIN code',
   'NAME' => 'Name',
   'ORG' => 'Workplace or school',
+  'POSSIBLE_NAME' => 'Possible name',
   _ => 'Identifier',
 };
