@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Your Counselor Admin</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/admin/admin.css">
+  <script src="/admin/admin.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="your">Your</span> <span class="counselor">Counselor</span> <span class="tag">Admin</span></div>
+    <div class="who" id="who" hidden>
+      <span id="who-email"></span>
+      <button type="button" class="link" id="sign-out">Sign out</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Sign in -->
+    <section id="view-sign-in" class="card narrow" hidden>
+      <h1>Admin sign-in</h1>
+      <p class="muted" id="sign-in-help">Only existing admin accounts can sign in. We'll email you a 6-digit code.</p>
+      <form id="form-email">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required>
+        <button type="submit" class="primary">Send code</button>
+      </form>
+      <form id="form-code" hidden>
+        <label for="code">6-digit code</label>
+        <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" required>
+        <button type="submit" class="primary">Verify</button>
+        <button type="button" class="link" id="change-email">Use a different email</button>
+      </form>
+      <form id="form-dev" hidden>
+        <label for="dev-token">Dev token (DEV_MODE only)</label>
+        <input id="dev-token" value="dev-L3" required>
+        <button type="submit" class="primary">Continue</button>
+      </form>
+      <p class="error" id="sign-in-error" role="alert"></p>
+    </section>
+
+    <!-- Not an admin -->
+    <section id="view-denied" class="card narrow" hidden>
+      <h1>No admin access</h1>
+      <p class="muted">This account isn't an admin. Ask the Your Counselor team to grant access.</p>
+      <button type="button" class="primary" id="denied-sign-out">Sign out</button>
+    </section>
+
+    <!-- Admin -->
+    <section id="view-admin" hidden>
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-clinicians" aria-selected="true">Registrations <span class="count" id="count-pending"></span></button>
+        <button type="button" role="tab" id="tab-incidents" aria-selected="false">Reports <span class="count" id="count-open"></span></button>
+      </nav>
+
+      <div id="panel-clinicians" role="tabpanel">
+        <div class="toolbar">
+          <label>Show
+            <select id="clinician-status">
+              <option value="pending">Waiting for approval</option>
+              <option value="verified">Verified</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </label>
+          <button type="button" class="link" id="refresh-clinicians">Refresh</button>
+        </div>
+        <p class="muted small">Check each registration number on the official register (RCI / NMC / State Medical Council) before approving.</p>
+        <div id="clinician-list" class="list"></div>
+      </div>
+
+      <div id="panel-incidents" role="tabpanel" hidden>
+        <div class="toolbar">
+          <label>Show
+            <select id="incident-status">
+              <option value="open">Open</option>
+              <option value="triaged">Triaged</option>
+              <option value="fixed">Fixed</option>
+              <option value="wont_fix">Won't fix</option>
+              <option value="">All</option>
+            </select>
+          </label>
+          <button type="button" class="link" id="refresh-incidents">Refresh</button>
+        </div>
+        <div class="split">
+          <div id="incident-list" class="list"></div>
+          <div id="incident-detail" class="card detail" hidden></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Decision dialog -->
+  <dialog id="decide">
+    <form method="dialog" id="decide-form">
+      <h2 id="decide-title"></h2>
+      <p class="muted small" id="decide-who"></p>
+      <div id="decide-level-row">
+        <label for="decide-level">Level</label>
+        <select id="decide-level">
+          <option value="L1">L1 · Counsellor / trainee</option>
+          <option value="L2">L2 · Psychologist</option>
+          <option value="L3">L3 · Senior / psychiatrist</option>
+        </select>
+      </div>
+      <label for="decide-note">How you checked (required)</label>
+      <input id="decide-note" required minlength="3" maxlength="500" placeholder="e.g. RCI register, 2026-10-03">
+      <p class="error" id="decide-error" role="alert"></p>
+      <div class="row">
+        <button type="button" class="link" id="decide-cancel">Cancel</button>
+        <button type="submit" class="primary" id="decide-ok">Confirm</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
