@@ -22,6 +22,7 @@ OPTIONAL = {
     "WHO_ICD_CLIENT_SECRET": "",
     "DAILY_TURN_LIMIT": "40",
     "DEV_MODE": "0",
+    "SUPABASE_PUBLISHABLE_KEY": "",   # public by design; only the web admin page uses it
 }
 _MASK = 4  # show only the last N chars of any secret when describing config
 
@@ -38,6 +39,7 @@ class Config:
     who_icd_client_secret: str
     daily_turn_limit: int
     dev_mode: bool
+    supabase_publishable_key: str = ""
 
     @property
     def icd_enabled(self) -> bool:
@@ -84,4 +86,5 @@ def load_config() -> Config:
         who_icd_client_secret=g("WHO_ICD_CLIENT_SECRET"),
         daily_turn_limit=int(g("DAILY_TURN_LIMIT") or "40"),
         dev_mode=dev,
+        supabase_publishable_key=g("SUPABASE_PUBLISHABLE_KEY"),
     )

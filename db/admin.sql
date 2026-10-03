@@ -63,3 +63,10 @@ select u.email, c.role, c.registration_body, c.registration_number, c.created_at
 from clinicians c join auth.users u on u.id = c.id
 where c.verification_status = 'pending'
 order by c.created_at;
+
+
+-- Day to day, use the admin panel instead of these snippets:
+--   * in the app: Account → "Admin: registrations and reports" (admins only), or
+--   * in a browser: https://<your Cloud Run address>/admin
+-- Both approve/reject registrations and triage reports, and write admin_audit rows.
+-- Block 2 above is still how the very first admin is created.
