@@ -48,11 +48,11 @@ Plain `http` is allowed only to your own computer, and only in debug builds.
 
 **Live mode:**
 ```bash
-flutter run --release \
-  --dart-define-from-file=config/live.json \
-  --dart-define=BACKEND_URL=https://<your Cloud Run address>
+flutter run --release --dart-define-from-file=config/live.json
 ```
-`config/live.json` holds the Supabase project address and its *publishable* key. Both are public by design, so they can live in git; no secret ever goes in the app. Admin tasks (first admin, approving clinicians) are in `db/admin.sql`. The Supabase project must:
+No Flutter on your computer? Every CI run builds this live app for Android: open the run under **Actions → ci**, download **yourcounselor-live-android** from *Artifacts*, unzip it and install `app-debug.apk` on the phone (allow "install unknown apps" when asked).
+
+`config/live.json` holds the Cloud Run backend address, the Supabase project address and its *publishable* key. Both are public by design, so they can live in git; no secret ever goes in the app. Admin tasks (first admin, approving clinicians) are in `db/admin.sql`. The Supabase project must:
 - use **asymmetric JWT signing keys**, because the backend checks tokens with JWKS;
 - have an email template that includes `{{ .Token }}`, so clinicians get a 6-digit code rather than a link;
 - use **custom SMTP** for beta volume.
