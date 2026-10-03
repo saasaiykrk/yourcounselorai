@@ -1,6 +1,8 @@
 import 'package:go_router/go_router.dart';
 
+import 'core/content/legal_content.dart';
 import 'features/account/account_screen.dart';
+import 'features/account/info_screen.dart';
 import 'features/admin/admin_screen.dart';
 import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
@@ -41,6 +43,18 @@ GoRouter buildRouter({String initialLocation = '/'}) {
       GoRoute(path: '/drafting', builder: (_, _) => const DraftingScreen()),
       GoRoute(path: '/reply', builder: (_, _) => const ReplyScreen()),
       GoRoute(path: '/safety', builder: (_, _) => const SafetyScreen()),
+      GoRoute(
+        path: '/privacy',
+        builder: (_, _) => const InfoScreen(doc: kPrivacyDoc),
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (_, _) => const InfoScreen(doc: kTermsDoc),
+      ),
+      GoRoute(
+        path: '/dpa',
+        builder: (_, _) => const InfoScreen(doc: kDpaDoc),
+      ),
       GoRoute(path: '/held-back', builder: (_, _) => const HeldBackScreen()),
       GoRoute(
         path: '/identifiers',

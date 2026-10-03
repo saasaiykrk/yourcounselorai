@@ -31,6 +31,9 @@ const _routes = [
   '/account',
   '/history',
   '/gallery',
+  '/privacy',
+  '/terms',
+  '/dpa',
 ];
 
 /// Consult repository that answers instantly with a chosen outcome.
