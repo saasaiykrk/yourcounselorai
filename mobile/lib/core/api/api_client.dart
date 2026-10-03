@@ -37,13 +37,55 @@ class ApiClient {
   Future<void> reportIncident({required String turnId, required String category, required String note}) =>
       _send('POST', '/v1/incidents', body: {'turn_id': turnId, 'category': category, 'note': note});
 
-  Future<Map<String, dynamic>> _send(String method, String path, {Map<String, dynamic>? body}) async {
+  // --- admin (the backend re-checks admin rights on every call) ---
+
+  Future<List<AdminClinician>> adminClinicians(String status) async {
+    final data = await _send('GET', '/v1/admin/clinicians', query: {'status': status});
+    return [
+      for (final c in (data['clinicians'] as List? ?? const [])) AdminClinician.fromJson(c as Map<String, dynamic>),
+    ];
+  }
+
+  /// Approve ([level] required) or reject a registration. [note] says how the register was checked.
+  Future<void> adminDecide(String clinicianId, {required bool approve, String? level, required String note}) => _send(
+    'PATCH',
+    '/v1/admin/clinicians/${Uri.encodeComponent(clinicianId)}',
+    body: {
+      'verification_status': approve ? 'verified' : 'rejected',
+      'level': approve ? level : null,
+      'evidence_note': note,
+    },
+  );
+
+  Future<List<AdminIncident>> adminIncidents(String? status) async {
+    final data = await _send('GET', '/v1/admin/incidents', query: {'status': ?status});
+    return [
+      for (final i in (data['incidents'] as List? ?? const [])) AdminIncident.fromJson(i as Map<String, dynamic>),
+    ];
+  }
+
+  Future<AdminIncident> adminIncident(String id) async =>
+      AdminIncident.fromJson(await _send('GET', '/v1/admin/incidents/${Uri.encodeComponent(id)}'));
+
+  Future<void> adminUpdateIncident(String id, {required String status, required String reviewerNote}) => _send(
+    'PATCH',
+    '/v1/admin/incidents/${Uri.encodeComponent(id)}',
+    body: {'status': status, 'reviewer_note': reviewerNote},
+  );
+
+  Future<Map<String, dynamic>> _send(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    Map<String, dynamic>? query,
+  }) async {
     final token = await _token();
     if (token == null) throw const Unauthorized();
     try {
       final response = await _dio.request<Object?>(
         path,
         data: body,
+        queryParameters: query,
         options: Options(method: method, headers: {'Authorization': 'Bearer $token'}),
       );
       final data = response.data;

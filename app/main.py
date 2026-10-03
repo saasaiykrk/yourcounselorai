@@ -3,12 +3,18 @@ HTTP API (FastAPI). The phone talks ONLY to this service; it never holds the
 Anthropic key, the WHO key or the database key.
 
 Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
-  GET  /healthz
+  GET  /healthz   (local; Cloud Run's front end reserves paths ending in "z")
+  GET  /health    (same response; use this one on *.run.app)
   GET  /v1/me                         → profile, level, verification status
   POST /v1/profile                    → role + registration number at signup (status=pending)
   POST /v1/consult                    → one consult turn (inspected before return)
   POST /v1/incidents                  → "Report a problem" button on any reply
+  GET  /v1/admin/clinicians?status=   → admin: pending / verified / rejected registrations
   PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
+  GET  /v1/admin/incidents?status=    → admin: "Report a problem" items and held-back replies
+  GET  /v1/admin/incidents/{id}       → admin: one incident with its de-identified turn
+  PATCH /v1/admin/incidents/{id}      → admin: triage status + reviewer note
+  GET  /admin                         → web admin page (static; signs in with Supabase email code)
 
 DEV_MODE=1 (local only): accepts a `Bearer dev-L1|dev-L2|dev-L3` token as a
 verified clinician, skips the database, exposes POST /dev/clean, and — if no
@@ -25,10 +31,12 @@ import pathlib
 import uuid
 from datetime import date
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import db, deid
+from .dev_admin import DevAdminStore
 from .icd import ICD11Client, OfflineICD11
 from .pipeline import DeidRejected, ModelResult, Pipeline
 from .prompt import load_skill
@@ -81,6 +89,7 @@ if CFG.dev_mode:
 # In-memory clinician for DEV_MODE so no database is needed locally.
 _DEV_CLINICIAN = {"id": "dev-clinician", "level": "L2", "verification_status": "verified",
                   "consent_version": "beta-draft-1", "is_admin": True}
+_dev_admin = DevAdminStore()  # sample registrations and reports for the admin panel in DEV_MODE
 
 
 # --- auth -------------------------------------------------------------------
@@ -141,9 +150,14 @@ class IncidentIn(BaseModel):
 
 
 class VerifyIn(BaseModel):
-    level: str = Field(pattern="^(L1|L2|L3)$")
+    level: str | None = Field(default=None, pattern="^(L1|L2|L3)$")   # required when verifying
     verification_status: str = Field(pattern="^(verified|rejected)$")
-    evidence_note: str = Field(max_length=500)
+    evidence_note: str = Field(min_length=3, max_length=500)          # how the register was checked
+
+
+class IncidentUpdateIn(BaseModel):
+    status: str = Field(pattern="^(open|triaged|fixed|wont_fix)$")
+    reviewer_note: str = Field(default="", max_length=2000)
 
 
 class CleanIn(BaseModel):
@@ -152,6 +166,7 @@ class CleanIn(BaseModel):
 
 # --- routes -----------------------------------------------------------------
 @app.get("/healthz")
+@app.get("/health")
 def healthz():
     return {"ok": True, "skill_version": SKILL.version, "prompt_hash": SKILL.prompt_hash,
             "model": MODEL.model, **CFG.public()}
@@ -219,10 +234,94 @@ def incident(body: IncidentIn, c: dict = Depends(verified_clinician)):
     return {"ok": True}
 
 
+# --- admin panel (app Admin area and /admin web page) -------------------------
+# Admin-only. Lists hold clinicians' registration details and de-identified case
+# text only; every change is written to admin_audit.
+@app.get("/v1/admin/clinicians")
+def admin_clinicians(status: str = Query("pending", pattern="^(pending|verified|rejected)$"),
+                     a: dict = Depends(admin)):
+    rows = _dev_admin.clinicians(status) if CFG.dev_mode else db.list_clinicians(status)
+    return {"clinicians": rows}
+
+
 @app.patch("/v1/admin/clinicians/{clinician_id}")
 def verify(clinician_id: uuid.UUID, body: VerifyIn, a: dict = Depends(admin)):
-    db.set_verification(clinician_id, body.level, body.verification_status, body.evidence_note, a["id"])
+    if body.verification_status == "verified" and not body.level:
+        raise HTTPException(422, "level required to verify")
+    if str(clinician_id) == str(a["id"]):
+        raise HTTPException(409, "admins cannot change their own verification")
+    if CFG.dev_mode:
+        found = _dev_admin.verify(clinician_id, body)
+    else:
+        found = db.set_verification(clinician_id, body.level, body.verification_status, body.evidence_note, a["id"])
+    if not found:
+        raise HTTPException(404, "clinician not found")
     return {"ok": True}
+
+
+@app.get("/v1/admin/incidents")
+def admin_incidents(status: str | None = Query(None, pattern="^(open|triaged|fixed|wont_fix)$"),
+                    a: dict = Depends(admin)):
+    rows = _dev_admin.incidents(status) if CFG.dev_mode else db.list_incidents(status)
+    return {"incidents": rows}
+
+
+@app.get("/v1/admin/incidents/{incident_id}")
+def admin_incident(incident_id: uuid.UUID, a: dict = Depends(admin)):
+    row = _dev_admin.incident(incident_id) if CFG.dev_mode else db.get_incident(incident_id)
+    if not row:
+        raise HTTPException(404, "incident not found")
+    return row
+
+
+@app.patch("/v1/admin/incidents/{incident_id}")
+def admin_update_incident(incident_id: uuid.UUID, body: IncidentUpdateIn, a: dict = Depends(admin)):
+    if CFG.dev_mode:
+        found = _dev_admin.update_incident(incident_id, body)
+    else:
+        found = db.update_incident(incident_id, body.status, body.reviewer_note, a["id"])
+    if not found:
+        raise HTTPException(404, "incident not found")
+    return {"ok": True}
+
+
+# The web admin page: static files from app/admin_web, served from this origin so
+# no CORS is needed. No third-party scripts; strict CSP; never cached.
+_ADMIN_DIR = pathlib.Path(__file__).parent / "admin_web"
+_ADMIN_FILES = {"": ("index.html", "text/html"), "admin.js": ("admin.js", "text/javascript"),
+                "admin.css": ("admin.css", "text/css")}
+
+
+def _supabase_url() -> str:
+    # https://<project>.supabase.co/auth/v1/.well-known/jwks.json -> https://<project>.supabase.co
+    return CFG.supabase_jwks_url.split("/auth/v1/", 1)[0] if "/auth/v1/" in CFG.supabase_jwks_url else ""
+
+
+def _admin_headers() -> dict:
+    connect = " ".join(x for x in ("'self'", _supabase_url()) if x)
+    return {
+        "Content-Security-Policy": (f"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                                    f"connect-src {connect}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+@app.get("/admin/config.json")
+def admin_config():
+    return JSONResponse({"supabase_url": _supabase_url(), "supabase_publishable_key": CFG.supabase_publishable_key,
+                         "dev_mode": CFG.dev_mode}, headers=_admin_headers())
+
+
+@app.get("/admin")
+@app.get("/admin/")
+@app.get("/admin/{name}")
+def admin_page(name: str = ""):
+    if name not in _ADMIN_FILES:
+        raise HTTPException(404, "not found")
+    file, media = _ADMIN_FILES[name]
+    return Response((_ADMIN_DIR / file).read_bytes(), media_type=media, headers=_admin_headers())
 
 
 # --- dev-only helper --------------------------------------------------------

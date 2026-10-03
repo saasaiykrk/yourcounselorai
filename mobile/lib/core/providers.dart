@@ -27,5 +27,9 @@ final consultRepositoryProvider = Provider<ConsultRepository>(
   (ref) => AppConfig.previewMode ? PreviewConsultRepository() : ApiConsultRepository(ref.watch(apiClientProvider)),
 );
 
+final adminRepositoryProvider = Provider<AdminRepository>(
+  (ref) => AppConfig.previewMode ? PreviewAdminRepository() : ApiAdminRepository(ref.watch(apiClientProvider)),
+);
+
 /// The signed-in clinician's profile and verified level. Re-read with `ref.invalidate(meProvider)`.
 final meProvider = FutureProvider.autoDispose<Me>((ref) => ref.watch(profileRepositoryProvider).me());

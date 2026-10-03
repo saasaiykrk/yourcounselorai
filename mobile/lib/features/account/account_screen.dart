@@ -52,6 +52,7 @@ class AccountScreen extends ConsumerWidget {
           ),
           _LinkGroup(
             links: [
+              if (me.value?.isAdmin == true) ('Admin: registrations and reports', () => context.push('/admin')),
               ('How we protect client data', () {}),
               ('Crisis numbers', () => context.push('/safety')),
               ('Clinician Terms', () {}),

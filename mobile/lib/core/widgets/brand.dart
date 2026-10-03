@@ -63,6 +63,8 @@ class BrandWordmark extends StatelessWidget {
         ],
       ),
       semanticsLabel: 'Your Counselor',
+      maxLines: 1,
+      softWrap: false,
     );
   }
 }

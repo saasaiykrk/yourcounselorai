@@ -3,13 +3,14 @@ library;
 
 /// `GET /v1/me`.
 class Me {
-  const Me({required this.verificationStatus, this.level, this.role, this.registrationBody});
+  const Me({required this.verificationStatus, this.level, this.role, this.registrationBody, this.isAdmin = false});
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
     verificationStatus: json['verification_status'] as String? ?? 'none',
     level: json['level'] as String?,
     role: json['role'] as String?,
     registrationBody: json['registration_body'] as String?,
+    isAdmin: json['is_admin'] == true,
   );
 
   /// none (no profile yet) · pending · verified · rejected
@@ -19,6 +20,10 @@ class Me {
   final String? level;
   final String? role;
   final String? registrationBody;
+
+  /// Set only in the database by another admin; shows the Admin area. The
+  /// backend checks it again on every admin request.
+  final bool isAdmin;
 
   bool get needsProfile => verificationStatus == 'none';
   bool get isVerified => verificationStatus == 'verified' && level != null;
@@ -123,4 +128,97 @@ class ConsultReply {
   final String text;
   final String skillVersion;
   final ReplyMeta meta;
+}
+
+// --- admin -------------------------------------------------------------------
+
+DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v)?.toLocal() : null;
+
+/// A clinician registration as the admin list shows it.
+class AdminClinician {
+  const AdminClinician({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.verificationStatus,
+    this.registrationBody,
+    this.registrationNumber,
+    this.level,
+    this.verificationNote,
+    this.createdAt,
+  });
+
+  factory AdminClinician.fromJson(Map<String, dynamic> j) => AdminClinician(
+    id: '${j['id']}',
+    email: j['email'] as String? ?? '',
+    role: j['role'] as String? ?? '',
+    verificationStatus: j['verification_status'] as String? ?? 'pending',
+    registrationBody: j['registration_body'] as String?,
+    registrationNumber: j['registration_number'] as String?,
+    level: j['level'] as String?,
+    verificationNote: j['verification_note'] as String?,
+    createdAt: _date(j['created_at']),
+  );
+
+  final String id;
+  final String email;
+  final String role;
+  final String verificationStatus;
+  final String? registrationBody;
+  final String? registrationNumber;
+  final String? level;
+  final String? verificationNote;
+  final DateTime? createdAt;
+}
+
+/// A "Report a problem" item or an automatic held-back report. [inputDeid],
+/// [outputShown] and [inspectorReports] are only filled when opened.
+class AdminIncident {
+  const AdminIncident({
+    required this.id,
+    required this.source,
+    required this.category,
+    required this.status,
+    this.note,
+    this.reviewerNote,
+    this.level,
+    this.turnStatus,
+    this.requestedMode,
+    this.createdAt,
+    this.inputDeid,
+    this.outputShown,
+    this.inspectorReports,
+  });
+
+  factory AdminIncident.fromJson(Map<String, dynamic> j) => AdminIncident(
+    id: '${j['id']}',
+    source: j['source'] as String? ?? '',
+    category: j['category'] as String? ?? '',
+    status: j['status'] as String? ?? 'open',
+    note: j['note'] as String?,
+    reviewerNote: j['reviewer_note'] as String?,
+    level: j['level'] as String?,
+    turnStatus: j['turn_status'] as String?,
+    requestedMode: j['requested_mode'] as String?,
+    createdAt: _date(j['created_at']),
+    inputDeid: j['input_deid'] as String?,
+    outputShown: j['output_shown'] as String?,
+    inspectorReports: j['inspector_reports'],
+  );
+
+  final String id;
+  final String source;
+  final String category;
+  final String status;
+  final String? note;
+  final String? reviewerNote;
+  final String? level;
+  final String? turnStatus;
+  final String? requestedMode;
+  final DateTime? createdAt;
+  final String? inputDeid;
+  final String? outputShown;
+  final Object? inspectorReports;
+
+  bool get automatic => source == 'inspector';
 }

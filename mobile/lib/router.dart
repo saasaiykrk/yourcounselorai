@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import 'features/account/account_screen.dart';
+import 'features/admin/admin_screen.dart';
 import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
 import 'features/consult/reply_screen.dart';
@@ -47,6 +48,11 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         builder: (_, state) => OfflineScreen(error: state.extra),
       ),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
+      GoRoute(path: '/admin', builder: (_, _) => const AdminScreen()),
+      GoRoute(
+        path: '/admin/report',
+        builder: (_, state) => AdminReportScreen(incidentId: state.extra as String? ?? ''),
+      ),
     ],
   );
 }
