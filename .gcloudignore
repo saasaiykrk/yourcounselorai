@@ -1,0 +1,20 @@
+# Only what the Dockerfile needs is uploaded to Cloud Build (app/, skill/,
+# requirements.txt, Dockerfile). Keeps uploads small and keeps the rest out.
+.git
+.github
+.gitignore
+.gcloudignore
+.env
+.env.*
+**/__pycache__
+*.pyc
+mobile/
+docs/
+evals/
+tests/
+fixtures/
+harness/
+schema/
+db/
+BRIEF.md
+package.json
