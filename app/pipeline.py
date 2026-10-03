@@ -128,10 +128,11 @@ class Pipeline:
             reports.append(rep)
             if rep.passed:
                 break
-            messages = messages + [
-                {"role": "assistant", "content": result.text},
-                {"role": "user", "content": rep.retry_feedback()},
-            ]
+            # An empty reply (e.g. a declined one) is not echoed back: the API rejects
+            # empty assistant turns.
+            messages = messages + (
+                [{"role": "assistant", "content": result.text}] if result.text.strip() else []
+            ) + [{"role": "user", "content": rep.retry_feedback()}]
 
         assert result is not None
         passed = reports[-1].passed
