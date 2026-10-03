@@ -95,6 +95,21 @@ add yourself. Each deploy then waits for your click in the Actions tab before go
 Actions → **deploy** → **Run workflow** (branch `main`). It takes about 4 to 6 minutes. The summary ends with
 the skill version, model and prompt hash that are now live.
 
+## Clinical evals (optional, manual)
+
+Actions → **ci** → Run workflow builds the app. Tick **run_evals** only when you also want the clinical
+test cases (`evals/evals.json`) run through the real model (it costs money; needed before changing the model, the skill or the
+inspector). They need these extra settings in GitHub → Settings → Secrets and variables → Actions:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `ANTHROPIC_API_KEY` | an Anthropic key (ideally a separate one, so its spend shows apart) |
+| Secret | `WHO_ICD_CLIENT_ID`, `WHO_ICD_CLIENT_SECRET` | the WHO keys (optional; without them ICD lookups are offline) |
+| Variable | `CLAUDE_MODEL` | `claude-opus-5-5` |
+| Variable | `ICD_RELEASE` | `2025-01` |
+
+The grading pack appears under *Artifacts* as **eval-grading-pack** for the clinician to grade.
+
 ## Rolling back by hand
 
 ```bash

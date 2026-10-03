@@ -1,6 +1,11 @@
 name: ci
 on:
   workflow_dispatch:
+    inputs:
+      run_evals:
+        description: "Also run the clinical evals (real model, costs money; needs the eval secrets in GitHub)"
+        type: boolean
+        default: false
   pull_request:
     types: [opened, synchronize, labeled, unlabeled]
   push:
@@ -101,14 +106,27 @@ jobs:
       - run: flutter build ios --debug --no-codesign
 
   evals:
-    # Manual: runs the real model. Needs repo secrets. Upload the grading pack for the clinician.
-    if: github.event_name == 'workflow_dispatch'
+    # Manual and opt-in (tick "run_evals"): runs the real model, which costs money. Needs repo
+    # secrets. Uploads the grading pack for the clinician.
+    if: github.event_name == 'workflow_dispatch' && inputs.run_evals
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
+      - name: Check the eval settings
+        env:
+          HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+        run: |
+          missing=""
+          [ "$HAS_KEY" = "true" ] || missing="$missing secret:ANTHROPIC_API_KEY"
+          [ -n "$CLAUDE_MODEL" ] || missing="$missing variable:CLAUDE_MODEL"
+          if [ -n "$missing" ]; then
+            echo "::error::Evals need these in Settings → Secrets and variables → Actions:$missing (see docs/DEPLOY.md)"
+            exit 1
+          fi
       - run: python -m evals.run_evals
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
