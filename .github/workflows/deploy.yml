@@ -1,0 +1,110 @@
+name: deploy
+# CD for the backend (API + /admin web page): after `ci` passes on main, build
+# and roll out the new Cloud Run revision, then check /health. Only runs when
+# backend files changed (app/, skill/, requirements.txt, Dockerfile,
+# .gcloudignore); the mobile app is released separately by its owner. No keys are stored in GitHub: the job
+# signs in to Google Cloud with Workload Identity Federation, which only trusts
+# this repository's main branch. Setup and rollback: docs/DEPLOY.md.
+#
+# Database migrations (db/migrations/*.sql) are NOT run here; run them in the
+# Supabase SQL Editor before merging a change that needs them.
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:        # manual re-deploy of main (Actions → deploy → Run workflow)
+
+permissions:
+  contents: read
+  id-token: write           # lets the job ask GitHub for an OIDC token for Google
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false # never cut a rollout short
+
+jobs:
+  backend:
+    # Only after a green ci run on a push to main (not PRs), or by hand on main.
+    if: >-
+      vars.GCP_WIF_PROVIDER != '' && (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-latest
+    environment: production  # add required reviewers here to approve each deploy
+    env:
+      SERVICE: yourcounselor-api
+      REGION: asia-south1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+
+      # Merges that only touch the app, docs or tests don't redeploy. A manual run always deploys.
+      - name: Did backend files change?
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"; echo "Manual run: deploying."; exit 0
+          fi
+          CHANGED=$(git diff --name-only HEAD^1 HEAD)
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -qE '^(app/|skill/|requirements\.txt$|Dockerfile$|\.gcloudignore$)'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"; echo "No backend changes: nothing to deploy."
+          fi
+
+      - uses: google-github-actions/auth@v2
+        if: steps.changes.outputs.backend == 'true'
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+        if: steps.changes.outputs.backend == 'true'
+
+      - name: Note the current revision (for rollback)
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          PREV=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "${{ vars.GCP_PROJECT_ID }}" \
+                   --format='value(status.latestReadyRevisionName)')
+          echo "PREV=$PREV" >> "$GITHUB_ENV"
+          echo "Currently serving: $PREV"
+
+      # --source builds the Dockerfile with Cloud Build. Env vars and Secret
+      # Manager mounts set on the service are kept; secrets never pass through here.
+      - name: Deploy
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          gcloud run deploy "$SERVICE" --source . --region "$REGION" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --quiet
+
+      - name: Smoke test /health
+        if: steps.changes.outputs.backend == 'true'
+        run: |
+          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "${{ vars.GCP_PROJECT_ID }}" \
+                  --format='value(status.url)')
+          for i in 1 2 3 4 5; do
+            if curl -fsS "$URL/health" -o health.json; then break; fi
+            sleep 5
+          done
+          python3 - <<'PY'
+          import json, sys
+          d = json.load(open("health.json"))
+          problems = [p for p, bad in [("not ok", not d.get("ok")), ("DEV_MODE is on", d.get("dev_mode")),
+                                       ("WHO ICD keys missing", not d.get("icd_enabled"))] if bad]
+          print("skill", d.get("skill_version"), "model", d.get("claude_model"), "prompt", d.get("prompt_hash"))
+          if problems:
+              sys.exit("Smoke test failed: " + ", ".join(problems))
+          PY
+
+      - name: Roll back if the smoke test failed
+        if: failure() && env.PREV != ''
+        run: |
+          echo "Sending all traffic back to $PREV"
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --project "${{ vars.GCP_PROJECT_ID }}" --to-revisions "$PREV=100"
