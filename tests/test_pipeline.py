@@ -52,6 +52,13 @@ class TestPipeline(unittest.TestCase):
         self.assertEqual(r.display_text, FALLBACK)
         self.assertIn("14416", r.display_text)
 
+    def test_empty_reply_is_retried_without_an_empty_assistant_turn(self):
+        # A declined (refusal) reply comes back empty; the API rejects empty assistant turns.
+        m = FakeModel(["", GOOD])
+        r = Pipeline(self.skill, m, OfflineICD11()).run(PROMPT, "L2")
+        self.assertEqual((r.status, r.attempts), ("delivered", 2))
+        self.assertNotIn({"role": "assistant", "content": ""}, m.seen[1])
+
     def test_rejects_identifiers_server_side(self):
         with self.assertRaises(DeidRejected) as cm:
             Pipeline(self.skill, FakeModel([GOOD]), OfflineICD11()).run(PROMPT + " ph 9876543210", "L2")

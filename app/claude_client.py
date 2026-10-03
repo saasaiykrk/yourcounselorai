@@ -9,7 +9,8 @@ Anthropic Messages API client with a small tool loop.
   nothing reaches the phone until the inspector has passed it.
 
 ⚠ Not run against the live API from this repo yet (no key in the build
-environment). Day 2 task: smoke-test with a real key.
+environment). Day 2 task: smoke-test with a real key. The tool loop and refusal
+handling are covered by tests/test_claude_client.py against a fake SDK.
 """
 from __future__ import annotations
 
@@ -41,15 +42,20 @@ class AnthropicClient:
             for k, v in (msg.usage.model_dump() if hasattr(msg.usage, "model_dump") else {}).items():
                 if isinstance(v, int):
                     usage_total[k] = usage_total.get(k, 0) + v
+            if msg.stop_reason == "refusal":
+                # Declined by the model's safety classifier: deliver nothing. The empty
+                # text fails the inspector, so the turn is retried once, then held back.
+                texts.append("")
+                break
             tool_uses = [b for b in msg.content if b.type == "tool_use"]
             round_text = "".join(b.text for b in msg.content if b.type == "text")
             if not tool_uses:
                 texts.append(round_text)
                 break
-            convo.append({"role": "assistant", "content": [
-                {"type": "text", "text": b.text} if b.type == "text" else
-                {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                for b in msg.content if b.type in ("text", "tool_use")]})
+            # Send the assistant turn back exactly as received, thinking blocks included:
+            # the model needs its reasoning for the tool round, and the API rejects or
+            # drops thinking from a history that was edited.
+            convo.append({"role": "assistant", "content": msg.content})
             results = []
             for tu in tool_uses:
                 out = tool_handler(tu.name, tu.input or {})
