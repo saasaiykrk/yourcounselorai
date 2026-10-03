@@ -9,11 +9,17 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   POST /v1/profile                    → role + registration number at signup (status=pending)
   POST /v1/consult                    → one consult turn (inspected before return)
   POST /v1/incidents                  → "Report a problem" button on any reply
+  GET  /v1/history?q=&mode=           → the clinician's own past consults (History tab)
+  GET  /v1/history/{id}               → one past consult, read-only
+  PATCH /v1/history/{id}              → set or clear its label (identifier-checked)
+  DELETE /v1/history/{id}             → hide it from History (kept for audit until retention)
   GET  /v1/admin/clinicians?status=   → admin: pending / verified / rejected registrations
   PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
   GET  /v1/admin/incidents?status=    → admin: "Report a problem" items and held-back replies
   GET  /v1/admin/incidents/{id}       → admin: one incident with its de-identified turn
   PATCH /v1/admin/incidents/{id}      → admin: triage status + reviewer note
+  GET  /v1/admin/clinicians/{id}/consults → admin: a clinician's consults, incl. hidden (audited)
+  GET  /v1/admin/consults/{id}        → admin: one consult (audited)
   GET  /admin                         → web admin page (static; signs in with Supabase email code)
 
 DEV_MODE=1 (local only): accepts a `Bearer dev-L1|dev-L2|dev-L3` token as a
@@ -36,7 +42,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import db, deid
-from .dev_admin import DevAdminStore
+from .dev_admin import DevAdminStore, DevHistoryStore
 from .icd import ICD11Client, OfflineICD11
 from .pipeline import DeidRejected, ModelResult, Pipeline
 from .prompt import load_skill
@@ -90,6 +96,7 @@ if CFG.dev_mode:
 _DEV_CLINICIAN = {"id": "dev-clinician", "level": "L2", "verification_status": "verified",
                   "consent_version": "beta-draft-1", "is_admin": True}
 _dev_admin = DevAdminStore()  # sample registrations and reports for the admin panel in DEV_MODE
+_dev_history = DevHistoryStore()  # consult history in DEV_MODE (no database)
 
 
 # --- auth -------------------------------------------------------------------
@@ -160,6 +167,10 @@ class IncidentUpdateIn(BaseModel):
     reviewer_note: str = Field(default="", max_length=2000)
 
 
+class LabelIn(BaseModel):
+    title: str | None = Field(default=None, max_length=60)
+
+
 class CleanIn(BaseModel):
     text: str = Field(max_length=12000)
 
@@ -194,7 +205,7 @@ def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
         level = body.level
 
     if CFG.dev_mode:
-        conv_id, history = uuid.uuid4(), []
+        conv_id, history = body.conversation_id or uuid.uuid4(), []
     else:
         if db.turns_today(c["id"]) >= CFG.daily_turn_limit:
             raise HTTPException(429, "daily limit reached")
@@ -214,6 +225,7 @@ def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
 
     if CFG.dev_mode:
         turn_id = uuid.uuid4()
+        _dev_history.record(c["id"], str(conv_id), body.mode, level, body.text, r.display_text, r.status)
     else:
         turn_id = db.log_turn(conv_id, c["id"], level, body, r)
         if r.status == "blocked":
@@ -231,6 +243,53 @@ def incident(body: IncidentIn, c: dict = Depends(verified_clinician)):
         db.create_incident(body.turn_id, c["id"], body.category, body.note)
     except PermissionError:
         raise HTTPException(404, "turn not found")
+    return {"ok": True}
+
+
+# --- consult history (clinician's own; read-only) ---------------------------------
+def _check_label(title: str | None) -> str | None:
+    """Labels go through the same cleaner as case text; any identifier or possible name is refused."""
+    title = (title or "").strip()
+    if not title:
+        return None
+    r = deid.clean(title)
+    if r.redactions or r.warnings:
+        types = sorted(set(r.counts) | ({"POSSIBLE_NAME"} if r.warnings else set()))
+        raise HTTPException(422, {"error": "identifiers_detected", "types": types})
+    return title
+
+
+@app.get("/v1/history")
+def history_list(q: str | None = Query(None, max_length=100), mode: str | None = Query(None, pattern="^[A-G]$"),
+                 c: dict = Depends(verified_clinician)):
+    q = (q or "").strip() or None
+    rows = _dev_history.list(c["id"], q, mode) if CFG.dev_mode else db.list_history(c["id"], q, mode)
+    return {"consults": [{k: v for k, v in r.items() if k != "hidden_at"} for r in rows]}
+
+
+@app.get("/v1/history/{conv_id}")
+def history_get(conv_id: uuid.UUID, c: dict = Depends(verified_clinician)):
+    conv = _dev_history.get(str(conv_id), c["id"]) if CFG.dev_mode else db.get_conversation(conv_id, c["id"])
+    if not conv:
+        raise HTTPException(404, "consult not found")
+    return {k: v for k, v in conv.items() if k not in ("clinician_id", "hidden_at")}
+
+
+@app.patch("/v1/history/{conv_id}")
+def history_label(conv_id: uuid.UUID, body: LabelIn, c: dict = Depends(verified_clinician)):
+    title = _check_label(body.title)
+    ok = (_dev_history.rename(str(conv_id), c["id"], title) if CFG.dev_mode
+          else db.rename_conversation(conv_id, c["id"], title))
+    if not ok:
+        raise HTTPException(404, "consult not found")
+    return {"ok": True, "title": title}
+
+
+@app.delete("/v1/history/{conv_id}")
+def history_hide(conv_id: uuid.UUID, c: dict = Depends(verified_clinician)):
+    ok = _dev_history.hide(str(conv_id), c["id"]) if CFG.dev_mode else db.hide_conversation(conv_id, c["id"])
+    if not ok:
+        raise HTTPException(404, "consult not found")
     return {"ok": True}
 
 
@@ -257,6 +316,28 @@ def verify(clinician_id: uuid.UUID, body: VerifyIn, a: dict = Depends(admin)):
     if not found:
         raise HTTPException(404, "clinician not found")
     return {"ok": True}
+
+
+@app.get("/v1/admin/clinicians/{clinician_id}/consults")
+def admin_clinician_consults(clinician_id: uuid.UUID, q: str | None = Query(None, max_length=100),
+                             a: dict = Depends(admin)):
+    q = (q or "").strip() or None
+    if CFG.dev_mode:
+        rows = _dev_history.list(str(clinician_id), q, None, include_hidden=True)
+    else:
+        rows = db.list_history(clinician_id, q, None, limit=200, include_hidden=True)
+        db.audit(a["id"], "view_consult_list", clinician_id, {"q": bool(q)})
+    return {"consults": rows}
+
+
+@app.get("/v1/admin/consults/{conv_id}")
+def admin_consult(conv_id: uuid.UUID, a: dict = Depends(admin)):
+    conv = _dev_history.get(str(conv_id)) if CFG.dev_mode else db.get_conversation(conv_id)
+    if not conv:
+        raise HTTPException(404, "consult not found")
+    if not CFG.dev_mode:
+        db.audit(a["id"], "view_consult", conv_id, {"clinician_id": str(conv["clinician_id"])})
+    return conv
 
 
 @app.get("/v1/admin/incidents")

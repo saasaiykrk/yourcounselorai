@@ -3,6 +3,7 @@
 library;
 
 import 'api/api_client.dart';
+import 'api/api_exceptions.dart';
 import 'api/api_models.dart';
 import 'demo/preview_data.dart';
 
@@ -100,6 +101,10 @@ class PreviewConsultRepository implements ConsultRepository {
 abstract interface class AdminRepository {
   Future<List<AdminClinician>> clinicians(String status);
 
+  Future<List<ConsultSummary>> clinicianConsults(String clinicianId);
+
+  Future<ConsultDetail> consult(String id);
+
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note});
 
   Future<List<AdminIncident>> incidents(String? status);
@@ -116,6 +121,12 @@ class ApiAdminRepository implements AdminRepository {
 
   @override
   Future<List<AdminClinician>> clinicians(String status) => _api.adminClinicians(status);
+
+  @override
+  Future<List<ConsultSummary>> clinicianConsults(String clinicianId) => _api.adminClinicianConsults(clinicianId);
+
+  @override
+  Future<ConsultDetail> consult(String id) => _api.adminConsult(id);
 
   @override
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note}) =>
@@ -180,6 +191,14 @@ class PreviewAdminRepository implements AdminRepository {
   Future<List<AdminClinician>> clinicians(String status) async =>
       _clinicians.where((c) => c.verificationStatus == status).toList();
 
+  final _history = PreviewHistoryRepository();
+
+  @override
+  Future<List<ConsultSummary>> clinicianConsults(String clinicianId) => _history.list();
+
+  @override
+  Future<ConsultDetail> consult(String id) => _history.get(id);
+
   @override
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note}) async {
     final i = _clinicians.indexWhere((c) => c.id == clinicianId);
@@ -226,4 +245,116 @@ class PreviewAdminRepository implements AdminRepository {
       inspectorReports: x.inspectorReports,
     );
   }
+}
+
+/// The clinician's own past consults (read-only).
+abstract interface class HistoryRepository {
+  Future<List<ConsultSummary>> list({String? query, String? mode});
+
+  Future<ConsultDetail> get(String id);
+
+  Future<String?> label(String id, String? title);
+
+  Future<void> delete(String id);
+}
+
+class ApiHistoryRepository implements HistoryRepository {
+  ApiHistoryRepository(this._api);
+
+  final ApiClient _api;
+
+  @override
+  Future<List<ConsultSummary>> list({String? query, String? mode}) => _api.history(query: query, mode: mode);
+
+  @override
+  Future<ConsultDetail> get(String id) => _api.historyConsult(id);
+
+  @override
+  Future<String?> label(String id, String? title) => _api.labelConsult(id, title);
+
+  @override
+  Future<void> delete(String id) => _api.deleteConsult(id);
+}
+
+/// Preview: invented, de-identified sample consults, changed in memory only.
+class PreviewHistoryRepository implements HistoryRepository {
+  final _items = <ConsultDetail>[
+    ConsultDetail(
+      id: 'h1',
+      title: 'Sleep and low mood',
+      createdAt: DateTime.now().subtract(const Duration(days: 1)),
+      turns: [
+        ConsultTurn(
+          input: '34F, low mood for 3 months, poor sleep, lost interest in work. Full plan please.',
+          reply: kPreviewReplyMarkdown,
+          mode: 'A',
+          status: 'delivered',
+          createdAt: DateTime.now().subtract(const Duration(days: 1)),
+        ),
+      ],
+    ),
+    ConsultDetail(
+      id: 'h2',
+      createdAt: DateTime.now().subtract(const Duration(hours: 6)),
+      turns: [
+        ConsultTurn(
+          input: '19M, panic attacks before exams, no medical history. Quick review.',
+          reply: kPreviewReplyMarkdown,
+          mode: 'B',
+          status: 'delivered',
+          createdAt: DateTime.now().subtract(const Duration(hours: 6)),
+        ),
+      ],
+    ),
+  ];
+
+  ConsultSummary _summary(ConsultDetail d) => ConsultSummary(
+    id: d.id,
+    title: d.title,
+    preview: d.turns.first.input,
+    turns: d.turns.length,
+    modes: {for (final t in d.turns) t.mode}.toList(),
+    lastStatus: d.turns.last.status,
+    createdAt: d.createdAt,
+    lastAt: d.turns.last.createdAt,
+  );
+
+  @override
+  Future<List<ConsultSummary>> list({String? query, String? mode}) async {
+    final q = query?.trim().toLowerCase() ?? '';
+    final rows = _items
+        .where((d) {
+          final matchesQ =
+              q.isEmpty ||
+              (d.title ?? '').toLowerCase().contains(q) ||
+              d.turns.any((t) => t.input.toLowerCase().contains(q));
+          final matchesMode = mode == null || d.turns.any((t) => t.mode == mode);
+          return matchesQ && matchesMode;
+        })
+        .map(_summary)
+        .toList();
+    rows.sort((a, b) => (b.lastAt ?? DateTime(0)).compareTo(a.lastAt ?? DateTime(0)));
+    return rows;
+  }
+
+  @override
+  Future<ConsultDetail> get(String id) async =>
+      _items.firstWhere((d) => d.id == id, orElse: () => throw const NotFound());
+
+  @override
+  Future<String?> label(String id, String? title) async {
+    final t = title?.trim();
+    final i = _items.indexWhere((d) => d.id == id);
+    final d = _items[i];
+    _items[i] = ConsultDetail(
+      id: d.id,
+      title: t == null || t.isEmpty ? null : t,
+      createdAt: d.createdAt,
+      turns: d.turns,
+    );
+    return _items[i].title;
+  }
+
+  @override
+  Future<void> delete(String id) async => _items.removeWhere((d) => d.id == id);
 }

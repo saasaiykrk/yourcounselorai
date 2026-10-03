@@ -37,7 +37,38 @@ class ApiClient {
   Future<void> reportIncident({required String turnId, required String category, required String note}) =>
       _send('POST', '/v1/incidents', body: {'turn_id': turnId, 'category': category, 'note': note});
 
+  // --- consult history (the clinician's own) ---
+
+  Future<List<ConsultSummary>> history({String? query, String? mode}) async {
+    final q = query?.trim();
+    final data = await _send('GET', '/v1/history', query: {if (q != null && q.isNotEmpty) 'q': q, 'mode': ?mode});
+    return [
+      for (final c in (data['consults'] as List? ?? const [])) ConsultSummary.fromJson(c as Map<String, dynamic>),
+    ];
+  }
+
+  Future<ConsultDetail> historyConsult(String id) async =>
+      ConsultDetail.fromJson(await _send('GET', '/v1/history/${Uri.encodeComponent(id)}'));
+
+  /// Sets (or clears, with null/empty) a consult's label. Throws [IdentifiersDetected]
+  /// when the label looks like it holds a name or other identifier.
+  Future<String?> labelConsult(String id, String? title) async =>
+      (await _send('PATCH', '/v1/history/${Uri.encodeComponent(id)}', body: {'title': title}))['title'] as String?;
+
+  /// Removes a consult from History. The server keeps it for audit until retention ends.
+  Future<void> deleteConsult(String id) => _send('DELETE', '/v1/history/${Uri.encodeComponent(id)}');
+
   // --- admin (the backend re-checks admin rights on every call) ---
+
+  Future<List<ConsultSummary>> adminClinicianConsults(String clinicianId) async {
+    final data = await _send('GET', '/v1/admin/clinicians/${Uri.encodeComponent(clinicianId)}/consults');
+    return [
+      for (final c in (data['consults'] as List? ?? const [])) ConsultSummary.fromJson(c as Map<String, dynamic>),
+    ];
+  }
+
+  Future<ConsultDetail> adminConsult(String id) async =>
+      ConsultDetail.fromJson(await _send('GET', '/v1/admin/consults/${Uri.encodeComponent(id)}'));
 
   Future<List<AdminClinician>> adminClinicians(String status) async {
     final data = await _send('GET', '/v1/admin/clinicians', query: {'status': status});
