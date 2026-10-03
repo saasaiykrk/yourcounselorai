@@ -50,7 +50,11 @@ Plain `http` is allowed only to your own computer, and only in debug builds.
 ```bash
 flutter run --release --dart-define-from-file=config/live.json
 ```
-No Flutter on your computer? Every CI run builds this live app for Android: open the run under **Actions → ci**, download **yourcounselor-live-android** from *Artifacts*, unzip it and install `app-debug.apk` on the phone (allow "install unknown apps" when asked).
+No Flutter on your computer? Every CI run builds this live app for Android: open the run under **Actions → ci**, download **yourcounselor-live-android** from *Artifacts*, unzip it and install on the phone (allow "install unknown apps" when asked):
+- `app-arm64-v8a-release.apk` for almost every phone from the last ~8 years;
+- `app-armeabi-v7a-release.apk` only if that one says "problem parsing the package" on an old 32-bit phone.
+
+Needs Android 7.0 or newer. These test builds are signed with the debug key; the Play Store build gets its own upload key.
 
 `config/live.json` holds the Cloud Run backend address, the Supabase project address and its *publishable* key. Both are public by design, so they can live in git; no secret ever goes in the app. Admin tasks (first admin, approving clinicians) are in `db/admin.sql`. The Supabase project must:
 - use **asymmetric JWT signing keys**, because the backend checks tokens with JWKS;
