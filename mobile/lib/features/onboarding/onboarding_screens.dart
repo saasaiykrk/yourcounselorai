@@ -254,10 +254,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         gap: 24,
         actions: [
           _BusyButton(label: 'Send code', busy: _busy, onPressed: _valid ? _send : null),
-          const Text(
-            'By continuing you agree to the Clinician Terms.',
-            textAlign: TextAlign.center,
-            style: AppText.caption,
+          Center(
+            child: TextButton(
+              onPressed: () => context.push('/terms'),
+              child: const Text('By continuing you agree to the Clinician Terms.', textAlign: TextAlign.center),
+            ),
           ),
         ],
         children: [
@@ -468,12 +469,25 @@ class DetailsScreen extends ConsumerStatefulWidget {
 
 class _DetailsScreenState extends ConsumerState<DetailsScreen> {
   ClinicianRole _role = ClinicianRole.psychologist;
+  final _name = TextEditingController();
+  final _age = TextEditingController();
+  String? _gender;
   final _registration = TextEditingController();
   bool _consent = false;
   bool _busy = false;
   String? _error;
 
-  bool get _valid => _consent && (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
+  int? get _ageValue {
+    final a = int.tryParse(_age.text.trim());
+    return a != null && a >= 18 && a <= 100 ? a : null;
+  }
+
+  bool get _valid =>
+      _consent &&
+      _name.text.trim().length >= 2 &&
+      _gender != null &&
+      _ageValue != null &&
+      (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
 
   Future<void> _submit() async {
     setState(() {
@@ -485,6 +499,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
           .read(profileRepositoryProvider)
           .submit(
             ProfileSubmission(
+              fullName: _name.text.trim(),
+              gender: _gender!,
+              age: _ageValue!,
               role: _role.apiValue,
               registrationBody: _role.registrationBody,
               registrationNumber: _role.needsRegistration ? _registration.text.trim() : null,
@@ -502,6 +519,8 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
 
   @override
   void dispose() {
+    _name.dispose();
+    _age.dispose();
     _registration.dispose();
     super.dispose();
   }
@@ -530,6 +549,60 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
           const PageHeading(
             'Your professional details',
             message: 'Your registration decides how the assistant writes for you. We verify it before you start.',
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('Full name', style: AppText.label),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _name,
+                maxLength: 100,
+                autocorrect: false,
+                textCapitalization: TextCapitalization.words,
+                autofillHints: const [AutofillHints.name],
+                decoration: const InputDecoration(hintText: 'As on your registration', counterText: ''),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 16),
+              const Text('Gender', style: AppText.label),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final e in kGenders.entries)
+                    ChoiceChip(
+                      label: Text(e.value),
+                      selected: _gender == e.key,
+                      onSelected: (_) => setState(() => _gender = e.key),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text('Age', style: AppText.label),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _age,
+                  maxLength: 3,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    hintText: 'Years',
+                    counterText: '',
+                    errorText: _age.text.isNotEmpty && _ageValue == null ? '18 to 100' : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Only our verification team sees these. They are never sent to the AI.',
+                style: AppText.caption,
+              ),
+            ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -572,6 +645,13 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
               'is processed by an AI provider outside India.',
               style: TextStyle(fontSize: 14, height: 1.45),
             ),
+          ),
+          Wrap(
+            spacing: 4,
+            children: [
+              TextButton(onPressed: () => context.push('/terms'), child: const Text('Read the Clinician Terms')),
+              TextButton(onPressed: () => context.push('/dpa'), child: const Text('Read the DPA')),
+            ],
           ),
           _ErrorText(_error),
         ],

@@ -85,7 +85,9 @@ class Pipeline:
         self.skill, self.model, self.icd, self.max_attempts = skill, model, icd, max_attempts
 
     def run(self, text: str, level: str, requested_mode: str = "auto", history: list[dict] | None = None,
-            today: str | None = None) -> TurnResult:
+            today: str | None = None, extra_system: str | None = None, prompt_hash: str | None = None) -> TurnResult:
+        """extra_system: a second system part sent after the cached skill prompt (the guided
+        consultation's report template); the skill part stays byte-identical so its cache is shared."""
         t0 = time.monotonic()
         # Second line of defence: the phone should already have cleaned this.
         check = deid.clean(text)
@@ -122,7 +124,8 @@ class Pipeline:
         usage: list[dict] = []
         result: ModelResult | None = None
         for attempt in range(1, self.max_attempts + 1):
-            result = self.model.run(self.skill.system_prompt, messages, TOOLS, handle_tool)
+            system = [self.skill.system_prompt, extra_system] if extra_system else self.skill.system_prompt
+            result = self.model.run(system, messages, TOOLS, handle_tool)
             usage.append(result.usage)
             rep = inspect(result.text, ctx)
             reports.append(rep)
@@ -144,7 +147,7 @@ class Pipeline:
             attempts=len(reports),
             model=result.model,
             skill_version=self.skill.version,
-            prompt_hash=self.skill.prompt_hash,
+            prompt_hash=prompt_hash or self.skill.prompt_hash,
             tool_calls=tool_log,
             usage=usage,
             latency_ms=int((time.monotonic() - t0) * 1000),

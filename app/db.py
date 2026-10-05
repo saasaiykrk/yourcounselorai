@@ -27,12 +27,16 @@ def get_clinician(cid) -> dict | None:
 def upsert_clinician_profile(cid, p: dict) -> None:
     with _conn() as c:
         c.execute(
-            """insert into clinicians (id, role, registration_body, registration_number, consent_version, consent_at)
-               values (%s,%s,%s,%s,%s, now())
-               on conflict (id) do update set role=excluded.role, registration_body=excluded.registration_body,
-                 registration_number=excluded.registration_number, consent_version=excluded.consent_version,
-                 consent_at=now(), verification_status='pending', level=null""",
-            (str(cid), p["role"], p["registration_body"], p.get("registration_number"), p["consent_version"]))
+            """insert into clinicians (id, full_name, gender, age_at_registration, role, registration_body,
+                                          registration_number, consent_version, consent_at)
+               values (%s,%s,%s,%s,%s,%s,%s,%s, now())
+               on conflict (id) do update set full_name=excluded.full_name, gender=excluded.gender,
+                 age_at_registration=excluded.age_at_registration, role=excluded.role,
+                 registration_body=excluded.registration_body, registration_number=excluded.registration_number,
+                 consent_version=excluded.consent_version, consent_at=now(), verification_status='pending',
+                 level=null""",
+            (str(cid), p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"],
+             p.get("registration_number"), p["consent_version"]))
 
 
 def set_verification(cid, level, status, note, admin_id) -> bool:
@@ -106,7 +110,8 @@ def log_deid_rejection(cid, counts: dict) -> None:
 
 
 # --- admin (reads and updates for the admin panel; every write is audited) ---------------
-_CLINICIAN_COLS = """c.id, u.email, c.role, c.registration_body, c.registration_number, c.level,
+_CLINICIAN_COLS = """c.id, u.email, c.full_name, c.gender, c.age_at_registration, c.role,
+                     c.registration_body, c.registration_number, c.level,
                      c.verification_status, c.verification_note, c.verified_at, c.is_admin, c.created_at"""
 
 
@@ -213,3 +218,70 @@ def audit(admin_id, action: str, target_id, detail: dict) -> None:
     with _conn() as c:
         c.execute("insert into admin_audit (actor_id, action, target_id, detail) values (%s,%s,%s,%s)",
                   (str(admin_id), action, str(target_id), json.dumps(detail)))
+
+
+# --- guided consultations ----------------------------------------------------------
+_BUSY_SECONDS = 360   # a stuck request frees the consultation after this long
+
+
+def new_consultation(cid, stage: str, state: dict) -> uuid.UUID:
+    with _conn() as c, c.transaction():
+        conv_id = c.execute("insert into conversations (clinician_id) values (%s) returning id",
+                            (str(cid),)).fetchone()["id"]
+        c.execute("insert into consultations (id, clinician_id, stage, state) values (%s,%s,%s,%s)",
+                  (str(conv_id), str(cid), stage, json.dumps(state)))
+        return conv_id
+
+
+def get_consultation(conv_id, cid) -> dict | None:
+    """Owner-checked; hidden conversations are excluded."""
+    with _conn() as c:
+        return c.execute(
+            """select k.id, k.stage, k.state, k.updated_at from consultations k
+               join conversations v on v.id = k.id
+               where k.id = %s and k.clinician_id = %s and v.hidden_at is null""",
+            (str(conv_id), str(cid))).fetchone()
+
+
+def claim_consultation(conv_id, cid) -> dict | None | str:
+    """Atomically mark the consultation busy and return it; "busy" if another request holds it,
+    None if it does not exist for this clinician."""
+    with _conn() as c:
+        row = c.execute(
+            f"""update consultations k set busy_until = now() + interval '{_BUSY_SECONDS} seconds'
+                from conversations v
+                where k.id = %s and k.clinician_id = %s and v.id = k.id and v.hidden_at is null
+                  and (k.busy_until is null or k.busy_until < now())
+                returning k.id, k.stage, k.state""", (str(conv_id), str(cid))).fetchone()
+        if row:
+            return row
+    return "busy" if get_consultation(conv_id, cid) else None
+
+
+def save_consultation(conv_id, stage: str, state: dict) -> None:
+    """Store the new state and release the busy mark."""
+    with _conn() as c:
+        c.execute("update consultations set stage=%s, state=%s, busy_until=null, updated_at=now() where id=%s",
+                  (stage, json.dumps(state), str(conv_id)))
+
+
+def release_consultation(conv_id) -> None:
+    with _conn() as c:
+        c.execute("update consultations set busy_until=null where id=%s", (str(conv_id),))
+
+
+def list_open_consultations(cid, limit: int = 10) -> list[dict]:
+    """Unfinished consultations to continue (newest first)."""
+    with _conn() as c:
+        return c.execute(
+            """select k.id, k.stage, k.updated_at, left(k.state->>'case_summary', 160) as case_summary,
+                      (k.state->>'questions_asked')::int as questions_asked
+               from consultations k join conversations v on v.id = k.id
+               where k.clinician_id = %s and v.hidden_at is null and k.stage <> 'COMPLETED'
+               order by k.updated_at desc limit %s""", (str(cid), limit)).fetchall()
+
+
+def consultations_today(cid) -> int:
+    with _conn() as c:
+        return c.execute("select count(*) n from consultations where clinician_id=%s and created_at > now() - interval '1 day'",
+                         (str(cid),)).fetchone()["n"]

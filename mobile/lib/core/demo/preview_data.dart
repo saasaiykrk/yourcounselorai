@@ -69,3 +69,45 @@ final String kPreviewSafetyMarkdown = [
   '',
   '> **$kDisclaimer**',
 ].join('\n');
+
+/// The fixed Consultation Report headings (skill/clinical-assist/assets/consult-report-template.md).
+const kConsultReportSections = [
+  'Psychological Case Pattern Analysis',
+  'Severity Classification',
+  'Recommended Psychometric Tools',
+  'Therapy Modalities to Consider',
+  'Best-Suited Therapy Recommendation',
+  "Therapist's Role & Actions",
+  "Client's Actions and Lifestyle Adjustments",
+  'Guardian/Parent Guidance',
+  'Session-Wise Treatment Plan (12 Weeks)',
+  'Suggested Worksheets & Tools',
+  'Progress Monitoring & Tracking Tools',
+  'Final Summary & Next Steps',
+  'Weekly Therapy Summary',
+  'Helpful Resource Links',
+  'Disclaimer',
+];
+
+/// Preview only: a guided-consultation report with the real headings and placeholder text.
+final String kPreviewConsultReportMarkdown = [
+  '## Consultation Report — sample case',
+  '',
+  '### Case Snapshot',
+  '',
+  '| Field | Details |',
+  '| --- | --- |',
+  '| Age / Gender | 34 / Female |',
+  '| Presenting concern | Panic attacks |',
+  '| Duration | 3 months |',
+  '',
+  '**Risk screening:** asked and absent.',
+  '',
+  for (final (i, title) in kConsultReportSections.indexed) ...[
+    '### ${i + 1}. $title',
+    '',
+    '[Sample text for this section.]',
+    '',
+  ],
+  '> **$kDisclaimer**',
+].join('\n');

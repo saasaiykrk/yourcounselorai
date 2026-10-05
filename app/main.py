@@ -13,6 +13,12 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   GET  /v1/history/{id}               → one past consult, read-only
   PATCH /v1/history/{id}              → set or clear its label (identifier-checked)
   DELETE /v1/history/{id}             → hide it from History (kept for audit until retention)
+  POST /v1/consultations              → guided consultation: start with the case → first question
+  GET  /v1/consultations              → unfinished guided consultations to continue
+  GET  /v1/consultations/{id}         → one consultation (and its report once written)
+  POST /v1/consultations/{id}/reply   → answer · don't know · skip · finish · confirm safety
+  PATCH /v1/consultations/{id}/facts  → correct the collected facts (no model call)
+  POST /v1/consultations/{id}/report  → write the fixed Consultation Report (Mode R; inspected)
   GET  /v1/admin/clinicians?status=   → admin: pending / verified / rejected registrations
   PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
   GET  /v1/admin/incidents?status=    → admin: "Report a problem" items and held-back replies
@@ -34,18 +40,23 @@ is unit-tested (tests/).
 from __future__ import annotations
 
 import pathlib
+import re
 import uuid
 from datetime import date
+from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+from typing import Annotated
 
 from . import db, deid
-from .dev_admin import DevAdminStore, DevHistoryStore
+from .consultation import ConsultationEngine, ConsultationError, public_view
+from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
 from .icd import ICD11Client, OfflineICD11
+from .inspector import ICD_CODE_RE
 from .pipeline import DeidRejected, ModelResult, Pipeline
-from .prompt import load_skill
+from .prompt import load_consult_prompts, load_skill
 from .secrets import load_config
 
 CFG = load_config()
@@ -62,9 +73,27 @@ class _FakeDevModel:
     def __init__(self, skill_dir: str):
         p = pathlib.Path("fixtures/golden/mode_a_panic.md")
         self._canned = p.read_text() if p.exists() else "<!--yc mode=Q gate=none ceiling=NA level=L2-->\nDev fake model: no canned reply found."
+        r = pathlib.Path("fixtures/golden/consult_report_ocd.md")
+        # No WHO lookups offline: every code is marked "to confirm", as the real model must do.
+        self._report = ICD_CODE_RE.sub(lambda m: m.group(0) + " (code to confirm at icd.who.int)", r.read_text()) \
+            if r.exists() else self._canned
 
     def run(self, system, messages, tools, tool_handler) -> ModelResult:
-        return ModelResult(text=self._canned, model=self.model, usage={"input_tokens": 0, "output_tokens": 0})
+        text = self._canned
+        if isinstance(system, list):  # guided consultation report (Mode R): canned gold-standard report
+            level = re.search(r"Clinician level: (L[123])", messages[-1]["content"])
+            text = self._report.replace("level=L2", f"level={level.group(1) if level else 'L2'}", 1)
+        return ModelResult(text=text, model=self.model, usage={"input_tokens": 0, "output_tokens": 0})
+
+    def run_structured(self, system, user, schema):
+        """Keyless intake: records the reply under the field just asked, then says "ready" — so the
+        app asks the intake guide's mandatory questions one by one and then offers the report."""
+        asked = re.search(r"\[Question just answered\] \(([a-z_]+)\)", user)
+        message = user.split("[Clinician's message]\n", 1)[-1].split("\n\n[App note]")[0].strip()[:200]
+        facts = [{"field": asked.group(1) if asked else "presenting_concern", "value": message}]
+        return ({"status": "ready", "facts_patch": facts, "unknown_fields": [], "case_summary": "",
+                 "question": "", "why": "", "field": "", "options": [], "brief_answer": ""},
+                {"input_tokens": 0, "output_tokens": 0})
 
 
 if CFG.dev_mode and not CFG.anthropic_api_key:
@@ -74,6 +103,7 @@ else:
     MODEL = AnthropicClient(CFG.anthropic_api_key, CFG.claude_model)
 
 PIPELINE = Pipeline(SKILL, MODEL, ICD)
+CONSULT = ConsultationEngine(load_consult_prompts(CFG.skill_dir), MODEL, PIPELINE)
 
 if not CFG.dev_mode:
     import jwt  # PyJWT
@@ -97,6 +127,7 @@ _DEV_CLINICIAN = {"id": "dev-clinician", "level": "L2", "verification_status": "
                   "consent_version": "beta-draft-1", "is_admin": True}
 _dev_admin = DevAdminStore()  # sample registrations and reports for the admin panel in DEV_MODE
 _dev_history = DevHistoryStore()  # consult history in DEV_MODE (no database)
+_dev_consults = DevConsultationStore()  # guided consultations in DEV_MODE (no database)
 
 
 # --- auth -------------------------------------------------------------------
@@ -135,6 +166,10 @@ def admin(user: dict = Depends(current_user)) -> dict:
 
 # --- schemas ----------------------------------------------------------------
 class ProfileIn(BaseModel):
+    # The clinician's own details (never a client's); admin-only, never sent to the AI.
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
+    gender: str = Field(pattern="^(female|male|other|prefer_not_to_say)$")
+    age: int = Field(ge=18, le=100)
     role: str = Field(pattern="^(counsellor_trainee|psychologist|psychiatrist)$")
     registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
     registration_number: str | None = Field(default=None, max_length=40)
@@ -171,6 +206,27 @@ class LabelIn(BaseModel):
     title: str | None = Field(default=None, max_length=60)
 
 
+class ConsultationStartIn(BaseModel):
+    text: str = Field(min_length=3, max_length=12000)
+    deid_attested: bool
+    client_redaction_counts: dict[str, int] = {}
+
+
+class ConsultationReplyIn(BaseModel):
+    action: str = Field(pattern="^(answer|dont_know|skip|finish|safety_managed|safety_absent)$")
+    text: str = Field(default="", max_length=4000)
+    deid_attested: bool = False
+    client_msg_id: str | None = Field(default=None, max_length=64)   # a repeat of the same id is not re-run
+
+
+class FactsIn(BaseModel):
+    facts: dict[str, str | None] = Field(max_length=30)
+
+
+class ReportIn(BaseModel):
+    force: bool = False            # "Generate report now" before the intake has finished
+
+
 class CleanIn(BaseModel):
     text: str = Field(max_length=12000)
 
@@ -185,9 +241,11 @@ def healthz():
 
 @app.get("/v1/me")
 def me(user: dict = Depends(current_user)):
+    features = {"consultation": CFG.consultation_enabled}
     if CFG.dev_mode and user["id"] == "dev-clinician":
-        return _DEV_CLINICIAN
-    return db.get_clinician(user["id"]) or {"id": user["id"], "verification_status": "none"}
+        return {**_DEV_CLINICIAN, "features": features}
+    row = db.get_clinician(user["id"])
+    return {**row, "features": features} if row else {"id": user["id"], "verification_status": "none"}
 
 
 @app.post("/v1/profile")
@@ -260,7 +318,7 @@ def _check_label(title: str | None) -> str | None:
 
 
 @app.get("/v1/history")
-def history_list(q: str | None = Query(None, max_length=100), mode: str | None = Query(None, pattern="^[A-G]$"),
+def history_list(q: str | None = Query(None, max_length=100), mode: str | None = Query(None, pattern="^[A-GR]$"),
                  c: dict = Depends(verified_clinician)):
     q = (q or "").strip() or None
     rows = _dev_history.list(c["id"], q, mode) if CFG.dev_mode else db.list_history(c["id"], q, mode)
@@ -291,6 +349,161 @@ def history_hide(conv_id: uuid.UUID, c: dict = Depends(verified_clinician)):
     if not ok:
         raise HTTPException(404, "consult not found")
     return {"ok": True}
+
+
+# --- guided consultation ------------------------------------------------------------
+# The phone sends one step at a time; the server keeps the compact state (app/consultation.py).
+# Every text is re-cleaned, every intake response is inspected, and the report goes through the
+# same pipeline and inspector as any consult. The level always comes from the clinicians row.
+def _consultations_on() -> None:
+    if not CFG.consultation_enabled:
+        raise HTTPException(404, "guided consultation is not enabled")
+
+
+def _identifiers(c: dict, e: DeidRejected):
+    if not CFG.dev_mode:
+        db.log_deid_rejection(c["id"], e.counts)
+    return HTTPException(422, {"error": "identifiers_detected", "types": sorted(e.counts)})
+
+
+def _claim(conv_id: str, c: dict) -> dict:
+    row = _dev_consults.claim(conv_id, c["id"]) if CFG.dev_mode else db.claim_consultation(conv_id, c["id"])
+    if row is None:
+        raise HTTPException(404, "consultation not found")
+    if row == "busy":
+        raise HTTPException(409, {"error": "busy", "detail": "the previous step is still being processed"})
+    return row
+
+
+def _save(conv_id: str, state: dict) -> None:
+    (_dev_consults.save if CFG.dev_mode else db.save_consultation)(conv_id, state["stage"], state)
+
+
+def _release(conv_id: str) -> None:
+    (_dev_consults.release if CFG.dev_mode else db.release_consultation)(conv_id)
+
+
+def _report_reply(conv_id: str, c: dict, state: dict) -> dict | None:
+    """The stored report of a finished consultation, shaped like a /v1/consult reply."""
+    rep = state.get("report")
+    if not rep:
+        return None
+    conv = _dev_history.get(conv_id, c["id"]) if CFG.dev_mode else db.get_conversation(conv_id, c["id"])
+    turn = next((t for t in (conv or {}).get("turns", []) if str(t["id"]) == rep["turn_id"]), None)
+    if not turn:
+        return None
+    return {"turn_id": rep["turn_id"], "conversation_id": conv_id, "status": turn["status"],
+            "text": turn["output_shown"], "skill_version": rep.get("skill_version", SKILL.version)}
+
+
+@app.post("/v1/consultations")
+def consultation_start(body: ConsultationStartIn, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    if not body.deid_attested:
+        raise HTTPException(422, "de-identification attestation required")
+    if not CFG.dev_mode and db.turns_today(c["id"]) + db.consultations_today(c["id"]) >= CFG.daily_turn_limit:
+        raise HTTPException(429, "daily limit reached")
+    try:
+        state = CONSULT.start(body.text)
+    except DeidRejected as e:
+        raise _identifiers(c, e)
+    conv_id = str(_dev_consults.new(c["id"], state["stage"], state) if CFG.dev_mode
+                  else db.new_consultation(c["id"], state["stage"], state))
+    return public_view(state, conv_id)
+
+
+@app.get("/v1/consultations")
+def consultation_list(c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    rows = _dev_consults.list_open(c["id"]) if CFG.dev_mode else db.list_open_consultations(c["id"])
+    return {"consultations": [{**r, "id": str(r["id"])} for r in rows]}
+
+
+@app.get("/v1/consultations/{conv_id}")
+def consultation_get(conv_id: uuid.UUID, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    row = _dev_consults.get(str(conv_id), c["id"]) if CFG.dev_mode else db.get_consultation(conv_id, c["id"])
+    if not row:
+        raise HTTPException(404, "consultation not found")
+    return {**public_view(row["state"], str(conv_id)), "reply": _report_reply(str(conv_id), c, row["state"])}
+
+
+@app.post("/v1/consultations/{conv_id}/reply")
+def consultation_reply(conv_id: uuid.UUID, body: ConsultationReplyIn, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    if body.action == "answer" and not body.deid_attested:
+        raise HTTPException(422, "de-identification attestation required")
+    cid = str(conv_id)
+    state = _claim(cid, c)["state"]
+    if body.client_msg_id and state.get("last_msg_id") == body.client_msg_id:
+        _release(cid)                       # a repeated tap or retry: already done, no second model call
+        return public_view(state, cid)
+    try:
+        CONSULT.reply(state, body.action, body.text)
+    except DeidRejected as e:
+        _release(cid)
+        raise _identifiers(c, e)
+    except ConsultationError as e:
+        _release(cid)
+        raise HTTPException(e.status, e.detail)
+    except Exception:
+        _release(cid)
+        raise
+    state["last_msg_id"] = body.client_msg_id
+    _save(cid, state)
+    return public_view(state, cid)
+
+
+@app.patch("/v1/consultations/{conv_id}/facts")
+def consultation_facts(conv_id: uuid.UUID, body: FactsIn, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    cid = str(conv_id)
+    state = _claim(cid, c)["state"]
+    try:
+        CONSULT.edit_facts(state, body.facts)
+    except DeidRejected as e:
+        _release(cid)
+        raise _identifiers(c, e)
+    except ConsultationError as e:
+        _release(cid)
+        raise HTTPException(e.status, e.detail)
+    _save(cid, state)
+    return public_view(state, cid)
+
+
+@app.post("/v1/consultations/{conv_id}/report")
+def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    cid = str(conv_id)
+    state = _claim(cid, c)["state"]
+    if state["stage"] == "COMPLETED":       # already written: return it, never pay for it twice
+        _release(cid)
+        return {"consultation": public_view(state, cid), "reply": _report_reply(cid, c, state)}
+    level = c["level"]
+    try:
+        r = CONSULT.report(state, level, force=body.force, today=date.today().isoformat())
+    except DeidRejected as e:
+        _release(cid)
+        raise _identifiers(c, e)
+    except ConsultationError as e:
+        _release(cid)
+        raise HTTPException(e.status, e.detail)
+    except Exception:
+        _release(cid)
+        raise
+    case = SimpleNamespace(mode="R", text=CONSULT.case_text(state), client_redaction_counts={})
+    if CFG.dev_mode:
+        turn_id = str(uuid.uuid4())
+        _dev_history.record(c["id"], cid, "R", level, case.text, r.display_text, r.status, turn_id=turn_id)
+    else:
+        turn_id = str(db.log_turn(cid, c["id"], level, case, r))
+        if r.status == "blocked":
+            db.auto_incident(turn_id, r.reports[-1])
+    state["report"] = {"turn_id": turn_id, "status": r.status, "skill_version": r.skill_version}
+    _save(cid, state)
+    reply = {"turn_id": turn_id, "conversation_id": cid, "status": r.status, "text": r.display_text,
+             "skill_version": r.skill_version, "report": r.reports[-1]}
+    return {"consultation": public_view(state, cid), "reply": reply}
 
 
 # --- admin panel (app Admin area and /admin web page) -------------------------
@@ -370,7 +583,11 @@ def admin_update_incident(incident_id: uuid.UUID, body: IncidentUpdateIn, a: dic
 # no CORS is needed. No third-party scripts; strict CSP; never cached.
 _ADMIN_DIR = pathlib.Path(__file__).parent / "admin_web"
 _ADMIN_FILES = {"": ("index.html", "text/html"), "admin.js": ("admin.js", "text/javascript"),
-                "admin.css": ("admin.css", "text/css")}
+                "admin.css": ("admin.css", "text/css"), "logo.png": ("logo.png", "image/png"),
+                # The app's brand fonts (SIL OFL, see fonts/OFL.txt), served from here: no third-party requests.
+                "nunito-extrabold.ttf": ("fonts/Nunito-ExtraBold.ttf", "font/ttf"),
+                "nunitosans-regular.ttf": ("fonts/NunitoSans-Regular.ttf", "font/ttf"),
+                "nunitosans-bold.ttf": ("fonts/NunitoSans-Bold.ttf", "font/ttf")}
 
 
 def _supabase_url() -> str:
@@ -382,6 +599,7 @@ def _admin_headers() -> dict:
     connect = " ".join(x for x in ("'self'", _supabase_url()) if x)
     return {
         "Content-Security-Policy": (f"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                                    f"font-src 'self'; "
                                     f"connect-src {connect}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
@@ -402,7 +620,10 @@ def admin_page(name: str = ""):
     if name not in _ADMIN_FILES:
         raise HTTPException(404, "not found")
     file, media = _ADMIN_FILES[name]
-    return Response((_ADMIN_DIR / file).read_bytes(), media_type=media, headers=_admin_headers())
+    headers = _admin_headers()
+    if media.startswith(("font/", "image/")):
+        headers["Cache-Control"] = "public, max-age=86400"   # logo and fonts only; pages and data stay no-store
+    return Response((_ADMIN_DIR / file).read_bytes(), media_type=media, headers=headers)
 
 
 # --- dev-only helper --------------------------------------------------------
