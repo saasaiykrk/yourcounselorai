@@ -70,3 +70,47 @@ class ToolLoopTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeCreate:
+    def __init__(self, msg):
+        self.msg, self.requests = msg, []
+
+    def create(self, **kwargs):
+        self.requests.append(kwargs)
+        return self.msg
+
+
+def _structured_client(msg):
+    c = object.__new__(AnthropicClient)
+    fake = _FakeCreate(msg)
+    c._client = NS(messages=fake)
+    c.model, c.max_tokens = "claude-opus-5-5", 16000
+    return c, fake
+
+
+class StructuredTests(unittest.TestCase):
+    SCHEMA = {"type": "object", "properties": {"status": {"type": "string"}}, "required": ["status"]}
+
+    def test_returns_parsed_json_with_low_effort_and_schema(self):
+        c, fake = _structured_client(_msg([_block("text", text='{"status": "ask"}')], "end_turn"))
+        out, _ = c.run_structured("intake rules", "state + answer", self.SCHEMA)
+        self.assertEqual(out, {"status": "ask"})
+        req = fake.requests[0]
+        self.assertEqual(req["output_config"]["effort"], "low")
+        self.assertEqual(req["output_config"]["format"]["schema"], self.SCHEMA)
+        self.assertNotIn("tools", req)
+        self.assertEqual(req["messages"], [{"role": "user", "content": "state + answer"}])
+
+    def test_refusal_or_bad_json_returns_none(self):
+        c, _ = _structured_client(_msg([], "refusal"))
+        self.assertIsNone(c.run_structured("s", "u", self.SCHEMA)[0])
+        c, _ = _structured_client(_msg([_block("text", text="not json")], "end_turn"))
+        self.assertIsNone(c.run_structured("s", "u", self.SCHEMA)[0])
+
+    def test_two_part_system_prompt_is_cached_per_part(self):
+        c = _client([_msg([_block("text", text="<!--yc-->ok")], "end_turn")])
+        c.run(["skill prompt", "report addendum"], [{"role": "user", "content": "hi"}], [], lambda n, a: "")
+        system = c._client.messages.requests[0]["system"]
+        self.assertEqual([b["text"] for b in system], ["skill prompt", "report addendum"])
+        self.assertTrue(all(b["cache_control"] == {"type": "ephemeral"} for b in system))

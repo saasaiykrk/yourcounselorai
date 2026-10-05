@@ -148,3 +148,139 @@ class TestGates(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- Guided consultation: the fixed Consultation Report (Mode R) ---------------
+from app.inspector import inspect_intake  # noqa: E402
+
+REPORT_R = (GOLD / "consult_report_ocd.md").read_text()
+CASE_R = ("Case summary: 9-year-old boy, Class 4. Holds saliva then spits, rewinds reels, makes parents repeat "
+          "words, avoids black objects ('black omen'), picks hair, fear of darkness, heavy YouTube and Roblox use. "
+          "About 10 months, gradual. No prior therapy, no medications. Lives with parents and older sibling. "
+          "Risk screening: not yet asked. Help requested: full plan with parent coaching.")
+R_CODES = {"6B20", "6B20.0", "6B20.1", "6B25", "6B25.0", "6B03", "6C51", "6A02", "8A05"}
+
+
+def rctx(level="L2", **kw):
+    return InspectionContext(level=level, user_input=CASE_R, verified_icd_codes=set(R_CODES),
+                             requested_mode="R", **kw)
+
+
+def _l1(report):
+    return report.replace("level=L2", "level=L1")
+
+
+class TestConsultationReport(unittest.TestCase):
+    def test_gold_standard_report_passes(self):
+        rep = inspect(REPORT_R, rctx())
+        self.assertTrue(rep.passed, rep.as_dict())
+
+    def test_every_section_is_required(self):
+        out = REPORT_R.replace("### 10. Suggested Worksheets & Tools", "### Worksheets")
+        self.assertIn("STRUCTURE", codes(inspect(out, rctx())))
+
+    def test_case_snapshot_is_required(self):
+        out = REPORT_R.replace("### Case Snapshot", "### Overview")
+        self.assertIn("STRUCTURE", codes(inspect(out, rctx())))
+
+    def test_section_titles_are_fixed(self):
+        out = REPORT_R.replace("### 4. Therapy Modalities to Consider", "### 4. Treatment options")
+        self.assertIn("STRUCTURE", codes(inspect(out, rctx())))
+
+    def test_section_order_is_fixed(self):
+        a = REPORT_R.index("### 6. Therapist's Role & Actions")
+        b = REPORT_R.index("### 7. Client's Actions and Lifestyle Adjustments")
+        c = REPORT_R.index("### 8. Guardian/Parent Guidance")
+        out = REPORT_R[:a] + REPORT_R[b:c] + REPORT_R[a:b] + REPORT_R[c:]
+        self.assertIn("STRUCTURE", codes(inspect(out, rctx())))
+
+    def test_risk_screening_line_is_required(self):
+        out = REPORT_R.replace("**Risk screening:**", "**Notes:**")
+        self.assertIn("SAFETY", codes(inspect(out, rctx())))
+
+    def test_confidence_labels_in_sections_1_and_2(self):
+        out = REPORT_R.replace("**Confidence:** Moderate — estimate", "Estimate", 1)
+        self.assertIn("CONFIDENCE", codes(inspect(out, rctx())))
+
+    def test_week_table_in_section_13(self):
+        s13 = REPORT_R.index("### 13. Weekly Therapy Summary")
+        s14 = REPORT_R.index("### 14. Helpful Resource Links")
+        out = REPORT_R[:s13] + "### 13. Weekly Therapy Summary\nSee Section 9.\n\n" + REPORT_R[s14:]
+        self.assertIn("STRUCTURE", codes(inspect(out, rctx())))
+
+    def test_disclaimer_still_required_and_last(self):
+        out = REPORT_R.replace("It does not diagnose or replace therapy.", "")
+        self.assertIn("DISCLAIMER", codes(inspect(out, rctx())))
+
+    def test_unapproved_link_is_blocked(self):
+        out = REPORT_R.replace("https://www.bfrb.org", "https://made-up-ocd-help.example.com")
+        self.assertIn("LINK", codes(inspect(out, rctx())))
+
+    def test_requested_report_must_be_mode_r(self):
+        out = REPORT_R.replace("mode=R", "mode=A", 1)
+        self.assertIn("MODE", codes(inspect(out, rctx())))
+
+    def test_unverified_codes_still_blocked(self):
+        rep = inspect(REPORT_R, InspectionContext(level="L2", user_input=CASE_R, requested_mode="R"))
+        self.assertIn("ICD_CODE", codes(rep))
+
+    def test_l1_gets_no_codes_in_section_1(self):
+        rep = inspect(_l1(REPORT_R), rctx(level="L1"))
+        self.assertIn("L1", codes(rep))
+
+    def test_l1_section_4_rule_does_not_misfire_on_modalities(self):
+        # Mode R's Section 4 is "Therapy Modalities"; the Mode A differential-title rule must not apply.
+        rep = inspect(_l1(REPORT_R), rctx(level="L1"))
+        self.assertFalse(any("Section 4 must be titled" in f.message for f in rep.blocks), rep.as_dict())
+
+    def test_gate1_still_applies_to_the_case_summary(self):
+        risky = CASE_R + " He said he wants to die and has kept pills at home."
+        rep = inspect(REPORT_R, InspectionContext(level="L2", user_input=risky, requested_mode="R",
+                                                  verified_icd_codes=set(R_CODES)))
+        self.assertIn("GATE1", codes(rep))
+
+
+class TestIntakeOutput(unittest.TestCase):
+    GOOD = {"question": "How long has this been going on, and did it start suddenly or gradually?",
+            "why": "Duration and onset shape severity and rule-outs.", "options": [],
+            "brief_answer": "", "case_summary": "9-year-old boy with rituals and screen overuse.",
+            "facts": {"age_gender": "9 years, male"}}
+
+    def test_good_question_passes(self):
+        self.assertTrue(inspect_intake(self.GOOD).passed)
+
+    def test_long_question_blocked(self):
+        out = dict(self.GOOD, question="Tell me " + "more about it " * 40 + "?")
+        self.assertIn("INTAKE_LENGTH", codes(inspect_intake(out)))
+
+    def test_identifier_in_question_blocked(self):
+        out = dict(self.GOOD, question="Can I call the parent on 9876543210 to ask about onset?")
+        self.assertIn("IDENTIFIER", codes(inspect_intake(out)))
+
+    def test_identifier_in_a_fact_blocked(self):
+        out = dict(self.GOOD, facts={"family": "mother reachable at 9876543210"})
+        self.assertIn("IDENTIFIER", codes(inspect_intake(out)))
+
+    def test_no_codes_or_diagnosis_codes_in_brief_answer(self):
+        out = dict(self.GOOD, brief_answer="This is 6B20 obsessive-compulsive disorder.")
+        self.assertIn("ICD_CODE", codes(inspect_intake(out)))
+
+    def test_no_medication_advice(self):
+        out = dict(self.GOOD, brief_answer="You could recommend starting sertraline at a low dose.")
+        self.assertIn("MEDICATION", codes(inspect_intake(out)))
+
+    def test_only_register_numbers(self):
+        out = dict(self.GOOD, brief_answer="Ask them to call the helpline 1800-123-4567.")
+        self.assertIn("CRISIS_NUMBERS", codes(inspect_intake(out)))
+
+    def test_long_brief_answer_blocked(self):
+        out = dict(self.GOOD, brief_answer="ERP works. " * 120)
+        self.assertIn("INTAKE_LENGTH", codes(inspect_intake(out)))
+
+
+class TestNiceGuidelineIds(unittest.TestCase):
+    def test_nice_guideline_number_is_not_a_diagnosis_code(self):
+        # "NICE guideline CG31" looks like an ICD-11 code; it must not need ICD verification.
+        out = MODE_A.replace("Panic disorder", "Panic disorder (see NICE guideline CG31)", 1)
+        rep = inspect(out, ctx())
+        self.assertTrue(rep.passed, rep.as_dict())

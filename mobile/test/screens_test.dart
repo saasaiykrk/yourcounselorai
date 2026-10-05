@@ -34,6 +34,7 @@ const _routes = [
   '/privacy',
   '/terms',
   '/dpa',
+  '/consultation',
 ];
 
 /// Consult repository that answers instantly with a chosen outcome.

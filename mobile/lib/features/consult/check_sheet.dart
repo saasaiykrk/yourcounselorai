@@ -14,13 +14,22 @@ import 'consult_controller.dart';
 /// clinician attests that no identifiers remain.
 ///
 /// Returns true when the consult was sent (the caller then clears its draft).
-Future<bool> showCheckSheet(BuildContext context, {required String text, required ConsultMode mode}) async {
+///
+/// With [onSend], the cleaned text and counts go to that callback instead of a
+/// direct consult (the guided consultation uses this for the case and for any
+/// answer in which the cleaner found something).
+Future<bool> showCheckSheet(
+  BuildContext context, {
+  required String text,
+  ConsultMode mode = ConsultMode.auto,
+  void Function(String text, Map<String, int> redactionCounts)? onSend,
+}) async {
   final sent = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
     useSafeArea: true,
-    builder: (_) => CheckSheet(text: text, mode: mode),
+    builder: (_) => CheckSheet(text: text, mode: mode, onSend: onSend),
   );
   return sent ?? false;
 }
@@ -43,10 +52,11 @@ const _typeLabels = <String, (String, String)>{
 final _tag = RegExp(r'\[(?:EMAIL|URL|HANDLE|ID|DOB|PHONE|ADDRESS|PINCODE|NAME|ORG)\]');
 
 class CheckSheet extends ConsumerStatefulWidget {
-  const CheckSheet({super.key, required this.text, required this.mode});
+  const CheckSheet({super.key, required this.text, required this.mode, this.onSend});
 
   final String text;
   final ConsultMode mode;
+  final void Function(String text, Map<String, int> redactionCounts)? onSend;
 
   @override
   ConsumerState<CheckSheet> createState() => _CheckSheetState();
@@ -75,6 +85,13 @@ class _CheckSheetState extends ConsumerState<CheckSheet> {
   }
 
   void _send() {
+    final onSend = widget.onSend;
+    if (onSend != null) {
+      final (text, counts) = (_outgoing, _counts);
+      Navigator.of(context).pop(true);
+      onSend(text, counts);
+      return;
+    }
     final router = GoRouter.of(context);
     ref.read(consultControllerProvider.notifier).send(text: _outgoing, mode: widget.mode, redactionCounts: _counts);
     Navigator.of(context).pop(true);

@@ -23,6 +23,7 @@ OPTIONAL = {
     "DAILY_TURN_LIMIT": "40",
     "DEV_MODE": "0",
     "SUPABASE_PUBLISHABLE_KEY": "",   # public by design; only the web admin page uses it
+    "CONSULTATION_ENABLED": "",       # guided consultation: "1" on, "0" off; default on in DEV_MODE only
 }
 _MASK = 4  # show only the last N chars of any secret when describing config
 
@@ -40,6 +41,7 @@ class Config:
     daily_turn_limit: int
     dev_mode: bool
     supabase_publishable_key: str = ""
+    consultation_enabled: bool = False
 
     @property
     def icd_enabled(self) -> bool:
@@ -53,6 +55,7 @@ class Config:
             "icd_release": self.icd_release,
             "icd_enabled": self.icd_enabled,
             "dev_mode": self.dev_mode,
+            "consultation_enabled": self.consultation_enabled,
             "database": _host_only(self.database_url),
         }
 
@@ -87,4 +90,5 @@ def load_config() -> Config:
         daily_turn_limit=int(g("DAILY_TURN_LIMIT") or "40"),
         dev_mode=dev,
         supabase_publishable_key=g("SUPABASE_PUBLISHABLE_KEY"),
+        consultation_enabled=(g("CONSULTATION_ENABLED") or ("1" if dev else "0")) == "1",
     )

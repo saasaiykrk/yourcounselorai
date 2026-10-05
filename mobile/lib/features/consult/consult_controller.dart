@@ -85,6 +85,14 @@ class ConsultController extends Notifier<ConsultState> {
     await ref.read(consultRepositoryProvider).report(turnId: reply.turnId, category: category.apiValue, note: note);
   }
 
+  /// Shows a reply that arrived another way (a guided consultation's report) on
+  /// the reply screen; a follow-up then continues that conversation.
+  void showReply(ConsultReply reply) {
+    _request++;
+    _conversationId = reply.conversationId;
+    state = ConsultReplied(reply);
+  }
+
   /// Starts over: forgets the conversation and the last reply.
   void clear() {
     _request++;

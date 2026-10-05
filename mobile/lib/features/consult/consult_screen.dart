@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/config.dart';
 import '../../core/content/safety_content.dart';
@@ -11,6 +12,8 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../consultation/consultation_controller.dart';
+import '../consultation/open_consultations.dart';
 import 'check_sheet.dart';
 import 'consult_controller.dart';
 
@@ -26,9 +29,22 @@ class _ConsultScreenState extends ConsumerState<ConsultScreen> {
   final _text = TextEditingController(text: AppConfig.previewMode ? kSampleCase : '');
   ConsultMode _mode = ConsultMode.auto;
 
+  /// Guided consultation (questions, then the fixed report) or a direct consult.
+  /// Null until the clinician picks: guided is the default when the server offers it.
+  bool? _guidedChoice;
+
   bool get _canSend => _text.text.trim().length >= AppConfig.minCaseLength;
 
-  Future<void> _check() => showCheckSheet(context, text: _text.text, mode: _mode);
+  Future<void> _check(bool guided) => guided
+      ? showCheckSheet(context, text: _text.text, onSend: _startGuided)
+      : showCheckSheet(context, text: _text.text, mode: _mode);
+
+  Future<void> _startGuided(String text, Map<String, int> counts) async {
+    final router = GoRouter.of(context);
+    router.push('/consultation');
+    final ok = await ref.read(consultationControllerProvider.notifier).start(text: text, redactionCounts: counts);
+    if (ok && mounted) setState(_text.clear);
+  }
 
   @override
   void dispose() {
@@ -43,16 +59,18 @@ class _ConsultScreenState extends ConsumerState<ConsultScreen> {
     ref.listen(consultControllerProvider, (_, next) {
       if (next is ConsultReplied && next.reply.delivered) setState(_text.clear);
     });
+    final offered = ref.watch(meProvider).value?.guidedConsultation ?? false;
+    final guided = offered && (_guidedChoice ?? true);
     return ProtectedScreen(
       child: Scaffold(
         body: PageBody(
           gap: 16,
           actions: [
             FilledButton.icon(
-              onPressed: _canSend ? _check : null,
+              onPressed: _canSend ? () => _check(guided) : null,
               iconAlignment: IconAlignment.end,
               icon: const Icon(Icons.arrow_forward_rounded),
-              label: const Text('Check & send'),
+              label: Text(guided ? 'Check & start' : 'Check & send'),
             ),
           ],
           children: [
@@ -63,37 +81,52 @@ class _ConsultScreenState extends ConsumerState<ConsultScreen> {
                 tone: Tone.neutral,
                 text: 'Preview build: sample case, not connected to the server.',
               ),
-            const PageHeading(
-              'New consult',
-              message: 'Describe the case. Leave out names, contact details and ID numbers.',
+            if (offered)
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, label: Text('Guided'), icon: Icon(Icons.forum_outlined)),
+                  ButtonSegment(value: false, label: Text('Direct'), icon: Icon(Icons.bolt_outlined)),
+                ],
+                selected: {guided},
+                showSelectedIcon: false,
+                onSelectionChanged: (v) => setState(() => _guidedChoice = v.first),
+              ),
+            PageHeading(
+              guided ? 'Guided consultation' : 'New consult',
+              message: guided
+                  ? "Describe the case. We'll ask only what the report needs, then write your consultation report. "
+                        'Leave out names, contact details and ID numbers.'
+                  : 'Describe the case. Leave out names, contact details and ID numbers.',
             ),
             _CaseField(controller: _text, onChanged: () => setState(() {})),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('What do you need?', style: AppText.label),
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 44,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: ConsultMode.values.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemBuilder: (context, i) {
-                      final mode = ConsultMode.values[i];
-                      return _ModeChip(
-                        label: mode.label,
-                        selected: mode == _mode,
-                        onTap: () => setState(() => _mode = mode),
-                      );
-                    },
+            if (guided) const OpenConsultations(),
+            if (!guided)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('What do you need?', style: AppText.label),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 44,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      clipBehavior: Clip.none,
+                      itemCount: ConsultMode.values.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
+                      itemBuilder: (context, i) {
+                        final mode = ConsultMode.values[i];
+                        return _ModeChip(
+                          label: mode.label,
+                          selected: mode == _mode,
+                          onTap: () => setState(() => _mode = mode),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Text(_mode.hint, style: AppText.smallMuted),
-              ],
-            ),
+                  const SizedBox(height: 10),
+                  Text(_mode.hint, style: AppText.smallMuted),
+                ],
+              ),
           ],
         ),
       ),

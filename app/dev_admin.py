@@ -93,11 +93,12 @@ class DevHistoryStore:
                 "input_deid": text, "status": "delivered",
                 "output_shown": "### 1. Case History & MSE Audit\n(sample reply for local testing)"})
 
-    def record(self, owner: str, conv_id: str, mode: str, level: str, text: str, shown: str, status: str) -> None:
+    def record(self, owner: str, conv_id: str, mode: str, level: str, text: str, shown: str, status: str,
+               turn_id: str | None = None) -> None:
         conv = self._convs.setdefault(conv_id, {"id": conv_id, "clinician_id": owner, "title": None,
                                                 "hidden_at": None, "created_at": _ago(0), "turns": []})
-        conv["turns"].append({"id": str(uuid.uuid4()), "created_at": _ago(0), "requested_mode": mode, "level": level,
-                              "input_deid": text, "output_shown": shown, "status": status})
+        conv["turns"].append({"id": turn_id or str(uuid.uuid4()), "created_at": _ago(0), "requested_mode": mode,
+                              "level": level, "input_deid": text, "output_shown": shown, "status": status})
 
     def _summary(self, c: dict) -> dict:
         t = c["turns"]
@@ -137,3 +138,46 @@ class DevHistoryStore:
             return False
         c["hidden_at"] = _ago(0)
         return True
+
+
+class DevConsultationStore:
+    """DEV_MODE guided consultations (no database). Same calls as the db.* consultation functions."""
+
+    def __init__(self) -> None:
+        self._rows: dict[str, dict] = {}
+
+    def new(self, owner: str, stage: str, state: dict) -> str:
+        cid = str(uuid.uuid4())
+        self._rows[cid] = {"id": cid, "owner": owner, "stage": stage, "state": copy.deepcopy(state),
+                           "busy": False, "updated_at": _ago(0)}
+        return cid
+
+    def get(self, cid: str, owner: str) -> dict | None:
+        r = self._rows.get(cid)
+        if not r or r["owner"] != owner:
+            return None
+        return {"id": cid, "stage": r["stage"], "state": copy.deepcopy(r["state"]), "updated_at": r["updated_at"]}
+
+    def claim(self, cid: str, owner: str):
+        r = self._rows.get(cid)
+        if not r or r["owner"] != owner:
+            return None
+        if r["busy"]:
+            return "busy"
+        r["busy"] = True
+        return self.get(cid, owner)
+
+    def save(self, cid: str, stage: str, state: dict) -> None:
+        r = self._rows[cid]
+        r.update(stage=stage, state=copy.deepcopy(state), busy=False, updated_at=_ago(0))
+
+    def release(self, cid: str) -> None:
+        if cid in self._rows:
+            self._rows[cid]["busy"] = False
+
+    def list_open(self, owner: str) -> list[dict]:
+        rows = [r for r in self._rows.values() if r["owner"] == owner and r["stage"] != "COMPLETED"]
+        return [{"id": r["id"], "stage": r["stage"], "updated_at": r["updated_at"],
+                 "case_summary": (r["state"].get("case_summary") or "")[:160],
+                 "questions_asked": r["state"].get("questions_asked", 0)}
+                for r in sorted(rows, key=lambda r: r["updated_at"], reverse=True)][:10]

@@ -14,6 +14,8 @@ handling are covered by tests/test_claude_client.py against a fake SDK.
 """
 from __future__ import annotations
 
+import json
+
 from .pipeline import ModelResult
 
 MAX_TOOL_ROUNDS = 8
@@ -25,7 +27,7 @@ class AnthropicClient:
         self._client = anthropic.Anthropic(api_key=api_key, max_retries=2, timeout=300)
         self.model, self.max_tokens = model, max_tokens
 
-    def run(self, system: str, messages: list[dict], tools: list[dict], tool_handler) -> ModelResult:
+    def run(self, system: str | list[str], messages: list[dict], tools: list[dict], tool_handler) -> ModelResult:
         convo = list(messages)
         texts: list[str] = []
         usage_total: dict[str, int] = {}
@@ -34,7 +36,7 @@ class AnthropicClient:
             with self._client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+                system=_system_blocks(system),
                 tools=tools,
                 messages=convo,
             ) as stream:
@@ -65,3 +67,31 @@ class AnthropicClient:
         # The contract line must be the very first thing in the reply; text emitted
         # before a tool call is preamble, so only the final round's text is used.
         return ModelResult(text=texts[-1] if texts else "", model=self.model, usage=usage_total, tool_calls=calls)
+
+    def run_structured(self, system: str, user: str, schema: dict, max_tokens: int = 2000) -> tuple[dict | None, dict]:
+        """One short call that must return JSON matching `schema` (guided-consultation intake).
+        No tools, low effort. Returns (None, usage) if the model declined or the JSON is unusable."""
+        msg = self._client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            system=_system_blocks(system),
+            messages=[{"role": "user", "content": user}],
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
+        )
+        usage = {k: v for k, v in (msg.usage.model_dump() if hasattr(msg.usage, "model_dump") else {}).items()
+                 if isinstance(v, int)}
+        if msg.stop_reason in ("refusal", "max_tokens"):
+            return None, usage
+        text = "".join(b.text for b in msg.content if b.type == "text")
+        try:
+            out = json.loads(text)
+        except ValueError:
+            return None, usage
+        return (out if isinstance(out, dict) else None), usage
+
+
+def _system_blocks(system: str | list[str]) -> list[dict]:
+    """Each part is cached separately, so the skill prompt shared by both flows is reused
+    when a consultation report adds its own part after it (at most 4 parts)."""
+    parts = [system] if isinstance(system, str) else list(system)
+    return [{"type": "text", "text": p, "cache_control": {"type": "ephemeral"}} for p in parts[:4]]

@@ -152,3 +152,89 @@ def _cap(rel: str, s: str) -> str:
 def app_header(level: str, requested_mode: str, today: str) -> str:
     return (f"[App header] Clinician level: {level} (verified) · Requested mode: {requested_mode} · Date: {today}\n\n"
             f"[Clinician message]\n")
+
+
+# --- Guided consultation (intake questions, then the fixed Consultation Report) ---------------
+# App mechanics only. What to ask, when to stop and the report structure live in the skill:
+# references/intake-questioning.md, assets/consult-report-template.md and the worked example.
+INTAKE_FILE = "references/intake-questioning.md"
+REPORT_FILES = ["assets/consult-report-template.md", "references/example-consult-report-ocd.md"]
+
+INTAKE_CONTRACT = """\
+# APP CONTRACT — guided consultation, intake step
+You are the intake step of a guided consultation in the YourCounselor app. Follow the intake guide below; you never
+write the report here. Each turn you receive the consultation state (JSON) and the clinician's latest message.
+Reply with JSON only, matching the response schema:
+- status: "ask" (one next question), "ready" (enough for the report) or "risk_stop".
+- facts_patch: facts learned or changed in the latest message only, as {field, value}. field is a short snake_case
+  key; use presenting_concern, age_gender, duration_onset and risk_screening where they fit, otherwise keys such as
+  education_occupation, functioning, triggers, family, prior_therapy, medications, medical, help_requested.
+  value is the clinician's information in at most 40 words. risk_screening is exactly "asked and absent",
+  "risk present — {what was done}" or "not yet asked".
+- unknown_fields: fields the clinician said they do not know or chose to skip.
+- case_summary: the whole case so far in at most 120 words, facts only.
+- question, why, field, options: the next question when status is "ask"; otherwise empty strings and [].
+- brief_answer: a short reply when the clinician asked you something; otherwise "".
+Never ask again about a field that is in facts or unknown. Never put an identifier in any field.
+"""
+
+CONSULT_REPORT_CONTRACT = """\
+# APP CONTRACT — guided consultation report (Mode R)
+When the app header says `Requested mode: R`, the message is a case summary collected by the app's guided intake.
+Write the Consultation Report exactly as in consult-report-template.md below: contract line with mode=R, every
+heading in the template's order with its title unchanged, built only from the facts given — mark gaps
+"(not provided)" or "(unknown — clinician did not know)". For this request this replaces the mode choice in rule 2;
+every other app contract rule above still applies.
+"""
+
+INTAKE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "status": {"type": "string", "enum": ["ask", "ready", "risk_stop"]},
+        "facts_patch": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False,
+            "properties": {"field": {"type": "string"}, "value": {"type": "string"}},
+            "required": ["field", "value"]}},
+        "unknown_fields": {"type": "array", "items": {"type": "string"}},
+        "case_summary": {"type": "string"},
+        "question": {"type": "string"},
+        "why": {"type": "string"},
+        "field": {"type": "string"},
+        "options": {"type": "array", "items": {"type": "string"}},
+        "brief_answer": {"type": "string"},
+    },
+    "required": ["status", "facts_patch", "unknown_fields", "case_summary", "question", "why", "field", "options",
+                 "brief_answer"],
+}
+
+
+@dataclass(frozen=True)
+class ConsultPrompts:
+    intake_system: str                 # small; sent on every question turn
+    report_addendum: str               # sent after the cached skill prompt, for the report call only
+    mandatory: tuple[dict, ...]        # [{field, question, why, options}] from the intake guide
+    prompt_hash: str
+
+
+_MANDATORY_ROW = re.compile(r"^\|\s*(?P<field>[a-z_]+)\s*\|\s*(?P<q>[^|]+?)\s*\|\s*(?P<why>[^|]+?)\s*\|\s*(?P<opts>[^|]*?)\s*\|\s*$",
+                            re.M)
+
+
+@lru_cache(maxsize=4)
+def load_consult_prompts(root: str) -> ConsultPrompts:
+    r = Path(root)
+    guide = (r / INTAKE_FILE).read_text(encoding="utf-8")
+    table = guide[guide.index("## Mandatory before the report"):]
+    table = table[:table.index("\n## ", 5)]
+    mandatory = tuple(
+        {"field": m["field"], "question": m["q"], "why": m["why"],
+         "options": [o.strip() for o in m["opts"].split(" / ") if o.strip()]}
+        for m in _MANDATORY_ROW.finditer(table) if m["field"] != "field")
+    if not mandatory:
+        raise ValueError(f"{INTAKE_FILE}: no mandatory-field rows found")
+    intake = f"{INTAKE_CONTRACT}\n\n<file path=\"{INTAKE_FILE}\">\n{guide}\n</file>"
+    report = CONSULT_REPORT_CONTRACT + "".join(
+        f"\n\n<file path=\"{rel}\">\n{(r / rel).read_text(encoding='utf-8')}\n</file>" for rel in REPORT_FILES)
+    digest = hashlib.sha256((intake + report).encode()).hexdigest()[:16]
+    return ConsultPrompts(intake, report, mandatory, digest)
