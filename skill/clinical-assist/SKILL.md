@@ -7,7 +7,7 @@ description: Clinical case-consultation for psychologists and counsellors (YourC
 
 | Skill version | Governing spec | Released | Owner | Next review |
 |---|---|---|---|---|
-| **2.1.1** | YourCounselor master prompt v2.1 | 2026-09-24 | Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) | **2027-09-24** (annual; sooner on any change to crisis lines, licences or v2.x spec) |
+| **2.2.0** | YourCounselor master prompt v2.1 + guided consultation (Mode R) | 2026-10-05 | Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) | **2027-09-24** (annual; sooner on any change to crisis lines, licences or v2.x spec) |
 
 Sub-registers with their own owner and review date: `references/crisis-resources.md` (helplines) · Core 6 `NPS-00` (cognitive/neuropsychological tool licences). Change history: `CHANGELOG.md`.
 
@@ -133,6 +133,9 @@ Then `view` the relevant line range. Read only the cards the request needs.
 | Case history & MSE audit tables, Mode E diagnostic review | — | case-history-mse-audit.md |
 | Fill-in skeletons for every mode | — | ../assets/mode-templates.md |
 | Model Mode A output (adult panic presentation, audit = critical omission) | — | example-mode-a-panic.md |
+| **Guided consultation:** intake questioning (what to ask, when to stop) | — | intake-questioning.md |
+| **Guided consultation:** fixed Consultation Report template (Mode R) | — | ../assets/consult-report-template.md |
+| Model Consultation Report (childhood OCD traits, digital dependence) — gold standard | — | example-consult-report-ocd.md |
 | Pre-send quality check | — | qc-checklist.md |
 | **India crisis numbers (owner, review date, status)** | — | crisis-resources.md |
 | **Licence status of cognitive / neuropsych tools (MoCA, MMSE, RBANS…)** | `NPS-00` | core6 |

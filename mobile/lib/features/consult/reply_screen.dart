@@ -82,6 +82,7 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
     final open = sections.take(_openSections).toList();
     final folded = sections.skip(_openSections).toList();
     final mode = ConsultMode.values.where((m) => m.apiCode == reply.meta.mode).firstOrNull;
+    final isReport = reply.meta.mode == 'R'; // guided consultation: the fixed Consultation Report
 
     return ProtectedScreen(
       child: Scaffold(
@@ -113,11 +114,16 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        '${(mode ?? ConsultMode.auto).label} · knowledge base ${reply.skillVersion}'.toUpperCase(),
+                        '${isReport ? 'Guided consultation' : (mode ?? ConsultMode.auto).label} · '
+                                'knowledge base ${reply.skillVersion}'
+                            .toUpperCase(),
                         style: AppText.overline,
                       ),
                       const SizedBox(height: 4),
-                      Semantics(header: true, child: const Text('Clinical work-up', style: AppText.screenTitle)),
+                      Semantics(
+                        header: true,
+                        child: Text(isReport ? 'Consultation report' : 'Clinical work-up', style: AppText.screenTitle),
+                      ),
                       const SizedBox(height: 16),
                       _SummaryCard(meta: reply.meta),
                       if (sections.length > 1) ...[

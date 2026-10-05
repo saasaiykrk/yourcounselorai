@@ -56,6 +56,18 @@ create index on turns (clinician_id, created_at);
 create index on turns (status);
 create index turns_conversation_idx on turns (conversation_id, created_at);
 
+create table consultations (                            -- guided consultations (db/migrations/003)
+  id            uuid primary key references conversations(id),
+  clinician_id  uuid not null references clinicians(id),
+  stage         text not null check (stage in ('INITIAL_CASE','QUESTIONING','INFORMATION_SUFFICIENT',
+                                               'REPORT_GENERATION','COMPLETED','SAFETY_STOP')),
+  state         jsonb not null default '{}',                -- compact de-identified state
+  busy_until    timestamptz,                                -- one request at a time
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+create index consultations_clinician_idx on consultations (clinician_id, updated_at desc);
+
 create table incidents (
   id            uuid primary key default gen_random_uuid(),
   turn_id       uuid not null references turns(id),
@@ -90,6 +102,7 @@ alter table turns           enable row level security;
 alter table incidents       enable row level security;
 alter table deid_rejections enable row level security;
 alter table admin_audit     enable row level security;
+alter table consultations   enable row level security;
 -- No policies for anon/authenticated roles: only the backend's service role can read/write.
 
 -- Retention (beta): turns and incidents kept 12 months, then deleted by a scheduled job,

@@ -11,6 +11,7 @@ import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
 import '../consult/consult_controller.dart';
+import '../consultation/consultation_controller.dart';
 import 'info_screen.dart';
 
 const _roles = {
@@ -25,6 +26,7 @@ class AccountScreen extends ConsumerWidget {
   Future<void> _signOut(BuildContext context, WidgetRef ref) async {
     // Wipe the in-memory consult and reply before leaving.
     ref.read(consultControllerProvider.notifier).clear();
+    ref.read(consultationControllerProvider.notifier).clear();
     await ref.read(authServiceProvider).signOut();
     ref.invalidate(meProvider);
     if (context.mounted) context.go('/welcome');

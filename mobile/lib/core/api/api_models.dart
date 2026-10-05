@@ -3,7 +3,14 @@ library;
 
 /// `GET /v1/me`.
 class Me {
-  const Me({required this.verificationStatus, this.level, this.role, this.registrationBody, this.isAdmin = false});
+  const Me({
+    required this.verificationStatus,
+    this.level,
+    this.role,
+    this.registrationBody,
+    this.isAdmin = false,
+    this.guidedConsultation = false,
+  });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
     verificationStatus: json['verification_status'] as String? ?? 'none',
@@ -11,6 +18,7 @@ class Me {
     role: json['role'] as String?,
     registrationBody: json['registration_body'] as String?,
     isAdmin: json['is_admin'] == true,
+    guidedConsultation: (json['features'] as Map?)?['consultation'] == true,
   );
 
   /// none (no profile yet) · pending · verified · rejected
@@ -24,6 +32,9 @@ class Me {
   /// Set only in the database by another admin; shows the Admin area. The
   /// backend checks it again on every admin request.
   final bool isAdmin;
+
+  /// The server has guided consultations switched on (`CONSULTATION_ENABLED`).
+  final bool guidedConsultation;
 
   bool get needsProfile => verificationStatus == 'none';
   bool get isVerified => verificationStatus == 'verified' && level != null;
@@ -307,3 +318,151 @@ class ConsultDetail {
   final DateTime? hiddenAt;
   final List<ConsultTurn> turns;
 }
+
+// --- guided consultation ---------------------------------------------------------------
+
+/// Where a guided consultation is (the server decides; the app only shows it).
+enum ConsultationStage {
+  questioning,
+  ready,
+  generating,
+  completed,
+  safetyStop;
+
+  static ConsultationStage fromApi(String? s) => switch (s) {
+    'INFORMATION_SUFFICIENT' => ready,
+    'REPORT_GENERATION' => generating,
+    'COMPLETED' => completed,
+    'SAFETY_STOP' => safetyStop,
+    _ => questioning,
+  };
+}
+
+/// The one open question, with why it is asked and any quick replies.
+class ConsultationQuestion {
+  const ConsultationQuestion({
+    required this.field,
+    required this.question,
+    this.why = '',
+    this.options = const [],
+    this.number = 0,
+  });
+
+  factory ConsultationQuestion.fromJson(Map<String, dynamic> j) => ConsultationQuestion(
+    field: j['field'] as String? ?? '',
+    question: j['question'] as String? ?? '',
+    why: j['why'] as String? ?? '',
+    options: [for (final o in (j['options'] as List? ?? const [])) '$o'],
+    number: (j['number'] as num?)?.toInt() ?? 0,
+  );
+
+  final String field;
+  final String question;
+  final String why;
+  final List<String> options;
+  final int number;
+}
+
+/// A question already answered ("(don't know)" and "(skipped)" included).
+class ConsultationExchange {
+  const ConsultationExchange({required this.question, required this.answer});
+
+  factory ConsultationExchange.fromJson(Map<String, dynamic> j) =>
+      ConsultationExchange(question: j['question'] as String? ?? '', answer: j['answer'] as String? ?? '');
+
+  /// Empty when the clinician added information without a question.
+  final String question;
+  final String answer;
+}
+
+/// `/v1/consultations…` state: compact, de-identified, held by the server.
+class Consultation {
+  const Consultation({
+    required this.id,
+    required this.stage,
+    this.question,
+    this.briefAnswer = '',
+    this.caseSummary = '',
+    this.facts = const {},
+    this.unknown = const [],
+    this.questionsAsked = 0,
+    this.maxQuestions = 8,
+    this.transcript = const [],
+    this.reply,
+  });
+
+  factory Consultation.fromJson(Map<String, dynamic> j) => Consultation(
+    id: '${j['id']}',
+    stage: ConsultationStage.fromApi(j['stage'] as String?),
+    question: j['question'] is Map<String, dynamic>
+        ? ConsultationQuestion.fromJson(j['question'] as Map<String, dynamic>)
+        : null,
+    briefAnswer: j['brief_answer'] as String? ?? '',
+    caseSummary: j['case_summary'] as String? ?? '',
+    facts: {for (final e in ((j['facts'] as Map?) ?? const {}).entries) '${e.key}': '${e.value}'},
+    unknown: [for (final u in (j['unknown'] as List? ?? const [])) '$u'],
+    questionsAsked: (j['questions_asked'] as num?)?.toInt() ?? 0,
+    maxQuestions: (j['max_questions'] as num?)?.toInt() ?? 8,
+    transcript: [
+      for (final t in (j['transcript'] as List? ?? const [])) ConsultationExchange.fromJson(t as Map<String, dynamic>),
+    ],
+    reply: j['reply'] is Map<String, dynamic> ? ConsultReply.fromJson(j['reply'] as Map<String, dynamic>) : null,
+  );
+
+  final String id;
+  final ConsultationStage stage;
+  final ConsultationQuestion? question;
+
+  /// The AI's short answer when the clinician asked something during the intake.
+  final String briefAnswer;
+  final String caseSummary;
+
+  /// What the clinician has told us so far, by field (e.g. age_gender).
+  final Map<String, String> facts;
+
+  /// Fields the clinician did not know or skipped.
+  final List<String> unknown;
+  final int questionsAsked;
+  final int maxQuestions;
+  final List<ConsultationExchange> transcript;
+
+  /// The finished report, once written.
+  final ConsultReply? reply;
+}
+
+/// An unfinished consultation in the "Continue" list.
+class ConsultationSummary {
+  const ConsultationSummary({
+    required this.id,
+    required this.stage,
+    this.caseSummary = '',
+    this.questionsAsked = 0,
+    this.updatedAt,
+  });
+
+  factory ConsultationSummary.fromJson(Map<String, dynamic> j) => ConsultationSummary(
+    id: '${j['id']}',
+    stage: ConsultationStage.fromApi(j['stage'] as String?),
+    caseSummary: j['case_summary'] as String? ?? '',
+    questionsAsked: (j['questions_asked'] as num?)?.toInt() ?? 0,
+    updatedAt: _date(j['updated_at']),
+  );
+
+  final String id;
+  final ConsultationStage stage;
+  final String caseSummary;
+  final int questionsAsked;
+  final DateTime? updatedAt;
+}
+
+/// Plain-language label for a fact key, e.g. age_gender → "Age / gender".
+String consultationFieldLabel(String field) => switch (field) {
+  'presenting_concern' => 'Presenting concern',
+  'age_gender' => 'Age / gender',
+  'duration_onset' => 'Duration and onset',
+  'risk_screening' => 'Risk screening',
+  'education_occupation' => 'Education / occupation',
+  'help_requested' => 'Help requested',
+  'prior_therapy' => 'Prior therapy',
+  _ => field.isEmpty ? 'Detail' : (field[0].toUpperCase() + field.substring(1)).replaceAll('_', ' '),
+};

@@ -90,6 +90,11 @@ The app is built and released by its owner; CI/CD only deploys the backend. On e
   - They are never written to disk.
   - The draft is cleared once a reply is delivered.
   - Everything is wiped on sign-out.
+- **Guided consultation** (Consult → Guided): the case, then one question at a time, then the fixed
+  Consultation Report. Every answer is cleaned on the phone first (the check panel opens only when something
+  is found); the server cleans it again and keeps the compact, de-identified state so a consultation can be
+  continued later. Risk in an answer pauses the questions and shows the crisis numbers. Shown only when the
+  server has `CONSULTATION_ENABLED=1` (see `docs/DEPLOY.md`).
 - **History** (past consults) is read from the server each time the tab opens and is never stored on the phone.
   - Clinicians see only their own consults. Labels go through the same identifier check as case text.
   - "Delete" hides a consult from History; the de-identified copy stays on the server for safety review

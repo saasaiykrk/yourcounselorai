@@ -27,6 +27,11 @@ final consultRepositoryProvider = Provider<ConsultRepository>(
   (ref) => AppConfig.previewMode ? PreviewConsultRepository() : ApiConsultRepository(ref.watch(apiClientProvider)),
 );
 
+final consultationRepositoryProvider = Provider<ConsultationRepository>(
+  (ref) =>
+      AppConfig.previewMode ? PreviewConsultationRepository() : ApiConsultationRepository(ref.watch(apiClientProvider)),
+);
+
 final historyRepositoryProvider = Provider<HistoryRepository>(
   (ref) => AppConfig.previewMode ? PreviewHistoryRepository() : ApiHistoryRepository(ref.watch(apiClientProvider)),
 );
