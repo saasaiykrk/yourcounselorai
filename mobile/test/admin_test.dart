@@ -145,8 +145,9 @@ void main() {
     testWidgets('approve a registration with a level and a note', (tester) async {
       final repo = PreviewAdminRepository();
       await _pump(tester, '/admin', admin: true, repo: repo);
-      expect(find.text('psychologist.two@example.test'), findsOneWidget);
-      expect(find.text('trainee.one@example.test'), findsOneWidget);
+      expect(find.text('Sample Psychologist Two'), findsOneWidget);
+      expect(find.textContaining('psychologist.two@example.test · Male · age 38'), findsOneWidget);
+      expect(find.text('Sample Trainee One'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Approve').first);
       await tester.pumpAndSettle();
@@ -159,7 +160,7 @@ void main() {
       await tester.tap(find.text('Approve as L2'));
       await tester.pumpAndSettle();
 
-      expect(find.text('psychologist.two@example.test'), findsNothing, reason: 'no longer waiting');
+      expect(find.text('Sample Psychologist Two'), findsNothing, reason: 'no longer waiting');
       expect((await repo.clinicians('verified')).single.level, 'L2');
       expect(tester.takeException(), isNull);
     });

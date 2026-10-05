@@ -47,7 +47,8 @@ from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+from typing import Annotated
 
 from . import db, deid
 from .consultation import ConsultationEngine, ConsultationError, public_view
@@ -165,6 +166,10 @@ def admin(user: dict = Depends(current_user)) -> dict:
 
 # --- schemas ----------------------------------------------------------------
 class ProfileIn(BaseModel):
+    # The clinician's own details (never a client's); admin-only, never sent to the AI.
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
+    gender: str = Field(pattern="^(female|male|other|prefer_not_to_say)$")
+    age: int = Field(ge=18, le=100)
     role: str = Field(pattern="^(counsellor_trainee|psychologist|psychiatrist)$")
     registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
     registration_number: str | None = Field(default=None, max_length=40)

@@ -67,6 +67,9 @@ class _FakeConsult implements ConsultRepository {
       reports.add('$turnId:$category');
 }
 
+/// The text field with this hint.
+Finder _field(String hint) => find.widgetWithText(TextField, hint);
+
 /// Finds a FilledButton (including FilledButton.icon) by its label.
 Finder _filled(String label) =>
     find.ancestor(of: find.text(label), matching: find.byWidgetPredicate((w) => w is FilledButton));
@@ -279,17 +282,47 @@ void main() {
     expect(consult.reports, ['turn-1:unsafe']);
   });
 
-  testWidgets('professional details need consent and a registration number', (tester) async {
+  testWidgets('professional details need name, gender, age, consent and a registration number', (tester) async {
     await _pumpAt(tester, '/details');
     expect(_onPressed(tester, 'Submit for verification'), isNull);
 
-    await tester.enterText(find.byType(TextField), 'A12345');
+    await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
+    await tester.enterText(_field('Years'), '34');
+    await tester.enterText(_field('As shown on the register'), 'A12345');
+    await tester.pump();
+    expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'gender and consent still missing');
+    await tester.ensureVisible(find.text('Female'));
+    await tester.tap(find.text('Female'));
     await tester.pump();
     expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'consent still missing');
     await tester.ensureVisible(find.byType(Checkbox));
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
     expect(_onPressed(tester, 'Submit for verification'), isNotNull);
+
+    await tester.enterText(_field('Years'), '15');
+    await tester.pump();
+    expect(find.text('18 to 100'), findsOneWidget);
+    expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'age must be 18 to 100');
+    await tester.enterText(_field('Years'), '34');
+    await tester.enterText(_field('As on your registration'), ' ');
+    await tester.pump();
+    expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'name is required');
+  });
+
+  test('registration sends name, gender and age', () {
+    const p = ProfileSubmission(
+      fullName: 'Dr Sample Clinician',
+      gender: 'female',
+      age: 34,
+      role: 'psychologist',
+      registrationBody: 'RCI',
+      registrationNumber: 'A12345',
+      consentVersion: 'beta-draft-1',
+    );
+    expect(p.toJson(), containsPair('full_name', 'Dr Sample Clinician'));
+    expect(p.toJson(), containsPair('gender', 'female'));
+    expect(p.toJson(), containsPair('age', 34));
   });
 
   testWidgets('sign-in flow: email, code, details, pending, verified', (tester) async {
@@ -306,7 +339,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/details', reason: 'new clinicians fill in their registration');
 
-    await tester.enterText(find.byType(TextField), 'A12345');
+    await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
+    await tester.enterText(_field('Years'), '34');
+    await tester.ensureVisible(find.text('Prefer not to say'));
+    await tester.tap(find.text('Prefer not to say'));
+    await tester.enterText(_field('As shown on the register'), 'A12345');
     await tester.ensureVisible(find.byType(Checkbox));
     await tester.tap(find.byType(Checkbox));
     await tester.pump();

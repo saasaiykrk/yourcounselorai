@@ -9,6 +9,9 @@ create table clinicians (
   role                 text not null check (role in ('counsellor_trainee','psychologist','psychiatrist')),
   registration_body    text not null check (registration_body in ('RCI','NMC','SMC','none')),
   registration_number  text,
+  full_name            text check (char_length(full_name) between 2 and 100),   -- the clinician's own (admin-only)
+  gender               text check (gender in ('female','male','other','prefer_not_to_say')),
+  age_at_registration  int  check (age_at_registration between 18 and 100),
   level                text check (level in ('L1','L2','L3')),        -- NULL until verified by an admin
   verification_status  text not null default 'pending'
                          check (verification_status in ('pending','verified','rejected')),

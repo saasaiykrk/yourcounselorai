@@ -70,6 +70,9 @@ enum ReportCategory {
   final String label;
 }
 
+/// Gender choices at registration (the clinician's own), matching the profile API.
+const kGenders = {'female': 'Female', 'male': 'Male', 'other': 'Other', 'prefer_not_to_say': 'Prefer not to say'};
+
 enum ClinicianRole {
   trainee('counsellor_trainee', 'Counsellor or trainee', 'Supervised wording, no diagnostic labels', 'none'),
   psychologist('psychologist', 'Psychologist', 'RCI registration needed', 'RCI'),

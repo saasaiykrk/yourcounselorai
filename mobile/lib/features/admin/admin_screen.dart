@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exceptions.dart';
 import '../../core/api/api_models.dart';
+import '../../core/content/safety_content.dart';
 import '../../core/providers.dart';
 import '../../core/security/screen_protection.dart';
 import '../../core/theme/app_colors.dart';
@@ -205,13 +206,22 @@ class _ClinicianCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(c.email, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                child: Text(c.fullName ?? c.email, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
               ),
               const SizedBox(width: 8),
               StatusPill(pill, tone: tone),
             ],
           ),
           const SizedBox(height: 4),
+          if (c.fullName != null || c.gender != null || c.age != null)
+            Text(
+              [
+                if (c.fullName != null) c.email,
+                if (c.gender != null) kGenders[c.gender] ?? c.gender!,
+                if (c.age != null) 'age ${c.age}',
+              ].join(' · '),
+              style: AppText.smallMuted,
+            ),
           Text('${adminRoles[c.role] ?? c.role} · $reg', style: AppText.smallMuted),
           Text(
             'Registered ${_when(c.createdAt)}${c.verificationNote != null ? ' · ${c.verificationNote}' : ''}',

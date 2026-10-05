@@ -241,6 +241,13 @@ async function loadClinicians() {
   }
 }
 
+const GENDER = { female: "Female", male: "Male", other: "Other", prefer_not_to_say: "Gender not stated" };
+
+// The clinician's own gender and age (asked at registration; older accounts may not have them).
+function personal(c) {
+  return [GENDER[c.gender], c.age_at_registration ? "age " + c.age_at_registration : null].filter(Boolean).join(", ");
+}
+
 function clinicianItem(c, status) {
   const reg = c.registration_body && c.registration_body !== "none"
     ? c.registration_body + " " + (c.registration_number || "(no number)") : "No registration given";
@@ -248,7 +255,8 @@ function clinicianItem(c, status) {
     : c.verification_status === "rejected" ? el("span", { class: "pill crisis", text: "Rejected" })
     : el("span", { class: "pill check", text: "Waiting" });
   const item = el("div", { class: "item" },
-    el("div", { class: "head" }, el("span", { class: "title", text: c.email || c.id }), pill),
+    el("div", { class: "head" }, el("span", { class: "title", text: c.full_name || c.email || c.id }), pill),
+    el("div", { class: "meta", text: [c.full_name ? c.email : null, personal(c)].filter(Boolean).join(" · ") }),
     el("div", { class: "meta", text: (ROLE[c.role] || c.role) + " · " + reg }),
     el("div", { class: "meta", text: "Registered " + when(c.created_at) +
       (c.verification_note ? " · Note: " + c.verification_note : "") }));

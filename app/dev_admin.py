@@ -19,10 +19,12 @@ class DevAdminStore:
     def __init__(self) -> None:
         self._clinicians = [
             {"id": "11111111-1111-4111-8111-111111111111", "email": "trainee.one@example.test",
+             "full_name": "Sample Trainee One", "gender": "female", "age_at_registration": 24,
              "role": "counsellor_trainee", "registration_body": "none", "registration_number": None,
              "level": None, "verification_status": "pending", "verification_note": None, "verified_at": None,
              "is_admin": False, "created_at": _ago(5)},
             {"id": "22222222-2222-4222-8222-222222222222", "email": "psychologist.two@example.test",
+             "full_name": "Sample Psychologist Two", "gender": "male", "age_at_registration": 38,
              "role": "psychologist", "registration_body": "RCI", "registration_number": "A12345",
              "level": None, "verification_status": "pending", "verification_note": None, "verified_at": None,
              "is_admin": False, "created_at": _ago(26)},

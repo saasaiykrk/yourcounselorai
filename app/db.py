@@ -27,12 +27,16 @@ def get_clinician(cid) -> dict | None:
 def upsert_clinician_profile(cid, p: dict) -> None:
     with _conn() as c:
         c.execute(
-            """insert into clinicians (id, role, registration_body, registration_number, consent_version, consent_at)
-               values (%s,%s,%s,%s,%s, now())
-               on conflict (id) do update set role=excluded.role, registration_body=excluded.registration_body,
-                 registration_number=excluded.registration_number, consent_version=excluded.consent_version,
-                 consent_at=now(), verification_status='pending', level=null""",
-            (str(cid), p["role"], p["registration_body"], p.get("registration_number"), p["consent_version"]))
+            """insert into clinicians (id, full_name, gender, age_at_registration, role, registration_body,
+                                          registration_number, consent_version, consent_at)
+               values (%s,%s,%s,%s,%s,%s,%s,%s, now())
+               on conflict (id) do update set full_name=excluded.full_name, gender=excluded.gender,
+                 age_at_registration=excluded.age_at_registration, role=excluded.role,
+                 registration_body=excluded.registration_body, registration_number=excluded.registration_number,
+                 consent_version=excluded.consent_version, consent_at=now(), verification_status='pending',
+                 level=null""",
+            (str(cid), p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"],
+             p.get("registration_number"), p["consent_version"]))
 
 
 def set_verification(cid, level, status, note, admin_id) -> bool:
@@ -106,7 +110,8 @@ def log_deid_rejection(cid, counts: dict) -> None:
 
 
 # --- admin (reads and updates for the admin panel; every write is audited) ---------------
-_CLINICIAN_COLS = """c.id, u.email, c.role, c.registration_body, c.registration_number, c.level,
+_CLINICIAN_COLS = """c.id, u.email, c.full_name, c.gender, c.age_at_registration, c.role,
+                     c.registration_body, c.registration_number, c.level,
                      c.verification_status, c.verification_note, c.verified_at, c.is_admin, c.created_at"""
 
 
