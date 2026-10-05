@@ -5,126 +5,185 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>Your Counselor Admin</title>
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="/admin/logo.png">
   <link rel="stylesheet" href="/admin/admin.css">
   <script src="/admin/admin.js" defer></script>
 </head>
 <body>
-  <header class="top">
-    <div class="brand"><span class="your">Your</span> <span class="counselor">Counselor</span> <span class="tag">Admin</span></div>
-    <div class="who" id="who" hidden>
-      <span id="who-email"></span>
-      <button type="button" class="link" id="sign-out">Sign out</button>
-    </div>
-  </header>
-
-  <main>
-    <!-- Sign in -->
-    <section id="view-sign-in" class="card narrow" hidden>
+  <!-- Sign in -->
+  <section id="view-sign-in" class="auth" hidden>
+    <div class="auth-card">
+      <img class="auth-logo" src="/admin/logo.png" alt="" width="64" height="64">
+      <p class="wordmark"><span class="your">Your</span> <span class="counselor">Counselor</span></p>
       <h1>Admin sign-in</h1>
       <p class="muted" id="sign-in-help">Only existing admin accounts can sign in. We'll email you a 6-digit code.</p>
       <form id="form-email">
         <label for="email">Email</label>
         <input id="email" type="email" autocomplete="username" required>
-        <button type="submit" class="primary">Send code</button>
+        <button type="submit" class="btn primary block">Send code</button>
       </form>
       <form id="form-code" hidden>
         <label for="code">6-digit code</label>
-        <input id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" required>
-        <button type="submit" class="primary">Verify</button>
-        <button type="button" class="link" id="change-email">Use a different email</button>
+        <input id="code" class="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" required>
+        <button type="submit" class="btn primary block">Verify</button>
+        <button type="button" class="btn ghost block" id="change-email">Use a different email</button>
       </form>
       <form id="form-dev" hidden>
         <label for="dev-token">Dev token (DEV_MODE only)</label>
         <input id="dev-token" value="dev-L3" required>
-        <button type="submit" class="primary">Continue</button>
+        <button type="submit" class="btn primary block">Continue</button>
       </form>
       <p class="error" id="sign-in-error" role="alert"></p>
-    </section>
+      <p class="fine">Signed-in sessions end after 15 minutes without activity.</p>
+    </div>
+  </section>
 
-    <!-- Not an admin -->
-    <section id="view-denied" class="card narrow" hidden>
+  <!-- Not an admin -->
+  <section id="view-denied" class="auth" hidden>
+    <div class="auth-card">
+      <img class="auth-logo" src="/admin/logo.png" alt="" width="64" height="64">
       <h1>No admin access</h1>
       <p class="muted">This account isn't an admin. Ask the Your Counselor team to grant access.</p>
-      <button type="button" class="primary" id="denied-sign-out">Sign out</button>
-    </section>
+      <button type="button" class="btn primary block" id="denied-sign-out">Sign out</button>
+    </div>
+  </section>
 
-    <!-- Admin -->
-    <section id="view-admin" hidden>
-      <nav class="tabs" role="tablist">
-        <button type="button" role="tab" id="tab-clinicians" aria-selected="true">Registrations <span class="count" id="count-pending"></span></button>
-        <button type="button" role="tab" id="tab-incidents" aria-selected="false">Reports <span class="count" id="count-open"></span></button>
-      </nav>
-
-      <div id="panel-clinicians" role="tabpanel">
-        <div class="toolbar">
-          <label>Show
-            <select id="clinician-status">
-              <option value="pending">Waiting for approval</option>
-              <option value="verified">Verified</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </label>
-          <button type="button" class="link" id="refresh-clinicians">Refresh</button>
+  <!-- Admin -->
+  <div id="view-admin" class="shell" hidden>
+    <aside class="side">
+      <div class="brand">
+        <img src="/admin/logo.png" alt="" width="36" height="36">
+        <div>
+          <p class="wordmark"><span class="your">Your</span> <span class="counselor">Counselor</span></p>
+          <span class="tag">Admin</span>
         </div>
-        <p class="muted small">Check each registration number on the official register (RCI / NMC / State Medical Council) before approving.</p>
-        <div id="clinician-list" class="list"></div>
       </div>
+      <nav class="nav" aria-label="Admin sections">
+        <button type="button" id="tab-overview" data-view="overview">
+          <span class="ico" data-icon="dashboard"></span><span class="lbl">Overview</span>
+        </button>
+        <button type="button" id="tab-clinicians" data-view="clinicians">
+          <span class="ico" data-icon="badge"></span><span class="lbl">Registrations</span>
+          <span class="count" id="count-pending"></span>
+        </button>
+        <button type="button" id="tab-incidents" data-view="incidents">
+          <span class="ico" data-icon="flag"></span><span class="lbl">Reports</span>
+          <span class="count alert" id="count-open"></span>
+        </button>
+      </nav>
+      <div class="me" id="who" hidden>
+        <span class="avatar small" id="who-initial"></span>
+        <span class="who-email" id="who-email"></span>
+        <button type="button" class="btn ghost small" id="sign-out">Sign out</button>
+      </div>
+    </aside>
 
-      <div id="panel-consults" hidden>
-        <div class="toolbar">
-          <button type="button" class="link" id="consults-back">‹ Back to registrations</button>
-          <span class="muted small" id="consults-who"></span>
+    <main class="main">
+      <!-- Overview -->
+      <section id="panel-overview" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Overview</h1>
+            <p class="muted">What needs your attention today.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-overview"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div class="stats" id="stats"></div>
+        <div class="two-col">
+          <section class="panel">
+            <div class="panel-head"><h2>Waiting for approval</h2><button type="button" class="btn link" data-goto="clinicians:pending">See all ›</button></div>
+            <div id="overview-pending" class="list compact"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2>Open reports</h2><button type="button" class="btn link" data-goto="incidents:open">See all ›</button></div>
+            <div id="overview-reports" class="list compact"></div>
+          </section>
         </div>
-        <p class="notice">Admin view: opening consults is recorded in the audit log. Use it for safety review only.</p>
+      </section>
+
+      <!-- Registrations -->
+      <section id="panel-clinicians" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Registrations</h1>
+            <p class="muted">Check each registration number on the official register (RCI / NMC / State Medical Council) before approving.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-clinicians"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Show" id="clinician-filter">
+            <button type="button" data-value="pending" aria-pressed="true">Waiting</button>
+            <button type="button" data-value="verified" aria-pressed="false">Verified</button>
+            <button type="button" data-value="rejected" aria-pressed="false">Rejected</button>
+          </div>
+          <label class="search"><span class="ico" data-icon="search"></span>
+            <input id="clinician-search" type="search" placeholder="Search name, email or registration no." aria-label="Search registrations">
+          </label>
+        </div>
+        <div id="clinician-list" class="cards"></div>
+      </section>
+
+      <!-- A clinician's consults -->
+      <section id="panel-consults" hidden>
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <button type="button" class="btn link" id="consults-back">Registrations</button>
+          <span aria-hidden="true">›</span>
+          <span id="consults-who"></span>
+        </nav>
+        <p class="notice"><span class="ico" data-icon="shield"></span>Admin view: opening consults is recorded in the audit log. Use it for safety review only.</p>
         <div class="split">
           <div id="consult-list" class="list"></div>
-          <div id="consult-detail" class="card detail" hidden></div>
+          <article id="consult-detail" class="panel detail" hidden></article>
         </div>
-      </div>
+      </section>
 
-      <div id="panel-incidents" role="tabpanel" hidden>
+      <!-- Reports -->
+      <section id="panel-incidents" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Reports</h1>
+            <p class="muted">"Report a problem" from clinicians, and replies the safety check held back.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-incidents"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
         <div class="toolbar">
-          <label>Show
-            <select id="incident-status">
-              <option value="open">Open</option>
-              <option value="triaged">Triaged</option>
-              <option value="fixed">Fixed</option>
-              <option value="wont_fix">Won't fix</option>
-              <option value="">All</option>
-            </select>
-          </label>
-          <button type="button" class="link" id="refresh-incidents">Refresh</button>
+          <div class="seg" role="group" aria-label="Show" id="incident-filter">
+            <button type="button" data-value="open" aria-pressed="true">Open</button>
+            <button type="button" data-value="triaged" aria-pressed="false">Triaged</button>
+            <button type="button" data-value="fixed" aria-pressed="false">Fixed</button>
+            <button type="button" data-value="wont_fix" aria-pressed="false">Won't fix</button>
+            <button type="button" data-value="" aria-pressed="false">All</button>
+          </div>
         </div>
         <div class="split">
           <div id="incident-list" class="list"></div>
-          <div id="incident-detail" class="card detail" hidden></div>
+          <article id="incident-detail" class="panel detail" hidden></article>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
+  </div>
 
   <!-- Decision dialog -->
   <dialog id="decide">
     <form method="dialog" id="decide-form">
       <h2 id="decide-title"></h2>
-      <p class="muted small" id="decide-who"></p>
-      <div id="decide-level-row">
-        <label for="decide-level">Level</label>
-        <select id="decide-level">
-          <option value="L1">L1 · Counsellor / trainee</option>
-          <option value="L2">L2 · Psychologist</option>
-          <option value="L3">L3 · Senior / psychiatrist</option>
-        </select>
-      </div>
+      <div class="decide-who" id="decide-who"></div>
+      <fieldset id="decide-level-row">
+        <legend>Level</legend>
+        <label class="radio-card"><input type="radio" name="decide-level" value="L1"><span><b>L1</b> Counsellor / trainee</span></label>
+        <label class="radio-card"><input type="radio" name="decide-level" value="L2"><span><b>L2</b> Psychologist</span></label>
+        <label class="radio-card"><input type="radio" name="decide-level" value="L3"><span><b>L3</b> Senior / psychiatrist</span></label>
+      </fieldset>
       <label for="decide-note">How you checked (required)</label>
       <input id="decide-note" required minlength="3" maxlength="500" placeholder="e.g. RCI register, 2026-10-03">
       <p class="error" id="decide-error" role="alert"></p>
       <div class="row">
-        <button type="button" class="link" id="decide-cancel">Cancel</button>
-        <button type="submit" class="primary" id="decide-ok">Confirm</button>
+        <button type="button" class="btn ghost" id="decide-cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="decide-ok">Confirm</button>
       </div>
     </form>
   </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

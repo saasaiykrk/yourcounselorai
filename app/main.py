@@ -583,7 +583,11 @@ def admin_update_incident(incident_id: uuid.UUID, body: IncidentUpdateIn, a: dic
 # no CORS is needed. No third-party scripts; strict CSP; never cached.
 _ADMIN_DIR = pathlib.Path(__file__).parent / "admin_web"
 _ADMIN_FILES = {"": ("index.html", "text/html"), "admin.js": ("admin.js", "text/javascript"),
-                "admin.css": ("admin.css", "text/css")}
+                "admin.css": ("admin.css", "text/css"), "logo.png": ("logo.png", "image/png"),
+                # The app's brand fonts (SIL OFL, see fonts/OFL.txt), served from here: no third-party requests.
+                "nunito-extrabold.ttf": ("fonts/Nunito-ExtraBold.ttf", "font/ttf"),
+                "nunitosans-regular.ttf": ("fonts/NunitoSans-Regular.ttf", "font/ttf"),
+                "nunitosans-bold.ttf": ("fonts/NunitoSans-Bold.ttf", "font/ttf")}
 
 
 def _supabase_url() -> str:
@@ -595,6 +599,7 @@ def _admin_headers() -> dict:
     connect = " ".join(x for x in ("'self'", _supabase_url()) if x)
     return {
         "Content-Security-Policy": (f"default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                                    f"font-src 'self'; "
                                     f"connect-src {connect}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
@@ -615,7 +620,10 @@ def admin_page(name: str = ""):
     if name not in _ADMIN_FILES:
         raise HTTPException(404, "not found")
     file, media = _ADMIN_FILES[name]
-    return Response((_ADMIN_DIR / file).read_bytes(), media_type=media, headers=_admin_headers())
+    headers = _admin_headers()
+    if media.startswith(("font/", "image/")):
+        headers["Cache-Control"] = "public, max-age=86400"   # logo and fonts only; pages and data stay no-store
+    return Response((_ADMIN_DIR / file).read_bytes(), media_type=media, headers=headers)
 
 
 # --- dev-only helper --------------------------------------------------------
