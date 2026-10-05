@@ -110,6 +110,11 @@ inspector). They need these extra settings in GitHub → Settings → Secrets an
 
 The grading pack appears under *Artifacts* as **eval-grading-pack** for the clinician to grade.
 
+## Before merging this release: run migration 004
+
+`db/migrations/004_clinician_identity.sql` adds the clinician's name, gender and age (asked at registration).
+Run it in Supabase → SQL Editor **before** the backend that needs it is deployed, or new registrations fail.
+
 ## Guided consultation (off until you switch it on)
 
 The guided consultation (case → a few questions → the fixed Consultation Report) ships switched off in

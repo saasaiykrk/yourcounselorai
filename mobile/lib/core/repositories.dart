@@ -235,6 +235,7 @@ class PreviewProfileRepository implements ProfileRepository {
       level: current == 'verified' ? 'L2' : null,
       role: 'psychologist',
       registrationBody: 'RCI',
+      fullName: current == 'none' ? null : 'Preview Clinician',
       // The preview account is an admin so the Admin area can be reviewed.
       isAdmin: current == 'verified',
       guidedConsultation: current == 'verified',
@@ -326,6 +327,9 @@ class PreviewAdminRepository implements AdminRepository {
     AdminClinician(
       id: 'c1',
       email: 'psychologist.two@example.test',
+      fullName: 'Sample Psychologist Two',
+      gender: 'male',
+      age: 38,
       role: 'psychologist',
       verificationStatus: 'pending',
       registrationBody: 'RCI',
@@ -335,6 +339,9 @@ class PreviewAdminRepository implements AdminRepository {
     AdminClinician(
       id: 'c2',
       email: 'trainee.one@example.test',
+      fullName: 'Sample Trainee One',
+      gender: 'female',
+      age: 24,
       role: 'counsellor_trainee',
       verificationStatus: 'pending',
       registrationBody: 'none',
@@ -391,6 +398,9 @@ class PreviewAdminRepository implements AdminRepository {
       level: approve ? level : null,
       verificationNote: note,
       createdAt: c.createdAt,
+      fullName: c.fullName,
+      gender: c.gender,
+      age: c.age,
     );
   }
 

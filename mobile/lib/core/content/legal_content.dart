@@ -100,8 +100,8 @@ const kDpaDoc = InfoDoc(
   draft: true,
   sections: [
     InfoSection('What is processed', [
-      'Your account details: email address, role, registration body and number, and the date you accepted '
-          'these terms.',
+      'Your account details: name, gender, age, email address, role, registration body and number, and the date '
+          'you accepted these terms. These are about you, never a client, and are not sent to the AI.',
       'De-identified case text you send, the replies, safety-check results and usage figures.',
       'Problem reports you send, and the types of any identifiers that were caught.',
     ]),

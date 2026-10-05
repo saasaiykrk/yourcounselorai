@@ -101,7 +101,8 @@ class _Profile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(role, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              Text(me.fullName ?? role, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+              if (me.fullName != null) Text(role, style: AppText.smallMuted),
               if (me.registrationBody != null && me.registrationBody != 'none')
                 Text('${me.registrationBody} registration', style: AppText.caption),
             ],

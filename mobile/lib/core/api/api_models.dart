@@ -10,6 +10,7 @@ class Me {
     this.registrationBody,
     this.isAdmin = false,
     this.guidedConsultation = false,
+    this.fullName,
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -19,6 +20,7 @@ class Me {
     registrationBody: json['registration_body'] as String?,
     isAdmin: json['is_admin'] == true,
     guidedConsultation: (json['features'] as Map?)?['consultation'] == true,
+    fullName: json['full_name'] as String?,
   );
 
   /// none (no profile yet) · pending · verified · rejected
@@ -36,6 +38,9 @@ class Me {
   /// The server has guided consultations switched on (`CONSULTATION_ENABLED`).
   final bool guidedConsultation;
 
+  /// The clinician's own name, as given at registration.
+  final String? fullName;
+
   bool get needsProfile => verificationStatus == 'none';
   bool get isVerified => verificationStatus == 'verified' && level != null;
   bool get isRejected => verificationStatus == 'rejected';
@@ -44,18 +49,31 @@ class Me {
 /// `POST /v1/profile`.
 class ProfileSubmission {
   const ProfileSubmission({
+    required this.fullName,
+    required this.gender,
+    required this.age,
     required this.role,
     required this.registrationBody,
     required this.registrationNumber,
     required this.consentVersion,
   });
 
+  /// The clinician's own details (never a client's). Seen only by admins checking the
+  /// register; never sent to the AI.
+  final String fullName;
+
+  /// female · male · other · prefer_not_to_say
+  final String gender;
+  final int age;
   final String role;
   final String registrationBody;
   final String? registrationNumber;
   final String consentVersion;
 
   Map<String, dynamic> toJson() => {
+    'full_name': fullName,
+    'gender': gender,
+    'age': age,
     'role': role,
     'registration_body': registrationBody,
     'registration_number': registrationNumber,
@@ -157,11 +175,17 @@ class AdminClinician {
     this.level,
     this.verificationNote,
     this.createdAt,
+    this.fullName,
+    this.gender,
+    this.age,
   });
 
   factory AdminClinician.fromJson(Map<String, dynamic> j) => AdminClinician(
     id: '${j['id']}',
     email: j['email'] as String? ?? '',
+    fullName: j['full_name'] as String?,
+    gender: j['gender'] as String?,
+    age: (j['age_at_registration'] as num?)?.toInt(),
     role: j['role'] as String? ?? '',
     verificationStatus: j['verification_status'] as String? ?? 'pending',
     registrationBody: j['registration_body'] as String?,
@@ -180,6 +204,11 @@ class AdminClinician {
   final String? level;
   final String? verificationNote;
   final DateTime? createdAt;
+
+  /// Asked at registration; older accounts may not have them.
+  final String? fullName;
+  final String? gender;
+  final int? age;
 }
 
 /// A "Report a problem" item or an automatic held-back report. [inputDeid],
