@@ -17,8 +17,9 @@ import '../consult/reply_markdown.dart';
 
 /// The clinician's past consults. Fetched from the server each time and kept
 /// in memory only; nothing is written to the phone.
-String historyModeLabel(String code) =>
-    ConsultMode.values.where((m) => m.apiCode == code).map((m) => m.label).firstOrNull ?? code;
+String historyModeLabel(String code) => code == 'R'
+    ? 'Guided consultation'
+    : ConsultMode.values.where((m) => m.apiCode == code).map((m) => m.label).firstOrNull ?? code;
 
 String historyWhen(DateTime? d) {
   if (d == null) return '';
@@ -130,6 +131,7 @@ class HistoryScreenState extends ConsumerState<HistoryScreen> {
                   children: [
                     for (final (code, label) in [
                       (null, 'All'),
+                      ('R', 'Guided'),
                       for (final m in ConsultMode.values.where((m) => m != ConsultMode.auto)) (m.apiCode, m.label),
                     ])
                       Padding(

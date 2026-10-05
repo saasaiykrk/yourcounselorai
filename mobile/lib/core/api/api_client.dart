@@ -58,6 +58,54 @@ class ApiClient {
   /// Removes a consult from History. The server keeps it for audit until retention ends.
   Future<void> deleteConsult(String id) => _send('DELETE', '/v1/history/${Uri.encodeComponent(id)}');
 
+  // --- guided consultation (the server keeps the state; every text is cleaned on the phone first) ---
+
+  Future<Consultation> startConsultation({required String text, required Map<String, int> redactionCounts}) async =>
+      Consultation.fromJson(
+        await _send(
+          'POST',
+          '/v1/consultations',
+          body: {'text': text, 'deid_attested': true, 'client_redaction_counts': redactionCounts},
+        ),
+      );
+
+  Future<List<ConsultationSummary>> openConsultations() async {
+    final data = await _send('GET', '/v1/consultations');
+    return [
+      for (final c in (data['consultations'] as List? ?? const []))
+        ConsultationSummary.fromJson(c as Map<String, dynamic>),
+    ];
+  }
+
+  Future<Consultation> consultation(String id) async =>
+      Consultation.fromJson(await _send('GET', '/v1/consultations/${Uri.encodeComponent(id)}'));
+
+  /// [action]: answer · dont_know · skip · finish · safety_managed · safety_absent.
+  /// The same [messageId] is never processed twice by the server.
+  Future<Consultation> consultationReply(
+    String id, {
+    required String action,
+    String text = '',
+    required String messageId,
+  }) async => Consultation.fromJson(
+    await _send(
+      'POST',
+      '/v1/consultations/${Uri.encodeComponent(id)}/reply',
+      body: {'action': action, 'text': text, 'deid_attested': true, 'client_msg_id': messageId},
+    ),
+  );
+
+  Future<Consultation> consultationFacts(String id, Map<String, String?> facts) async => Consultation.fromJson(
+    await _send('PATCH', '/v1/consultations/${Uri.encodeComponent(id)}/facts', body: {'facts': facts}),
+  );
+
+  /// Writes the Consultation Report (or returns the one already written).
+  Future<(Consultation, ConsultReply)> consultationReport(String id, {bool force = false}) async {
+    final data = await _send('POST', '/v1/consultations/${Uri.encodeComponent(id)}/report', body: {'force': force});
+    final reply = ConsultReply.fromJson(data['reply'] as Map<String, dynamic>);
+    return (Consultation.fromJson(data['consultation'] as Map<String, dynamic>), reply);
+  }
+
   // --- admin (the backend re-checks admin rights on every call) ---
 
   Future<List<ConsultSummary>> adminClinicianConsults(String clinicianId) async {
@@ -153,6 +201,7 @@ ApiException mapStatus(int? status, Object? body) {
     401 => const Unauthorized(),
     403 => const NotVerified(),
     404 => const NotFound(),
+    409 => Conflict(detail is String ? detail : null),
     429 => const DailyLimitReached(),
     422 when detail is Map && detail['error'] == 'identifiers_detected' => IdentifiersDetected([
       for (final t in (detail['types'] as List? ?? const [])) '$t',

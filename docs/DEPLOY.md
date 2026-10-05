@@ -110,6 +110,27 @@ inspector). They need these extra settings in GitHub → Settings → Secrets an
 
 The grading pack appears under *Artifacts* as **eval-grading-pack** for the clinician to grade.
 
+## Before merging this release: run migration 004
+
+`db/migrations/004_clinician_identity.sql` adds the clinician's name, gender and age (asked at registration).
+Run it in Supabase → SQL Editor **before** the backend that needs it is deployed, or new registrations fail.
+
+## Guided consultation (off until you switch it on)
+
+The guided consultation (case → a few questions → the fixed Consultation Report) ships switched off in
+production. The app shows the Guided option only when the server has it on. To switch it on:
+
+1. Supabase → SQL Editor: run `db/migrations/003_consultations.sql` once.
+2. Cloud Shell:
+   ```bash
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-env-vars CONSULTATION_ENABLED=1
+   ```
+   Set it back to `0` to hide the option again; consultations already saved stay in the database.
+3. Before real clients: run `python -m evals.run_consultation_evals` (real model; a few dollars) and have the
+   psychologist grade the reports in `evals/out/consult-*` against
+   `skill/clinical-assist/references/example-consult-report-ocd.md`.
+
 ## Rolling back by hand
 
 ```bash

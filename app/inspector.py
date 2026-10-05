@@ -36,13 +36,14 @@ ALLOWED_CRISIS_NUMBERS = {"112", "14416", "18008914416", "1098", "181"}
 RETIRED_CRISIS_MARKERS = ["KIRAN", "1800-599-0019", "18005990019", "CHILDLINE"]
 
 META_RE = re.compile(r"^\s*<!--\s*yc\s+(?P<body>[^>]*?)\s*-->\s*\n?", re.I)
-VALID_MODES = {"A", "A2", "B", "C", "D", "E", "F", "G", "Q"}
+VALID_MODES = {"A", "A2", "B", "C", "D", "E", "F", "G", "Q", "R"}
 VALID_GATES = {"none", "gate1", "gate2"}
 VALID_CEILINGS = {"High", "Moderate", "Low", "NA"}
 
 HEADING_RE = re.compile(r"^#{2,4}\s+(?P<title>.+?)\s*$", re.M)
 SECTION_NUM_RE = re.compile(r"^(?:.*?·\s*)?(?P<n>\d{1,2})\.\s")
 
+NICE_ID_BEFORE_RE = re.compile(r"\b(?:NICE|guideline)\s*$", re.I)
 ICD_CODE_RE = re.compile(
     r"\b(?:[1-9A-HJ-NP-Z][A-HJ-NP-Z]\d[0-9A-HJ-NP-Z](?:\.[0-9A-HJ-NP-Z]{1,2})?"   # ICD-11 MMS
     r"|F\d{2}(?:\.[0-9x]{1,2})?)\b"                                               # ICD-10 / DSM F-codes
@@ -107,6 +108,34 @@ MINOR_RE = re.compile(
 )
 SCORE_INPUT_RE = re.compile(r"\b(?:PHQ-?9|GAD-?7|DASS-?21|HAM-?A|RSES|Rosenberg)\b\s*[:=]?\s*\d{1,2}\b", re.I)
 CARDIAC_RE = re.compile(r"palpitat|palpatat|chest|cardiac|heart|breathless|dizz|faint|syncop|asthma", re.I)
+
+# Guided consultation report (Mode R): the fixed headings of
+# skill/clinical-assist/assets/consult-report-template.md, in order. Every report has all of them.
+REPORT_R_HEADINGS = [
+    ("Case Snapshot", r"Case Snapshot"),
+    ("1. Psychological Case Pattern Analysis", r"1\. Psychological Case Pattern Analysis"),
+    ("2. Severity Classification", r"2\. Severity Classification"),
+    ("3. Recommended Psychometric Tools", r"3\. Recommended Psychometric Tools"),
+    ("4. Therapy Modalities to Consider", r"4\. Therapy Modalities to Consider"),
+    ("5. Best-Suited Therapy Recommendation", r"5\. Best-Suited Therapy Recommendation"),
+    ("6. Therapist's Role & Actions", r"6\. Therapist's Role & Actions"),
+    ("7. Client's Actions and Lifestyle Adjustments", r"7\. Client's Actions and Lifestyle Adjustments"),
+    ("8. Guardian/Parent Guidance", r"8\. Guardian/Parent Guidance"),
+    ("9. Session-Wise Treatment Plan (N Weeks)", r"9\. Session-Wise Treatment Plan(?: \(\d{1,2} Weeks\))?"),
+    ("10. Suggested Worksheets & Tools", r"10\. Suggested Worksheets & Tools"),
+    ("11. Progress Monitoring & Tracking Tools", r"11\. Progress Monitoring & Tracking Tools"),
+    ("12. Final Summary & Next Steps", r"12\. Final Summary & Next Steps"),
+    ("13. Weekly Therapy Summary", r"13\. Weekly Therapy Summary"),
+    ("14. Helpful Resource Links", r"14\. Helpful Resource Links"),
+    ("15. Disclaimer", r"15\. Disclaimer"),
+]
+# Section 14 may link only to the sites the template approves.
+REPORT_R_LINK_DOMAINS = ("iocdf.org", "spacetreatment.net", "nice.org.uk", "bfrb.org", "healthychildren.org",
+                         "who.int", "nimhans.ac.in", "telemanas.mohfw.gov.in")
+URL_RE = re.compile(r"https?://(?:www\.)?(?P<host>[A-Za-z0-9.-]+)", re.I)
+
+# Intake (questioning) output limits — short by design (references/intake-questioning.md).
+INTAKE_LIMITS = {"question": 300, "why": 150, "brief_answer": 900, "case_summary": 1200, "option": 60, "fact": 300}
 
 
 @dataclass
@@ -185,6 +214,19 @@ def _sections(body: str) -> dict[int, tuple[str, str]]:
     return out
 
 
+def _numbered_spans(body: str) -> dict[int, tuple[str, str]]:
+    """Like _sections, but each body runs to the next NUMBERED heading, so it includes
+    sub-headings (#### …) inside the section. Used for the Consultation Report (Mode R)."""
+    heads = [(h, SECTION_NUM_RE.match(h.group("title"))) for h in HEADING_RE.finditer(body)]
+    numbered = [(h, int(m.group("n"))) for h, m in heads if m and h.group(0).startswith("###") and
+                not h.group(0).startswith("####")]
+    out: dict[int, tuple[str, str]] = {}
+    for i, (h, n) in enumerate(numbered):
+        end = numbered[i + 1][0].start() if i + 1 < len(numbered) else len(body)
+        out.setdefault(n, (h.group("title"), body[h.end():end]))
+    return out
+
+
 def _has_heading(body: str, phrase: str) -> bool:
     return any(phrase.lower() in h.group("title").lower() for h in HEADING_RE.finditer(body))
 
@@ -205,12 +247,14 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
         return rep
     if level != ctx.level:
         rep.block("LEVEL", f"Clinician level is {ctx.level} (verified by the app); reply was written for {level}.")
+    if ctx.requested_mode == "R" and mode != "R":
+        rep.block("MODE", f"This is a guided consultation report: the contract line must say mode=R (found {mode}).")
     if ctx.requested_mode not in ("auto", None) and gate == "none" and mode not in (ctx.requested_mode, "Q") \
             and not (ctx.requested_mode == "A" and mode == "A2"):
         rep.warn("MODE", f"Clinician requested Mode {ctx.requested_mode}; reply used Mode {mode}.")
 
     flat = _norm(body)
-    sections = _sections(body)
+    sections = _numbered_spans(body) if mode == "R" else _sections(body)
 
     # --- QC close: disclaimer verbatim, last block ---------------------------
     if mode != "Q":
@@ -269,6 +313,8 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
             rep.block("STRUCTURE", "Documentation must start with the safety line 'Risk reviewed this session: …'.")
         if mode == "Q" and (len(flat) > 1500 or sections):
             rep.block("STRUCTURE", "A clarifying question (mode Q) must be short and contain no plan sections.")
+        if mode == "R":
+            _check_report_r(rep, body, sections)
 
     # --- Audit rating ↔ ceiling (QC 0d) --------------------------------------
     rating = re.search(r"(?:Overall rating|Rating)\s*:?\s*(Complete|Adequate with gaps|Incomplete|Critical omission)", flat, re.I)
@@ -282,14 +328,14 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
         rep.block("AUDIT", "No audit rating found (Complete / Adequate with gaps / Incomplete / Critical omission).")
 
     # --- PROVISIONAL headings when ceiling is Low (QC 0d) ---------------------
-    if ceiling == "Low" and gate != "gate1":
+    if ceiling == "Low" and gate != "gate1" and mode != "R":
         bad = [n for n, (title, _) in sections.items() if n >= 3 and "PROVISIONAL" not in title.upper()]
         if bad:
             rep.block("PROVISIONAL", "Ceiling is Low: every heading from Section 3 onward must carry "
                                      f"'PROVISIONAL — Low confidence' (missing on: {', '.join(map(str, sorted(bad)))}).")
 
     # --- Confidence labels (QC 15) --------------------------------------------
-    for n in ((3, 5) if mode == "A" else (3,) if mode in ("A2", "C") else ()):
+    for n in ((3, 5) if mode == "A" else (3,) if mode in ("A2", "C") else (1, 2) if mode == "R" else ()):
         if n in sections and "confidence" not in sections[n][1].lower():
             rep.block("CONFIDENCE", f"Section {n} needs a 'Confidence: High/Moderate/Low — reason' label.")
 
@@ -309,12 +355,17 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
 
     # --- L1 competence gating (QC 15c) ----------------------------------------
     if ctx.level == "L1" and gate != "gate1":
-        if 4 in sections:
+        if mode in ("A", "A2", "C") and 4 in sections:
             t, b = sections[4]
             if "areas for the supervisor" not in t.lower():
                 rep.block("L1", "L1 user: Section 4 must be titled 'Areas for the supervisor or a psychologist to assess'.")
             if ICD_CODE_RE.search(b) or re.search(r"DSM-5|ICD-1[01]", b):
                 rep.block("L1", "L1 user: no diagnostic labels or codes in Section 4.")
+        if mode == "R" and 1 in sections:
+            t, b = sections[1]
+            if ICD_CODE_RE.search(b) or re.search(r"DSM-5|ICD-1[01]", b):
+                rep.block("L1", "L1 user: no diagnostic labels or codes in Section 1; use 'Areas for the supervisor "
+                                "or a psychologist to assess'.")
         if "supervisor" not in flat.lower():
             rep.block("L1", "L1 user: next steps must include discussing with the supervisor.")
 
@@ -335,22 +386,15 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
             rep.block("UNSAFE_HOMEWORK", "Interoceptive exposure must be gated behind medical clearance.")
 
     # --- Crisis numbers match the register (QC 8c) ----------------------------
-    for marker in RETIRED_CRISIS_MARKERS:
-        if marker in body:
-            rep.block("CRISIS_NUMBERS", f"'{marker}' is retired/not in the crisis register — use Tele-MANAS / Child Helpline 1098.")
-    for m in re.finditer(r"(?<![\w.])\+?\d[\d\s-]{5,}\d(?!\w)(?!\.\d)", flat):
-        digits = re.sub(r"\D", "", m.group(0))
-        if len(digits) >= 7 and digits not in ALLOWED_CRISIS_NUMBERS:
-            rep.block("CRISIS_NUMBERS", f"Phone-like number '{m.group(0)}' is not in the crisis register.")
-    for m in re.finditer(r"(?:helpline|hotline|call|dial|tele-manas|line|number)[^\d\n]{0,15}(\d{3,5})\b", flat, re.I):
-        if m.group(1) not in ALLOWED_CRISIS_NUMBERS:
-            rep.block("CRISIS_NUMBERS", f"Number '{m.group(1)}' near '{m.group(0)[:20]}' is not in the crisis register.")
+    _check_crisis_numbers(rep, body, flat)
 
     # --- ICD / DSM codes verified or marked (QC 7b) ---------------------------
     for m in ICD_CODE_RE.finditer(flat):
         code = m.group(0)
         if code in ctx.verified_icd_codes or code in ctx.user_input:
             continue
+        if NICE_ID_BEFORE_RE.search(flat[max(0, m.start() - 20):m.start()]):
+            continue  # a NICE guideline number such as "NICE guideline CG31", not a diagnosis code
         window = flat[m.end():m.end() + 80].lower()
         if "to confirm" in window or "confirm at" in window:
             continue
@@ -369,16 +413,102 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
 
     # --- Identifiers echoed (QC 17) -------------------------------------------
     for r in find_identifiers(body):
+        if r.type == "URL" and mode == "R" and _approved_link(body[r.start:r.end]):
+            continue  # approved resource site (Section 14); other links are blocked as LINK
         if r.type in ("NAME", "ORG", "ADDRESS"):
             rep.warn("IDENTIFIER", f"Possible {r.type} in output at {r.start}.")
         else:
             rep.block("IDENTIFIER", f"Output contains a {r.type}-like identifier; do not repeat identifiers.")
 
-    # de-duplicate
+    _dedupe(rep)
+    return rep
+
+
+def _dedupe(rep: InspectionReport) -> None:
     seen, uniq = set(), []
     for f in rep.blocks:
         if (f.code, f.message) not in seen:
             seen.add((f.code, f.message))
             uniq.append(f)
     rep.blocks = uniq
+
+
+def _check_crisis_numbers(rep: InspectionReport, body: str, flat: str) -> None:
+    for marker in RETIRED_CRISIS_MARKERS:
+        if marker in body:
+            rep.block("CRISIS_NUMBERS", f"'{marker}' is retired/not in the crisis register — use Tele-MANAS / Child Helpline 1098.")
+    for m in re.finditer(r"(?<![\w.])\+?\d[\d\s-]{5,}\d(?!\w)(?!\.\d)", flat):
+        digits = re.sub(r"\D", "", m.group(0))
+        if len(digits) >= 7 and digits not in ALLOWED_CRISIS_NUMBERS:
+            rep.block("CRISIS_NUMBERS", f"Phone-like number '{m.group(0)}' is not in the crisis register.")
+    for m in re.finditer(r"(?:helpline|hotline|call|dial|tele-manas|line|number)[^\d\n]{0,15}(\d{3,5})\b", flat, re.I):
+        if m.group(1) not in ALLOWED_CRISIS_NUMBERS:
+            rep.block("CRISIS_NUMBERS", f"Number '{m.group(1)}' near '{m.group(0)[:20]}' is not in the crisis register.")
+
+
+def _approved_link(text: str) -> bool:
+    m = URL_RE.search(text)
+    host = (m.group("host") if m else text.removeprefix("www.").split("/")[0]).lower().rstrip(".")
+    return any(host == d or host.endswith("." + d) for d in REPORT_R_LINK_DOMAINS)
+
+
+def _check_report_r(rep: InspectionReport, body: str, sections: dict[int, tuple[str, str]]) -> None:
+    """Mode R: the fixed Consultation Report — every heading, in order, nothing renamed or added."""
+    titles = [(h.start(), _norm(h.group("title"))) for h in HEADING_RE.finditer(body)]
+    found: list[int] = []
+    for label, pattern in REPORT_R_HEADINGS:
+        pos = next((p for p, t in titles if re.fullmatch(pattern, t, re.I)), None)
+        if pos is None:
+            rep.block("STRUCTURE", f"Consultation report is missing the section '{label}' (exact title, in order).")
+        else:
+            found.append(pos)
+    if found != sorted(found):
+        rep.block("STRUCTURE", "Consultation report sections must be in the template order (Case Snapshot, then 1–15).")
+    extra = [n for n in sections if n > 15]
+    if extra:
+        rep.block("STRUCTURE", f"Consultation report has extra numbered section(s): {', '.join(map(str, extra))}.")
+    snap = re.search(r"^#{2,4}\s+Case Snapshot\s*$(?P<b>.*?)(?=^#{2,4}\s)", body, re.M | re.S)
+    if not snap or "risk screening" not in snap.group("b").lower():
+        rep.block("SAFETY", "The Case Snapshot must state the risk-screening status ('Risk screening: …').")
+    if 13 in sections and not re.search(r"^\|\s*(?:Week|Wk)\b", sections[13][1], re.M | re.I):
+        rep.block("STRUCTURE", "Section 13 must be the week-by-week summary table (first column Week).")
+    for m in URL_RE.finditer(body):
+        if not _approved_link(m.group(0)):
+            rep.block("LINK", f"Link to '{m.group('host')}' is not an approved resource site; give the title "
+                              "without a link.")
+
+
+# ---------------------------------------------------------------------------
+def inspect_intake(out: dict, user_input: str = "") -> InspectionReport:
+    """Checks one intake (questioning) response before the clinician sees any of it:
+    the question, why, options, brief answer, case summary and recorded facts."""
+    rep = InspectionReport()
+    texts = {k: str(out.get(k) or "") for k in ("question", "why", "brief_answer", "case_summary")}
+    options = [str(o) for o in (out.get("options") or [])]
+    facts = {str(k): str(v) for k, v in (out.get("facts") or {}).items()}
+
+    for k, text in texts.items():
+        if len(text) > INTAKE_LIMITS[k]:
+            rep.block("INTAKE_LENGTH", f"'{k}' is too long ({len(text)} > {INTAKE_LIMITS[k]} characters).")
+    if len(options) > 4 or any(len(o) > INTAKE_LIMITS["option"] for o in options):
+        rep.block("INTAKE_LENGTH", "At most 4 short quick-reply options.")
+    for k, v in facts.items():
+        if len(v) > INTAKE_LIMITS["fact"]:
+            rep.block("INTAKE_LENGTH", f"Fact '{k}' is too long.")
+
+    everything = "\n".join(list(texts.values()) + options + list(facts.values()))
+    flat = _norm(everything)
+    for r in find_identifiers(everything):
+        if r.type in ("NAME", "ORG", "ADDRESS"):
+            rep.warn("IDENTIFIER", f"Possible {r.type} in intake output.")
+        else:
+            rep.block("IDENTIFIER", f"Intake output contains a {r.type}-like identifier; never ask for or repeat identifiers.")
+    for m in ICD_CODE_RE.finditer(flat):
+        if m.group(0) not in user_input:
+            rep.block("ICD_CODE", f"No diagnostic codes during intake ('{m.group(0)}').")
+    for m in MED_REC_RE.finditer(_norm(texts["question"] + "\n" + texts["brief_answer"])):
+        rep.block("MEDICATION", f"No medication advice during intake: '{m.group(0)[:90]}'.")
+        break
+    _check_crisis_numbers(rep, everything, flat)
+    _dedupe(rep)
     return rep

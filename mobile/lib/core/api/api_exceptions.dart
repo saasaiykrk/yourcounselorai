@@ -33,6 +33,14 @@ final class DailyLimitReached extends ApiException {
   const DailyLimitReached();
 }
 
+/// 409: the request does not fit where things are, e.g. the previous step of a
+/// guided consultation is still being processed, or more information is needed.
+final class Conflict extends ApiException {
+  const Conflict([this.detail]);
+
+  final String? detail;
+}
+
 /// No connection, or the server took longer than the timeout.
 final class NetworkProblem extends ApiException {
   const NetworkProblem({this.timedOut = false});

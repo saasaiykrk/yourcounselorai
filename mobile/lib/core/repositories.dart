@@ -7,6 +7,182 @@ import 'api/api_exceptions.dart';
 import 'api/api_models.dart';
 import 'demo/preview_data.dart';
 
+/// Guided consultation: case → questions → report. The server keeps the state.
+abstract interface class ConsultationRepository {
+  Future<Consultation> start({required String text, required Map<String, int> redactionCounts});
+
+  Future<List<ConsultationSummary>> open();
+
+  Future<Consultation> get(String id);
+
+  Future<Consultation> reply(String id, {required String action, String text, required String messageId});
+
+  Future<Consultation> editFacts(String id, Map<String, String?> facts);
+
+  Future<(Consultation, ConsultReply)> report(String id, {bool force});
+}
+
+class ApiConsultationRepository implements ConsultationRepository {
+  ApiConsultationRepository(this._api);
+
+  final ApiClient _api;
+
+  @override
+  Future<Consultation> start({required String text, required Map<String, int> redactionCounts}) =>
+      _api.startConsultation(text: text, redactionCounts: redactionCounts);
+
+  @override
+  Future<List<ConsultationSummary>> open() => _api.openConsultations();
+
+  @override
+  Future<Consultation> get(String id) => _api.consultation(id);
+
+  @override
+  Future<Consultation> reply(String id, {required String action, String text = '', required String messageId}) =>
+      _api.consultationReply(id, action: action, text: text, messageId: messageId);
+
+  @override
+  Future<Consultation> editFacts(String id, Map<String, String?> facts) => _api.consultationFacts(id, facts);
+
+  @override
+  Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) =>
+      _api.consultationReport(id, force: force);
+}
+
+/// Preview: asks the four mandatory questions, then offers a sample report. In memory only.
+class PreviewConsultationRepository implements ConsultationRepository {
+  PreviewConsultationRepository({this.delay = const Duration(milliseconds: 700)});
+
+  final Duration delay;
+  static const _questions = [
+    ConsultationQuestion(
+      field: 'age_gender',
+      question: "What is the client's age and gender?",
+      why: 'Tools and guidance depend on age.',
+    ),
+    ConsultationQuestion(
+      field: 'risk_screening',
+      question: 'Has risk been screened (self-harm, wish to die, harm to others, abuse)? What was found?',
+      why: 'Safety must be known before any plan.',
+      options: ['Asked and absent', 'Risk present', 'Not yet asked'],
+    ),
+    ConsultationQuestion(
+      field: 'duration_onset',
+      question: 'How long has this been going on, and did it start suddenly or gradually?',
+      why: 'Duration and onset shape severity and rule-outs.',
+    ),
+  ];
+  Consultation? _c;
+
+  Consultation _next(Map<String, String> facts, List<String> unknown, List<ConsultationExchange> transcript) {
+    final asked = transcript.where((t) => t.question.isNotEmpty).length;
+    final q = asked < _questions.length ? _questions[asked] : null;
+    return Consultation(
+      id: 'preview-consultation',
+      stage: q == null ? ConsultationStage.ready : ConsultationStage.questioning,
+      question: q == null
+          ? null
+          : ConsultationQuestion(
+              field: q.field,
+              question: q.question,
+              why: q.why,
+              options: q.options,
+              number: asked + 1,
+            ),
+      caseSummary: 'Sample case: ${facts['presenting_concern'] ?? ''}',
+      facts: facts,
+      unknown: unknown,
+      questionsAsked: asked + (q == null ? 0 : 1),
+      transcript: transcript,
+    );
+  }
+
+  @override
+  Future<Consultation> start({required String text, required Map<String, int> redactionCounts}) async {
+    await Future<void>.delayed(delay);
+    return _c = _next({'presenting_concern': text.length > 120 ? '${text.substring(0, 120)}…' : text}, [], []);
+  }
+
+  @override
+  Future<List<ConsultationSummary>> open() async => [
+    if (_c != null && _c!.stage != ConsultationStage.completed)
+      ConsultationSummary(id: _c!.id, stage: _c!.stage, caseSummary: _c!.caseSummary, updatedAt: DateTime.now()),
+  ];
+
+  @override
+  Future<Consultation> get(String id) async => _c ?? (throw const NotFound());
+
+  @override
+  Future<Consultation> reply(String id, {required String action, String text = '', required String messageId}) async {
+    await Future<void>.delayed(delay);
+    final c = _c ?? (throw const NotFound());
+    if (action == 'finish') {
+      return _c = Consultation(
+        id: c.id,
+        stage: ConsultationStage.ready,
+        caseSummary: c.caseSummary,
+        facts: c.facts,
+        unknown: c.unknown,
+        questionsAsked: c.questionsAsked,
+        transcript: c.transcript,
+      );
+    }
+    final q = c.question;
+    final facts = {...c.facts};
+    final unknown = [...c.unknown];
+    final answer = switch (action) {
+      'dont_know' => "(don't know)",
+      'skip' => '(skipped)',
+      _ => text,
+    };
+    if (q != null && action == 'answer') facts[q.field] = text;
+    if (q != null && action != 'answer') unknown.add(q.field);
+    return _c = _next(facts, unknown, [
+      ...c.transcript,
+      ConsultationExchange(question: q?.question ?? '', answer: answer),
+    ]);
+  }
+
+  @override
+  Future<Consultation> editFacts(String id, Map<String, String?> facts) async {
+    final c = _c ?? (throw const NotFound());
+    final next = {...c.facts};
+    facts.forEach((k, v) => v == null || v.trim().isEmpty ? next.remove(k) : next[k] = v.trim());
+    return _c = Consultation(
+      id: c.id,
+      stage: c.stage,
+      question: c.question,
+      caseSummary: c.caseSummary,
+      facts: next,
+      unknown: c.unknown,
+      questionsAsked: c.questionsAsked,
+      transcript: c.transcript,
+    );
+  }
+
+  @override
+  Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) async {
+    await Future<void>.delayed(delay * 3);
+    final c = _c ?? (throw const NotFound());
+    final reply = ConsultReply(
+      turnId: 'preview-report',
+      conversationId: c.id,
+      delivered: true,
+      text: kPreviewConsultReportMarkdown,
+      skillVersion: '2.2.0',
+      meta: const ReplyMeta(mode: 'R', gate: 'none', ceiling: 'Moderate', level: 'L2'),
+    );
+    _c = Consultation(
+      id: c.id,
+      stage: ConsultationStage.completed,
+      facts: c.facts,
+      transcript: c.transcript,
+      reply: reply,
+    );
+    return (_c!, reply);
+  }
+}
+
 abstract interface class ProfileRepository {
   Future<Me> me();
 
@@ -59,8 +235,10 @@ class PreviewProfileRepository implements ProfileRepository {
       level: current == 'verified' ? 'L2' : null,
       role: 'psychologist',
       registrationBody: 'RCI',
+      fullName: current == 'none' ? null : 'Preview Clinician',
       // The preview account is an admin so the Admin area can be reviewed.
       isAdmin: current == 'verified',
+      guidedConsultation: current == 'verified',
     );
   }
 
@@ -149,6 +327,9 @@ class PreviewAdminRepository implements AdminRepository {
     AdminClinician(
       id: 'c1',
       email: 'psychologist.two@example.test',
+      fullName: 'Sample Psychologist Two',
+      gender: 'male',
+      age: 38,
       role: 'psychologist',
       verificationStatus: 'pending',
       registrationBody: 'RCI',
@@ -158,6 +339,9 @@ class PreviewAdminRepository implements AdminRepository {
     AdminClinician(
       id: 'c2',
       email: 'trainee.one@example.test',
+      fullName: 'Sample Trainee One',
+      gender: 'female',
+      age: 24,
       role: 'counsellor_trainee',
       verificationStatus: 'pending',
       registrationBody: 'none',
@@ -214,6 +398,9 @@ class PreviewAdminRepository implements AdminRepository {
       level: approve ? level : null,
       verificationNote: note,
       createdAt: c.createdAt,
+      fullName: c.fullName,
+      gender: c.gender,
+      age: c.age,
     );
   }
 

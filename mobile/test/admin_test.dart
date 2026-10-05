@@ -76,6 +76,11 @@ Future<void> _pump(WidgetTester tester, String location, {required bool admin, A
   await tester.pumpAndSettle();
 }
 
+Future<void> _openTab(WidgetTester tester, String name) async {
+  await tester.tap(find.descendant(of: find.byType(TabBar), matching: find.text(name)));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('API', () {
     test('lists pending registrations with the status as a query parameter', () async {
@@ -142,11 +147,39 @@ void main() {
       expect(find.textContaining('Admin:'), findsOneWidget);
     });
 
+    testWidgets('overview counts what needs attention and opens the right list', (tester) async {
+      await _pump(tester, '/admin', admin: true);
+      expect(find.text('Waiting for approval'), findsWidgets);
+      expect(find.text('Open reports'), findsWidgets);
+      expect(find.text('Verified clinicians'), findsOneWidget);
+      // Two sample registrations wait; one sample report was held back automatically.
+      expect(find.text('2'), findsWidgets);
+      await tester.tap(find.text('Verified clinicians'));
+      await tester.pumpAndSettle();
+      expect(find.text('Search name, email or registration no.'), findsOneWidget);
+      expect(find.text('None yet.'), findsOneWidget, reason: 'opened on Verified');
+    });
+
+    testWidgets('registrations can be searched', (tester) async {
+      await _pump(tester, '/admin', admin: true);
+      await _openTab(tester, 'Registrations');
+      await tester.enterText(find.byType(TextField), 'A12345');
+      await tester.pump();
+      expect(find.text('Sample Psychologist Two'), findsOneWidget);
+      expect(find.text('Sample Trainee One'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'nobody');
+      await tester.pump();
+      expect(find.textContaining('No registrations match'), findsOneWidget);
+    });
+
     testWidgets('approve a registration with a level and a note', (tester) async {
       final repo = PreviewAdminRepository();
       await _pump(tester, '/admin', admin: true, repo: repo);
+      await _openTab(tester, 'Registrations');
+      expect(find.text('Sample Psychologist Two'), findsOneWidget);
       expect(find.text('psychologist.two@example.test'), findsOneWidget);
-      expect(find.text('trainee.one@example.test'), findsOneWidget);
+      expect(find.text('Male · 38 yrs'), findsOneWidget);
+      expect(find.text('Sample Trainee One'), findsOneWidget);
 
       await tester.tap(find.widgetWithText(FilledButton, 'Approve').first);
       await tester.pumpAndSettle();
@@ -159,7 +192,7 @@ void main() {
       await tester.tap(find.text('Approve as L2'));
       await tester.pumpAndSettle();
 
-      expect(find.text('psychologist.two@example.test'), findsNothing, reason: 'no longer waiting');
+      expect(find.text('Sample Psychologist Two'), findsNothing, reason: 'no longer waiting');
       expect((await repo.clinicians('verified')).single.level, 'L2');
       expect(tester.takeException(), isNull);
     });
@@ -167,6 +200,9 @@ void main() {
     testWidgets('reject needs no level', (tester) async {
       final repo = PreviewAdminRepository();
       await _pump(tester, '/admin', admin: true, repo: repo);
+      await _openTab(tester, 'Registrations');
+      await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Reject').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Reject').last);
       await tester.pumpAndSettle();
       expect(find.text('Level'), findsNothing);
@@ -179,35 +215,31 @@ void main() {
     testWidgets('triage a report: open it, set a status and a note, save', (tester) async {
       final repo = PreviewAdminRepository();
       await _pump(tester, '/admin', admin: true, repo: repo);
-      await tester.tap(find.text('Reports'));
-      await tester.pumpAndSettle();
+      await _openTab(tester, 'Reports');
       await tester.tap(find.text('Held back by safety check'));
       await tester.pumpAndSettle();
 
       expect(find.text('Case as sent (de-identified)'), findsOneWidget);
       expect(find.textContaining('34F, low mood'), findsOneWidget);
+      // Safety-check results are shown readably, not as raw JSON.
+      expect(find.text('MISSING_DISCLAIMER'), findsOneWidget);
+      expect(find.text('Show raw report'), findsOneWidget);
 
-      await tester.scrollUntilVisible(
-        find.byType(DropdownButtonFormField<String>),
-        200,
-        scrollable: find.byType(Scrollable).last,
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.scrollUntilVisible(find.text('Your review'), 200, scrollable: find.byType(Scrollable).last);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Triaged').last);
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Disclaimer missing on retry');
       await tester.scrollUntilVisible(
-        find.widgetWithText(FilledButton, 'Save'),
+        find.widgetWithText(FilledButton, 'Save review'),
         200,
         scrollable: find.byType(Scrollable).last,
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Save review'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Saved.'), findsOneWidget);
+      expect(find.text('Saved as Triaged.'), findsOneWidget);
       final saved = await repo.incident('i1');
       expect(saved.status, 'triaged');
       expect(saved.reviewerNote, 'Disclaimer missing on retry');
@@ -229,8 +261,9 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        await tester.tap(find.text('Reports'));
-        await tester.pumpAndSettle();
+        await _openTab(tester, 'Registrations');
+        expect(tester.takeException(), isNull);
+        await _openTab(tester, 'Reports');
         expect(tester.takeException(), isNull);
       });
     }

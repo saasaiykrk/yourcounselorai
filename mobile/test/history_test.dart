@@ -235,6 +235,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(TabBar), matching: find.text('Registrations')));
+      await tester.pumpAndSettle();
       expect(find.text('Consults'), findsNothing, reason: 'not for pending registrations');
       await tester.tap(find.text('Verified'));
       await tester.pumpAndSettle();

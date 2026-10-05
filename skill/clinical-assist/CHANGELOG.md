@@ -1,5 +1,24 @@
 # clinical-assist — change log
 
+## v2.2.0 — 2026-10-05
+**Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
+**Status:** draft — needs clinician review (`clinician-reviewed` label), the intake and report evals, and the grading pack before it is switched on.
+
+**Added (guided consultation, a new app flow; existing Modes A–G unchanged)**
+- `references/intake-questioning.md` — what to ask before a consultation report, in what order, the four
+  mandatory fields with the app's fallback questions, how to handle answers, when to stop (max 8 questions),
+  and the risk stop.
+- `assets/consult-report-template.md` — the fixed Consultation Report (Mode R): Case Snapshot + Sections 1–15,
+  same headings and order for every case; source labels (provided / analysis / recommendations); L1 rules;
+  approved resource sites; v2.1 disclaimer as the last block.
+- `references/example-consult-report-ocd.md` — the team's gold-standard report (childhood OCD traits & digital
+  dependence) in template form. Changes from the supplied file: heading levels, a source-label line, a
+  Confidence line in Sections 1 and 2, and Section 15 uses the v2.1 mandatory disclaimer.
+
+**Not changed:** Modes A–G behaviour, the crisis register and the QC checklist. The consultation files are
+loaded only for guided consultations; the Modes A–G prompt changes only by SKILL.md's version line and the
+three new rows in its file map.
+
 ## v2.1.1 — 2026-09-24
 **Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
 
