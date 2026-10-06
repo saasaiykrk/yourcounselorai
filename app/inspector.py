@@ -90,6 +90,22 @@ RISK_INPUT_RE = re.compile(
     r"baby (?:was |has been )?swapped|baby is not (?:hers|mine|his)|harm (?:the|her|my) baby",
     re.I,
 )
+# A risk phrase is cleared only when an explicit clinical negation sits directly before it
+# ("denies suicidal ideation", "no history of overdose", "not suicidal"). Only a few modifier
+# words may come between; anything else ("no one knows she wants to die") keeps it as risk.
+NEGATED_RISK_BEFORE_RE = re.compile(
+    r"\b(?:denies|denied|denying|no|nil|not|negative for|absence of)\s+"
+    r"(?:(?:any|current|currently|active|recent|past|history of|h/o|thoughts? of|ideas? of)\s+)*$",
+    re.I,
+)
+
+
+def risk_indicated(text: str) -> bool:
+    """True if any risk phrase in the text is not directly negated."""
+    return any(not NEGATED_RISK_BEFORE_RE.search(text[max(0, m.start() - 60):m.start()])
+               for m in RISK_INPUT_RE.finditer(text))
+
+
 SAFETY_MANAGED_RE = re.compile(
     r"safety (?:plan )?(?:is )?(?:in place|managed|confirmed|addressed)|risk (?:is )?(?:managed|addressed)|"
     r"(?:made|wrote|written|completed|did|have|has) (?:a )?(?:written )?safety plan|"
@@ -267,7 +283,7 @@ def inspect(text: str, ctx: InspectionContext) -> InspectionReport:
                 rep.block("DISCLAIMER", "The disclaimer must be the last block (at most one short offer line after it).")
 
     # --- Gate 1 (QC 2) -------------------------------------------------------
-    risk_in_input = bool(RISK_INPUT_RE.search(ctx.user_input))
+    risk_in_input = risk_indicated(ctx.user_input)
     if risk_in_input and gate != "gate1" and not SAFETY_MANAGED_RE.search(ctx.user_input):
         rep.block("GATE1", "The clinician's message contains possible imminent-risk indicators. Apply Gate 1 "
                            "(risk summary, immediate actions, emergency pathway, safeguarding, disclaimer only) "
