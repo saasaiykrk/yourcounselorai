@@ -33,10 +33,13 @@ class DevAdminStore:
                 "attempts": 2, "input_deid": "34F, low mood for 3 months, poor sleep. Full plan please.",
                 "output_shown": "This reply was held back by the safety check.",
                 "inspector_reports": [{"passed": False, "blocks": ["MISSING_DISCLAIMER"]}]}
+        held = [{"attempt": n, "text": "<!--yc mode=A gate=none ceiling=Low level=L2-->\n"
+                                         f"### 1. Case History & MSE Audit\n(sample held-back reply, attempt {n})"}
+                for n in (1, 2)]
         self._incidents = [
             {"id": "33333333-3333-4333-8333-333333333333", "turn_id": "44444444-4444-4444-8444-444444444444",
              "source": "inspector", "category": "blocked", "note": '["MISSING_DISCLAIMER"]', "status": "open",
-             "reviewer_note": None, "created_at": _ago(2), **turn},
+             "reviewer_note": None, "created_at": _ago(2), **turn, "held_back": held},
             {"id": "55555555-5555-4555-8555-555555555555", "turn_id": "66666666-6666-4666-8666-666666666666",
              "source": "clinician", "category": "wrong_clinical", "note": "Differential missed adjustment disorder.",
              "status": "open", "reviewer_note": None, "created_at": _ago(30),
@@ -59,10 +62,16 @@ class DevAdminStore:
 
     def incidents(self, status: str | None) -> list[dict]:
         rows = [i for i in self._incidents if status is None or i["status"] == status]
-        return [{k: v for k, v in i.items() if k not in self._LIST_HIDDEN} for i in copy.deepcopy(rows)]
+        hidden = self._LIST_HIDDEN + ("held_back",)
+        return [{k: v for k, v in i.items() if k not in hidden} for i in copy.deepcopy(rows)]
 
     def incident(self, iid: uuid.UUID) -> dict | None:
-        return next((copy.deepcopy(i) for i in self._incidents if i["id"] == str(iid)), None)
+        row = next((copy.deepcopy(i) for i in self._incidents if i["id"] == str(iid)), None)
+        return row and {k: v for k, v in row.items() if k != "held_back"}
+
+    def held_back(self, iid: uuid.UUID) -> list[dict] | None:
+        row = next((i for i in self._incidents if i["id"] == str(iid)), None)
+        return None if row is None else copy.deepcopy(row.get("held_back", []))
 
     def update_incident(self, iid: uuid.UUID, body) -> bool:
         for i in self._incidents:

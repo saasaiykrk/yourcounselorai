@@ -9,7 +9,7 @@ import pathlib
 import unittest
 
 from app.deid import clean
-from app.inspector import MINOR_RE, RISK_INPUT_RE, SAFETY_MANAGED_RE
+from app.inspector import MINOR_RE, SAFETY_MANAGED_RE, risk_indicated
 
 V = json.loads((pathlib.Path(__file__).parent.parent / "evals" / "vignettes.json").read_text())["evals"]
 
@@ -29,7 +29,7 @@ class TestVignettes(unittest.TestCase):
     def test_risk_backstop_matches_gate1_cases_only(self):
         for v in V:
             with self.subTest(v["id"]):
-                forced = bool(RISK_INPUT_RE.search(v["prompt"])) and not SAFETY_MANAGED_RE.search(v["prompt"])
+                forced = risk_indicated(v["prompt"]) and not SAFETY_MANAGED_RE.search(v["prompt"])
                 self.assertEqual(forced, v["expect_gate1"])
 
     def test_minor_detection(self):
