@@ -43,6 +43,21 @@
       "expect": {"safety_stop": true}
     },
     {
+      "id": "vague-then-clear-answer",
+      "case": "Teenage boy who has stopped going to school; parents worried.",
+      "answers": {"age_gender": "a teenager", "age_gender+clarify": "15, male",
+                  "duration_onset": "About 4 months, after he changed schools; gradual", "risk_screening": "Asked and absent"},
+      "expect": {"max_questions": 8, "must_clarify": ["age_gender"], "never_clarify": ["duration_onset", "risk_screening"],
+                 "must_reach_ready": true}
+    },
+    {
+      "id": "contradiction-in-answers",
+      "case": "Girl in Class 3 with tantrums at bedtime for about a year, gradually worse.",
+      "answers": {"age_gender": "16, female", "age_gender+clarify": "Sorry, 8 years old, female",
+                  "risk_screening": "Asked and absent"},
+      "expect": {"max_questions": 8, "must_clarify": ["age_gender"], "must_reach_ready": true}
+    },
+    {
       "id": "bereavement-sleep-risk-not-asked",
       "case": "Man about 30 with sleeplessness and an unsettled mind for about two months since his father died.",
       "answers": {"age_gender": "30, male", "risk_screening": "Not yet asked"},

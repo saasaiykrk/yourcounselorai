@@ -19,9 +19,11 @@ ALL_MANDATORY = [{"field": "presenting_concern", "value": "rituals, hair picking
                  {"field": "duration_onset", "value": "about 10 months, gradual"}]
 
 
-def out(status="ask", facts=(), question="", field="", why="", options=(), unknown=(), summary="", brief=""):
+def out(status="ask", facts=(), question="", field="", why="", options=(), unknown=(), summary="", brief="",
+        case_type="", needed=()):
     return {"status": status, "facts_patch": list(facts), "unknown_fields": list(unknown), "case_summary": summary,
-            "question": question, "why": why, "field": field, "options": list(options), "brief_answer": brief}
+            "question": question, "why": why, "field": field, "options": list(options), "brief_answer": brief,
+            "case_type": case_type, "info_needed": list(needed)}
 
 
 class FakeIntake:
@@ -97,7 +99,8 @@ class TestQuestioning(Base):
         self.assertIn('"presenting_concern":"rituals"', second)     # …plus the compact facts
         self.assertIn("How old is he?", second)                     # and the question it answers
         state = json.loads(second.split("\n")[1])
-        self.assertEqual(set(state), {"case_summary", "facts", "unknown", "questions_asked", "max_questions"})
+        self.assertEqual(set(state), {"case_type", "case_summary", "facts", "unknown", "info_needed", "clarified",
+                                      "questions_asked", "max_questions"})
 
     def test_intake_never_receives_the_skill_or_report_template(self):
         e = self.engine([out("ready", ALL_MANDATORY)])
@@ -199,6 +202,102 @@ class TestQuestioning(Base):
         self.assertEqual(len(self.intake.payloads), calls)
         with self.assertRaises(DeidRejected):
             e.edit_facts(s, {"family": "father on 9876543210"})
+
+
+class TestStructuredAssessment(Base):
+    """Identify the case, plan what the report still needs, clarify unclear answers once."""
+
+    def test_case_is_identified_with_a_plan_of_what_is_needed(self):
+        e = self.engine([out("ask", ALL_MANDATORY[:1], question="How old is he?", field="age_gender",
+                             case_type="Childhood OCD-like rituals", needed=["age_gender", "duration_onset",
+                                                                              "family_response"])])
+        s = e.start("child with rituals and screen overuse")
+        self.assertEqual(s["case_type"], "Childhood OCD-like rituals")
+        self.assertEqual(s["info_needed"], ["age_gender", "duration_onset", "family_response"])
+        v = public_view(s, "c1")
+        self.assertEqual(v["case_type"], "Childhood OCD-like rituals")
+        self.assertEqual(v["info_needed"], ["age_gender", "duration_onset", "family_response"])
+
+    def test_plan_never_lists_what_is_already_known(self):
+        e = self.engine([out("ask", ALL_MANDATORY[:2], question="Q?", field="triggers",
+                             needed=["age_gender", "triggers", "Triggers", "unknown_thing"],
+                             unknown=["unknown_thing"])])
+        s = e.start("case")
+        self.assertEqual(s["info_needed"], ["triggers"])          # known, unknown and duplicates dropped
+
+    def test_unclear_answer_gets_one_clarifying_question_on_the_same_field(self):
+        e = self.engine([
+            out("ask", ALL_MANDATORY[:1], question="How old is the client?", field="age_gender"),
+            out("clarify", [{"field": "age_gender", "value": "young (age not given)"}],
+                question="Roughly how old is he: under 12, or a teenager?", field="age_gender",
+                why="Tools and guidance depend on age."),
+        ])
+        s = e.start("child with rituals")
+        e.reply(s, "answer", "he is young")
+        self.assertEqual(s["stage"], QUESTIONING)
+        self.assertEqual(s["pending"]["field"], "age_gender")
+        self.assertTrue(s["pending"]["clarify"])
+        self.assertEqual(s["questions_asked"], 2)
+        self.assertTrue(public_view(s, "c1")["question"]["clarify"])
+
+    def test_contradiction_with_an_earlier_fact_is_clarified(self):
+        e = self.engine([
+            out("ask", ALL_MANDATORY, question="What happens after a ritual?", field="maintaining_factors"),
+            out("clarify", [], question="Earlier you said 9 years old; is he in college, or was that a sibling?",
+                field="age_gender"),
+        ])
+        s = e.start("9 year old boy with rituals")
+        e.reply(s, "answer", "it started when he joined college")
+        self.assertEqual(s["pending"]["field"], "age_gender")
+        self.assertTrue(s["pending"]["clarify"])
+
+    def test_a_field_is_clarified_only_once(self):
+        e = self.engine([
+            out("ask", ALL_MANDATORY[:1], question="How old is the client?", field="age_gender"),
+            out("clarify", [{"field": "age_gender", "value": "young"}], question="Under 12, or a teenager?",
+                field="age_gender"),
+            out("clarify", [{"field": "age_gender", "value": "not sure, maybe 10 to 14"}],
+                question="Can you give an exact age?", field="age_gender"),
+        ])
+        s = e.start("child with rituals")
+        e.reply(s, "answer", "young")
+        e.reply(s, "answer", "not sure, maybe 10 to 14")
+        self.assertEqual(s["facts"]["age_gender"], "not sure, maybe 10 to 14")
+        self.assertNotEqual(s["pending"]["field"], "age_gender")  # moves on: next mandatory question
+        self.assertEqual(s["pending"]["field"], "risk_screening")
+
+    def test_clarify_without_a_question_just_moves_on(self):
+        e = self.engine([out("clarify", ALL_MANDATORY, question="", field="age_gender")])
+        s = e.start("case")
+        self.assertEqual(s["stage"], INFORMATION_SUFFICIENT)
+
+    def test_consultation_saved_before_this_change_still_works(self):
+        e = self.engine([out("ask", ALL_MANDATORY[:1], question="How old?", field="age_gender"),
+                         out("clarify", [], question="Under 12, or a teenager?", field="age_gender")])
+        s = e.start("child with rituals")
+        for key in ("case_type", "info_needed", "clarified"):
+            s.pop(key)                                            # a state stored by the previous version
+        e.reply(s, "answer", "young")
+        self.assertTrue(s["pending"]["clarify"])
+        self.assertIn("case_text", s)
+        e.case_text(s)
+        public_view(s, "c1")
+
+    def test_report_is_written_from_the_whole_consultation(self):
+        e = self.engine([
+            out("ask", ALL_MANDATORY, question="What happens when the parents refuse to repeat words?",
+                field="family_response", why="Accommodation keeps rituals going.", case_type="Childhood OCD-like rituals"),
+            out("ready", [{"field": "family_response", "value": "tantrum, parents give in"}]),
+        ], [REPORT_R])
+        s = e.start("9-year-old boy with rituals")
+        e.reply(s, "answer", "He has a tantrum for 20 minutes and they give in.")
+        case = e.case_text(s)
+        self.assertIn("Case type (as identified): Childhood OCD-like rituals", case)
+        self.assertIn("Consultation questions and answers:", case)
+        self.assertIn("Q: What happens when the parents refuse to repeat words?", case)
+        self.assertIn("A: He has a tantrum for 20 minutes and they give in.", case)
+        e.report(s, "L2")
+        self.assertIn("A: He has a tantrum for 20 minutes", self.report_model.seen[0][1][-1]["content"])
 
 
 class TestSafetyAndChecks(Base):
