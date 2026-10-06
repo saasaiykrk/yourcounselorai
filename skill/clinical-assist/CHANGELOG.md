@@ -1,5 +1,25 @@
 # clinical-assist — change log
 
+## v2.2.1 — 2026-10-06
+**Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
+**Status:** draft — needs clinician review (`clinician-reviewed` label), the consultation evals at L1 and L2,
+and the grading pack.
+
+**Why:** a beta guided consultation (L1 clinician; adult, sleeplessness after a bereavement; risk not yet
+screened) was held back after both attempts. Attempt 1 left out the numbered sections (Gate 2 short form);
+attempt 2 kept the ICD-11 sub-heading in Section 1, which the L1 rule does not allow. The safety checks were
+right both times; the template did not say how these rules apply to a consultation report.
+
+**Changed — `assets/consult-report-template.md` only**
+- Level rules: for L1, the whole `#### ICD-11 (WHO) categories to consider` sub-section (heading and table) is
+  replaced by `#### Areas for the supervisor or a psychologist to assess`; no codes and no "ICD"/"DSM" in
+  Section 1.
+- New "Missing information" rule: Gate 2 never shortens a consultation report and never changes a heading.
+  Low confidence is stated in Sections 1–2, a provisional line opens Section 3, and Section 12 starts with the
+  3–7 priority questions (screen risk first when it is not yet asked).
+
+**Not changed:** Modes A–G, the inspector's report checks, the crisis register.
+
 ## v2.2.0 — 2026-10-05
 **Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
 **Status:** draft — needs clinician review (`clinician-reviewed` label), the intake and report evals, and the grading pack before it is switched on.
