@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import unittest
 
 from app.inspector import InspectionContext, inspect, strip_meta
@@ -190,6 +191,16 @@ def _l1(report):
     return report.replace("level=L2", "level=L1")
 
 
+def _l1_areas(report):
+    """The gold report rewritten for an L1 clinician as the template asks."""
+    areas = ("#### Areas for the supervisor or a psychologist to assess\n\n"
+             "- Repetitive rituals and avoidance that may be obsessive-compulsive in nature\n"
+             "- Hair picking: habit or tension relief\n"
+             "- Fear of darkness beyond what is usual for his age\n\n")
+    return re.sub(r"#### ICD-11 \(WHO\) categories to consider.*?(?=#### Behaviour)", areas, _l1(report),
+                  flags=re.S)
+
+
 class TestConsultationReport(unittest.TestCase):
     def test_gold_standard_report_passes(self):
         rep = inspect(REPORT_R, rctx())
@@ -247,6 +258,17 @@ class TestConsultationReport(unittest.TestCase):
     def test_l1_gets_no_codes_in_section_1(self):
         rep = inspect(_l1(REPORT_R), rctx(level="L1"))
         self.assertIn("L1", codes(rep))
+
+    def test_l1_report_following_the_template_passes(self):
+        # The L1 shape from the template: the ICD-11 sub-section is replaced by "Areas for the supervisor…".
+        rep = inspect(_l1_areas(REPORT_R), rctx(level="L1"))
+        self.assertTrue(rep.passed, rep.as_dict())
+
+    def test_l1_keeping_the_icd_subheading_is_blocked(self):
+        # Seen in beta (guided report, L1): the ICD-11 sub-heading was kept over a list of areas.
+        kept = _l1_areas(REPORT_R).replace("#### Areas for the supervisor or a psychologist to assess",
+                                           "#### ICD-11 (WHO) categories to consider")
+        self.assertIn("L1", codes(inspect(kept, rctx(level="L1"))))
 
     def test_l1_section_4_rule_does_not_misfire_on_modalities(self):
         # Mode R's Section 4 is "Therapy Modalities"; the Mode A differential-title rule must not apply.

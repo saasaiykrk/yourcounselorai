@@ -38,7 +38,7 @@ class TestPipeline(unittest.TestCase):
         r = Pipeline(self.skill, FakeModel([GOOD]), OfflineICD11()).run(PROMPT, "L2")
         self.assertEqual((r.status, r.attempts), ("delivered", 1))
         self.assertFalse(r.display_text.startswith("<!--"))
-        self.assertEqual(r.skill_version, "2.2.0")
+        self.assertEqual(r.skill_version, "2.2.1")
 
     def test_regenerates_once_then_delivers(self):
         m = FakeModel([BAD, GOOD])

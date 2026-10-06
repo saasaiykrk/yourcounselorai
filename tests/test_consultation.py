@@ -265,6 +265,19 @@ class TestSafetyAndChecks(Base):
         self.assertEqual(v["question"]["number"], 1)
 
 
+class TestReportPrompt(Base):
+    """Two beta report hold-backs (L1, risk not yet screened) came from template gaps, not the checks."""
+    def test_l1_rule_names_the_replacement_subheading(self):
+        text = " ".join(self.prompts.report_addendum.split())
+        self.assertIn("replace the whole `#### ICD-11 (WHO) categories to consider` sub-section", text)
+        self.assertIn("`#### Areas for the supervisor or a psychologist to assess`", text)
+
+    def test_missing_information_never_shortens_the_report(self):
+        text = " ".join(self.prompts.report_addendum.split())
+        self.assertIn("Gate 2 never shortens a consultation report", text)
+        self.assertIn("never add words to a heading", text)
+
+
 class TestReport(Base):
     def ready_state(self, e):
         return e.start("9-year-old boy with rituals")
