@@ -16,6 +16,8 @@ dependencies:
   flutter_riverpod: ^3.4.3
   flutter_secure_storage: ^11.2.0
   go_router: ^18.0.1
+  pdf: ^3.13.1
+  printing: ^5.15.1
   supabase_flutter: ^2.17.2
   url_launcher: ^6.3.2
 
