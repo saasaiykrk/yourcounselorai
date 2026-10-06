@@ -28,13 +28,18 @@ from app.prompt import load_consult_prompts, load_skill
 
 
 def run_case(engine: ConsultationEngine, case: dict, level: str, write_report: bool) -> dict:
-    answers, asked, problems = case.get("answers", {}), [], []
+    answers, asked, clarified, problems = case.get("answers", {}), [], [], []
     state = engine.start(case["case"])
     while state["stage"] == QUESTIONING:
         q = state["pending"]
         asked.append(q["field"])
-        if q["field"] in answers:
-            engine.reply(state, "answer", answers[q["field"]])
+        if q.get("clarify"):
+            clarified.append(q["field"])
+        # A clarifying question is answered with "<field>+clarify" when the case gives one.
+        answer = answers.get(q["field"] + "+clarify") if q.get("clarify") else None
+        answer = answer or answers.get(q["field"])
+        if answer:
+            engine.reply(state, "answer", answer)
         else:
             engine.reply(state, "dont_know")
     exp = case.get("expect", {})
@@ -50,9 +55,14 @@ def run_case(engine: ConsultationEngine, case: dict, level: str, write_report: b
         if given in asked:
             after = asked[asked.index(given) + 1:]
             problems += [f"asked '{f}' after it was answered inside '{given}'" for f in later if f in after]
+    problems += [f"did not clarify '{f}'" for f in exp.get("must_clarify", []) if f not in clarified]
+    problems += [f"clarified '{f}' though the answer was clear" for f in exp.get("never_clarify", []) if f in clarified]
+    if not state.get("case_type"):
+        problems.append("no case type identified")
     if exp.get("must_reach_ready") and state["stage"] != INFORMATION_SUFFICIENT:
         problems.append(f"ended in {state['stage']}")
-    result = {"id": case["id"], "stage": state["stage"], "questions": asked, "facts": state["facts"],
+    result = {"id": case["id"], "stage": state["stage"], "case_type": state.get("case_type", ""),
+              "questions": asked, "clarified": clarified, "facts": state["facts"],
               "unknown": state["unknown"], "intake_usage": state["usage"], "problems": problems}
     if write_report and state["stage"] == INFORMATION_SUFFICIENT:
         r = engine.report(state, level)

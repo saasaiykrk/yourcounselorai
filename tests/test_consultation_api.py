@@ -66,6 +66,19 @@ class ConsultationApiTests(unittest.TestCase):
         self.assertEqual([h["id"] for h in hist], [v["id"]])
         self.assertEqual(self.client.get("/v1/consultations", headers=ME).json()["consultations"], [])
 
+    def test_case_type_plan_and_clarifying_question_reach_the_app(self):
+        v = self.start()
+        self.assertEqual(v["case_type"], "Sample case (dev mode)")
+        self.assertIn("age_gender", v["info_needed"])
+        self.assertNotIn("presenting_concern", v["info_needed"])          # already given in the case
+        self.assertFalse(v["question"]["clarify"])
+        v = self.reply(v["id"], text="young")                               # too short: one clarifying question
+        self.assertEqual(v["question"]["field"], "age_gender")
+        self.assertTrue(v["question"]["clarify"])
+        v = self.reply(v["id"], text="9 years, male")
+        self.assertEqual(v["question"]["field"], "risk_screening")
+        self.assertNotIn("age_gender", v["info_needed"])
+
     def test_unfinished_consultation_can_be_continued(self):
         v = self.start()
         listed = self.client.get("/v1/consultations", headers=ME).json()["consultations"]

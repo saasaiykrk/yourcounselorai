@@ -89,9 +89,14 @@ class PreviewConsultationRepository implements ConsultationRepository {
               options: q.options,
               number: asked + 1,
             ),
+      caseType: 'Sample case (preview)',
       caseSummary: 'Sample case: ${facts['presenting_concern'] ?? ''}',
       facts: facts,
       unknown: unknown,
+      infoNeeded: [
+        for (final x in _questions.skip(asked))
+          if (!facts.containsKey(x.field) && !unknown.contains(x.field)) x.field,
+      ],
       questionsAsked: asked + (q == null ? 0 : 1),
       transcript: transcript,
     );
@@ -120,6 +125,7 @@ class PreviewConsultationRepository implements ConsultationRepository {
       return _c = Consultation(
         id: c.id,
         stage: ConsultationStage.ready,
+        caseType: c.caseType,
         caseSummary: c.caseSummary,
         facts: c.facts,
         unknown: c.unknown,
