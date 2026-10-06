@@ -45,12 +45,18 @@ class TestPipeline(unittest.TestCase):
         r = Pipeline(self.skill, m, OfflineICD11()).run(PROMPT, "L2")
         self.assertEqual((r.status, r.attempts), ("delivered", 2))
         self.assertIn("DISCLAIMER", m.seen[1][-1]["content"])  # failure list sent back
+        self.assertEqual(r.held_back, [{"attempt": 1, "text": BAD}])   # kept for admin review only
+
+    def test_held_back_is_empty_when_the_first_reply_passes(self):
+        r = Pipeline(self.skill, FakeModel([GOOD]), OfflineICD11()).run(PROMPT, "L2")
+        self.assertEqual(r.held_back, [])
 
     def test_blocks_after_two_failures(self):
         r = Pipeline(self.skill, FakeModel([BAD, BAD]), OfflineICD11()).run(PROMPT, "L2")
         self.assertEqual(r.status, "blocked")
         self.assertEqual(r.display_text, FALLBACK)
         self.assertIn("14416", r.display_text)
+        self.assertEqual([a["attempt"] for a in r.held_back], [1, 2])
 
     def test_empty_reply_is_retried_without_an_empty_assistant_turn(self):
         # A declined (refusal) reply comes back empty; the API rejects empty assistant turns.

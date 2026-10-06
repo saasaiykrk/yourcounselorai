@@ -115,6 +115,14 @@ The grading pack appears under *Artifacts* as **eval-grading-pack** for the clin
 `db/migrations/004_clinician_identity.sql` adds the clinician's name, gender and age (asked at registration).
 Run it in Supabase → SQL Editor **before** the backend that needs it is deployed, or new registrations fail.
 
+## Held-back replies in the web admin: run migration 005
+
+`db/migrations/005_held_back_attempts.sql` keeps every reply the safety check held back, so **/admin → Reports →
+a held-back report → Show held-back text** can show what the AI actually wrote. Run it in Supabase → SQL Editor
+(safe to run again). The server works without it; until then only the last attempt is shown, and only for
+replies logged after it runs will every attempt be kept. Each view is written to the audit log; the phone app
+never shows this text.
+
 ## Guided consultation (off until you switch it on)
 
 The guided consultation (case → a few questions → the fixed Consultation Report) ships switched off in

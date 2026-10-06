@@ -77,16 +77,24 @@ def turns_today(cid) -> int:
 
 
 def log_turn(conv_id, cid, level, body, r) -> uuid.UUID:
+    cols = """conversation_id, clinician_id, requested_mode, level, input_deid, client_redaction_counts,
+              output_raw, output_shown, status, attempts, inspector_reports, model, skill_version, prompt_hash,
+              tool_calls, verified_icd_codes, usage, latency_ms"""
+    vals = [str(conv_id), str(cid), body.mode, level, body.text,
+            json.dumps(body.client_redaction_counts), r.raw_text, r.display_text, r.status, r.attempts,
+            json.dumps(r.reports), r.model, r.skill_version, r.prompt_hash, json.dumps(r.tool_calls),
+            r.verified_icd_codes, json.dumps(r.usage), r.latency_ms]
+    try:
+        return _insert_turn(cols + ", held_back", vals + [json.dumps(r.held_back) if r.held_back else None])
+    except psycopg.errors.UndefinedColumn:
+        # migration 005 not run yet: log the turn without the held-back attempts
+        return _insert_turn(cols, vals)
+
+
+def _insert_turn(cols: str, vals: list) -> uuid.UUID:
     with _conn() as c:
-        return c.execute(
-            """insert into turns (conversation_id, clinician_id, requested_mode, level, input_deid, client_redaction_counts,
-                 output_raw, output_shown, status, attempts, inspector_reports, model, skill_version, prompt_hash,
-                 tool_calls, verified_icd_codes, usage, latency_ms)
-               values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning id""",
-            (str(conv_id), str(cid), body.mode, level, body.text,
-             json.dumps(body.client_redaction_counts), r.raw_text, r.display_text, r.status, r.attempts,
-             json.dumps(r.reports), r.model, r.skill_version, r.prompt_hash, json.dumps(r.tool_calls),
-             r.verified_icd_codes, json.dumps(r.usage), r.latency_ms)).fetchone()["id"]
+        marks = ",".join(["%s"] * len(vals))
+        return c.execute(f"insert into turns ({cols}) values ({marks}) returning id", vals).fetchone()["id"]
 
 
 def auto_incident(turn_id, report: dict) -> None:
@@ -142,6 +150,23 @@ def get_incident(incident_id) -> dict | None:
             f"""select {_INCIDENT_COLS}, t.input_deid, t.output_shown, t.inspector_reports, t.attempts
                 from incidents i join turns t on t.id = i.turn_id where i.id = %s""",
             (str(incident_id),)).fetchone()
+
+
+def held_back(incident_id) -> list[dict] | None:
+    """The replies the safety check held back for this incident's turn: [{attempt, text}].
+    None if the incident doesn't exist. Turns logged before migration 005 give the last attempt only."""
+    sql = """select {} as held_back, t.output_raw, t.status, t.attempts from incidents i
+             join turns t on t.id = i.turn_id where i.id = %s"""
+    with _conn() as c:
+        try:
+            row = c.execute(sql.format("t.held_back"), (str(incident_id),)).fetchone()
+        except psycopg.errors.UndefinedColumn:   # migration 005 not run yet
+            row = c.execute(sql.format("null"), (str(incident_id),)).fetchone()
+    if row is None:
+        return None
+    if row["held_back"]:
+        return row["held_back"]
+    return [{"attempt": row["attempts"], "text": row["output_raw"]}] if row["status"] == "blocked" else []
 
 
 def update_incident(incident_id, status: str, reviewer_note: str, admin_id) -> bool:

@@ -23,6 +23,7 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
   GET  /v1/admin/incidents?status=    → admin: "Report a problem" items and held-back replies
   GET  /v1/admin/incidents/{id}       → admin: one incident with its de-identified turn
+  GET  /v1/admin/incidents/{id}/held-back → admin web page only: the held-back replies (audited)
   PATCH /v1/admin/incidents/{id}      → admin: triage status + reviewer note
   GET  /v1/admin/clinicians/{id}/consults → admin: a clinician's consults, incl. hidden (audited)
   GET  /v1/admin/consults/{id}        → admin: one consult (audited)
@@ -566,6 +567,19 @@ def admin_incident(incident_id: uuid.UUID, a: dict = Depends(admin)):
     if not row:
         raise HTTPException(404, "incident not found")
     return row
+
+
+# The replies the safety check held back, as the AI wrote them — for working out why a reply was blocked.
+# Only the /admin web page calls this, on the admin's click; the phone app never does (nothing reaches the
+# phone without passing inspect()). Each view is written to the audit log.
+@app.get("/v1/admin/incidents/{incident_id}/held-back")
+def admin_incident_held_back(incident_id: uuid.UUID, a: dict = Depends(admin)):
+    attempts = _dev_admin.held_back(incident_id) if CFG.dev_mode else db.held_back(incident_id)
+    if attempts is None:
+        raise HTTPException(404, "incident not found")
+    if not CFG.dev_mode:
+        db.audit(a["id"], "view_held_back", incident_id, {"attempts": len(attempts)})
+    return {"attempts": attempts}
 
 
 @app.patch("/v1/admin/incidents/{incident_id}")
