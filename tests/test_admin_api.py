@@ -79,6 +79,22 @@ class AdminApiTests(unittest.TestCase):
         bad = self.client.patch(f"/v1/admin/incidents/{BLOCKED_INCIDENT}", headers=ADMIN, json={"status": "deleted"})
         self.assertEqual(bad.status_code, 422)
 
+    def test_held_back_text_is_a_separate_request(self):
+        # The incident detail never carries the held-back text; it comes only from its own (audited) request.
+        detail = self.client.get(f"/v1/admin/incidents/{BLOCKED_INCIDENT}", headers=ADMIN).json()
+        self.assertNotIn("held_back", detail)
+        r = self.client.get(f"/v1/admin/incidents/{BLOCKED_INCIDENT}/held-back", headers=ADMIN)
+        self.assertEqual(r.status_code, 200)
+        attempts = r.json()["attempts"]
+        self.assertEqual([a["attempt"] for a in attempts], [1, 2])
+        self.assertTrue(all(a["text"].startswith("<!--yc") for a in attempts))
+
+    def test_held_back_text_is_empty_for_a_delivered_reply(self):
+        r = self.client.get("/v1/admin/incidents/55555555-5555-4555-8555-555555555555/held-back", headers=ADMIN)
+        self.assertEqual(r.json(), {"attempts": []})
+        r = self.client.get("/v1/admin/incidents/99999999-9999-4999-8999-999999999999/held-back", headers=ADMIN)
+        self.assertEqual(r.status_code, 404)
+
     def test_non_admin_is_refused_everywhere(self):
         main.app.dependency_overrides[main.current_user] = lambda: {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
         original = main.db.get_clinician
@@ -92,6 +108,7 @@ class AdminApiTests(unittest.TestCase):
                 ("get", "/v1/admin/incidents", None),
                 ("get", f"/v1/admin/incidents/{BLOCKED_INCIDENT}", None),
                 ("patch", f"/v1/admin/incidents/{BLOCKED_INCIDENT}", {"status": "fixed"}),
+                ("get", f"/v1/admin/incidents/{BLOCKED_INCIDENT}/held-back", None),
             ]:
                 kwargs = {"json": body} if body is not None else {}
                 r = getattr(self.client, method)(path, headers={"Authorization": "Bearer x"}, **kwargs)
