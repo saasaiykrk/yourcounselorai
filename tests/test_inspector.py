@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import unittest
 
 from app.inspector import InspectionContext, inspect, strip_meta
@@ -133,6 +134,26 @@ class TestGates(unittest.TestCase):
         msg = EVALS[2] + " Safety plan in place, admitted overnight, parents informed."
         self.assertNotIn("GATE1", codes(inspect(MODE_B, ctx(user_input=msg))))
 
+    def test_negated_risk_phrase_does_not_force_gate1(self):
+        # A screened, negative risk finding is not a risk indicator.
+        for neg in ("Denies suicidal ideation.", "No suicidal ideation, no self-harm.", "Not suicidal.",
+                    "Nil suicidal ideation.", "Negative for suicidal ideation.", "Denies any current suicidal thoughts.",
+                    "No history of overdose.", "Denied wanting to die when asked directly."):
+            with self.subTest(neg):
+                self.assertNotIn("GATE1", codes(inspect(MODE_B, ctx(user_input=EVALS[1] + " " + neg))))
+
+    def test_negation_never_hides_another_risk_phrase(self):
+        # Only the phrase right after the negation is cleared; anything else still forces Gate 1.
+        for msg in ("Denies suicidal ideation but has kept pills at home.",
+                    "Denies suicidal ideation; told her sister she wants to die.",
+                    "No one knows she wants to die.",
+                    "Not only suicidal thoughts, he bought pesticide.",
+                    "No improvement. Wants to die.",
+                    "She never denies that she wants to die.",
+                    "Denies suicidal ideation, overdose last month."):
+            with self.subTest(msg):
+                self.assertIn("GATE1", codes(inspect(MODE_B, ctx(user_input=EVALS[1] + " " + msg))))
+
     def test_gate1_with_planning_blocks(self):
         out = GATE1.replace("Routine planning will follow", "### 13. Session plan\n| Week | Focus |\nRoutine planning will follow")
         self.assertIn("GATE1", codes(inspect(out, ctx(user_input=EVALS[2]))))
@@ -168,6 +189,16 @@ def rctx(level="L2", **kw):
 
 def _l1(report):
     return report.replace("level=L2", "level=L1")
+
+
+def _l1_areas(report):
+    """The gold report rewritten for an L1 clinician as the template asks."""
+    areas = ("#### Areas for the supervisor or a psychologist to assess\n\n"
+             "- Repetitive rituals and avoidance that may be obsessive-compulsive in nature\n"
+             "- Hair picking: habit or tension relief\n"
+             "- Fear of darkness beyond what is usual for his age\n\n")
+    return re.sub(r"#### ICD-11 \(WHO\) categories to consider.*?(?=#### Behaviour)", areas, _l1(report),
+                  flags=re.S)
 
 
 class TestConsultationReport(unittest.TestCase):
@@ -227,6 +258,17 @@ class TestConsultationReport(unittest.TestCase):
     def test_l1_gets_no_codes_in_section_1(self):
         rep = inspect(_l1(REPORT_R), rctx(level="L1"))
         self.assertIn("L1", codes(rep))
+
+    def test_l1_report_following_the_template_passes(self):
+        # The L1 shape from the template: the ICD-11 sub-section is replaced by "Areas for the supervisor…".
+        rep = inspect(_l1_areas(REPORT_R), rctx(level="L1"))
+        self.assertTrue(rep.passed, rep.as_dict())
+
+    def test_l1_keeping_the_icd_subheading_is_blocked(self):
+        # Seen in beta (guided report, L1): the ICD-11 sub-heading was kept over a list of areas.
+        kept = _l1_areas(REPORT_R).replace("#### Areas for the supervisor or a psychologist to assess",
+                                           "#### ICD-11 (WHO) categories to consider")
+        self.assertIn("L1", codes(inspect(kept, rctx(level="L1"))))
 
     def test_l1_section_4_rule_does_not_misfire_on_modalities(self):
         # Mode R's Section 4 is "Therapy Modalities"; the Mode A differential-title rule must not apply.

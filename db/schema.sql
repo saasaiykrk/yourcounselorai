@@ -53,7 +53,8 @@ create table turns (
   tool_calls              jsonb not null default '[]',
   verified_icd_codes      text[] not null default '{}',
   usage                   jsonb not null default '[]',
-  latency_ms              int not null
+  latency_ms              int not null,
+  held_back               jsonb                        -- [{attempt, text}] replies the inspector rejected; /admin web only (migration 005)
 );
 create index on turns (clinician_id, created_at);
 create index on turns (status);

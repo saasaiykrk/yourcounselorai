@@ -583,12 +583,36 @@ async function openIncident(id) {
       el("h3", { text: "Safety checks" }), ...checksView(i.inspector_reports),
       el("h3", { text: "Case as sent (de-identified)" }), el("pre", { text: i.input_deid || "" }),
       el("h3", { text: "Reply as shown to the clinician" }), el("pre", { text: i.output_shown || "" }),
+      ...(i.turn_status === "blocked" || i.attempts > 1 ? heldBackView(id) : []),
       el("div", { class: "triage" },
         el("h3", { text: "Your review" }), seg,
         el("label", { for: "detail-note", text: "Reviewer note" }), noteBox, save, err));
   } catch (e) {
     if (e.message !== "signed-out") box.replaceChildren(el("p", { class: "error", text: "Couldn't load this report." }));
   }
+}
+
+// The replies the safety check held back, exactly as the AI wrote them. Fetched only when the admin asks,
+// and each view is written to the audit log. Shown as plain text, never rendered.
+function heldBackView(incidentId) {
+  const box = el("div", { class: "held-back" });
+  const show = el("button", { type: "button", class: "btn ghost", text: "Show held-back text" });
+  show.addEventListener("click", () => busy(show, async () => {
+    try {
+      const { attempts } = await api("GET", "/v1/admin/incidents/" + encodeURIComponent(incidentId) + "/held-back");
+      box.replaceChildren(...(attempts.length
+        ? attempts.flatMap((a) => [el("p", { class: "muted small", text: "Attempt " + a.attempt + " · held back" }),
+                                   el("pre", { text: a.text || "(empty reply)" })])
+        : [el("p", { class: "muted", text: "Nothing was held back for this report." })]));
+    } catch (e) {
+      if (e.message !== "signed-out") box.replaceChildren(el("p", { class: "error", text: "Couldn't load the held-back text." }));
+    }
+  }));
+  box.append(
+    el("p", { class: "notice" }, icon("shield"),
+       el("span", { text: "Never shown to the clinician. Opening it is recorded in the audit log." })),
+    show);
+  return [el("h3", { text: "Held-back text" }), box];
 }
 
 // --- start --------------------------------------------------------------------

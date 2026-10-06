@@ -30,7 +30,7 @@ import re
 from typing import Protocol
 
 from . import deid
-from .inspector import RISK_INPUT_RE, SAFETY_MANAGED_RE, inspect_intake
+from .inspector import SAFETY_MANAGED_RE, inspect_intake, risk_indicated
 from .pipeline import DeidRejected, Pipeline, TurnResult
 from .prompt import INTAKE_SCHEMA, ConsultPrompts
 
@@ -80,7 +80,7 @@ def _clean_or_raise(text: str) -> str:
 
 
 def _risky(text: str) -> bool:
-    return bool(RISK_INPUT_RE.search(text)) and not SAFETY_MANAGED_RE.search(text)
+    return risk_indicated(text) and not SAFETY_MANAGED_RE.search(text)
 
 
 class ConsultationEngine:

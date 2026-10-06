@@ -78,6 +78,8 @@ class TurnResult:
     usage: list[dict]
     latency_ms: int
     verified_icd_codes: list[str]
+    # Every attempt the inspector rejected, as written: for admin review only, never shown to a clinician.
+    held_back: list[dict] = field(default_factory=list)
 
 
 class Pipeline:
@@ -121,6 +123,7 @@ class Pipeline:
                                 requested_mode=requested_mode)
 
         reports: list[InspectionReport] = []
+        held_back: list[dict] = []
         usage: list[dict] = []
         result: ModelResult | None = None
         for attempt in range(1, self.max_attempts + 1):
@@ -131,6 +134,7 @@ class Pipeline:
             reports.append(rep)
             if rep.passed:
                 break
+            held_back.append({"attempt": attempt, "text": result.text})
             # An empty reply (e.g. a declined one) is not echoed back: the API rejects
             # empty assistant turns.
             messages = messages + (
@@ -152,4 +156,5 @@ class Pipeline:
             usage=usage,
             latency_ms=int((time.monotonic() - t0) * 1000),
             verified_icd_codes=sorted(verified),
+            held_back=held_back,
         )
