@@ -133,6 +133,26 @@ class TestGates(unittest.TestCase):
         msg = EVALS[2] + " Safety plan in place, admitted overnight, parents informed."
         self.assertNotIn("GATE1", codes(inspect(MODE_B, ctx(user_input=msg))))
 
+    def test_negated_risk_phrase_does_not_force_gate1(self):
+        # A screened, negative risk finding is not a risk indicator.
+        for neg in ("Denies suicidal ideation.", "No suicidal ideation, no self-harm.", "Not suicidal.",
+                    "Nil suicidal ideation.", "Negative for suicidal ideation.", "Denies any current suicidal thoughts.",
+                    "No history of overdose.", "Denied wanting to die when asked directly."):
+            with self.subTest(neg):
+                self.assertNotIn("GATE1", codes(inspect(MODE_B, ctx(user_input=EVALS[1] + " " + neg))))
+
+    def test_negation_never_hides_another_risk_phrase(self):
+        # Only the phrase right after the negation is cleared; anything else still forces Gate 1.
+        for msg in ("Denies suicidal ideation but has kept pills at home.",
+                    "Denies suicidal ideation; told her sister she wants to die.",
+                    "No one knows she wants to die.",
+                    "Not only suicidal thoughts, he bought pesticide.",
+                    "No improvement. Wants to die.",
+                    "She never denies that she wants to die.",
+                    "Denies suicidal ideation, overdose last month."):
+            with self.subTest(msg):
+                self.assertIn("GATE1", codes(inspect(MODE_B, ctx(user_input=EVALS[1] + " " + msg))))
+
     def test_gate1_with_planning_blocks(self):
         out = GATE1.replace("Routine planning will follow", "### 13. Session plan\n| Week | Focus |\nRoutine planning will follow")
         self.assertIn("GATE1", codes(inspect(out, ctx(user_input=EVALS[2]))))
