@@ -1,16 +1,14 @@
 // Your Counselor web admin. Talks only to this backend (/v1/admin/*) and to
 // Supabase Auth for the email code. No third-party scripts. All data is shown
 // with textContent, never as HTML. The session lives in sessionStorage (gone
-// when the tab closes) and ends after 15 minutes without activity.
+// when the tab closes) and ends when the admin signs out.
 "use strict";
 
-const IDLE_LIMIT_MS = 15 * 60 * 1000;
 const KEY = "yc_admin_session";
 const $ = (id) => document.getElementById(id);
 
 let config = { supabase_url: "", supabase_publishable_key: "", dev_mode: false };
 let pendingEmail = "";
-let idleTimer = null;
 let selectedIncident = null;
 let clinicianStatus = "pending";
 let incidentStatus = "open";
@@ -80,11 +78,6 @@ async function signOut(message) {
   resetSignIn();
   $("sign-in-error").textContent = message || "";
   show("view-sign-in");
-}
-
-function touch() {
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => signOut("Signed out after 15 minutes without activity."), IDLE_LIMIT_MS);
 }
 
 // --- Supabase Auth (email code) -------------------------------------------
@@ -203,7 +196,6 @@ async function enter() {
     $("who-email").textContent = email;
     $("who-initial").textContent = (email[0] || "A").toUpperCase();
     show("view-admin");
-    touch();
     selectView("overview");
   } catch (err) {
     if (err.message !== "signed-out") $("sign-in-error").textContent = "Couldn't reach the backend. Try again.";
@@ -631,7 +623,6 @@ async function start() {
   for (const b of document.querySelectorAll("[data-goto]")) {
     b.addEventListener("click", () => { const [view, filter] = b.dataset.goto.split(":"); selectView(view, filter); });
   }
-  for (const evt of ["click", "keydown"]) document.addEventListener(evt, () => { if (session()) touch(); });
 
   if (!config.dev_mode && !(config.supabase_url && config.supabase_publishable_key)) {
     resetSignIn();

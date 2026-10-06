@@ -165,7 +165,12 @@ INTAKE_CONTRACT = """\
 You are the intake step of a guided consultation in the YourCounselor app. Follow the intake guide below; you never
 write the report here. Each turn you receive the consultation state (JSON) and the clinician's latest message.
 Reply with JSON only, matching the response schema:
-- status: "ask" (one next question), "ready" (enough for the report) or "risk_stop".
+- status: "ask" (one next question), "clarify" (one question about the answer just given, or about a contradiction
+  with a recorded fact), "ready" (enough for the report) or "risk_stop".
+- case_type: what kind of case this is, in at most 8 words (e.g. "Childhood OCD-like rituals"). Keep it once set
+  unless new information changes it.
+- info_needed: the field keys the report still needs for this case, most important first (at most 12). Never list a
+  field that is in facts or unknown.
 - facts_patch: facts learned or changed in the latest message only, as {field, value}. field is a short snake_case
   key; use presenting_concern, age_gender, duration_onset and risk_screening where they fit, otherwise keys such as
   education_occupation, functioning, triggers, family, prior_therapy, medications, medical, help_requested.
@@ -173,9 +178,11 @@ Reply with JSON only, matching the response schema:
   "risk present — {what was done}" or "not yet asked".
 - unknown_fields: fields the clinician said they do not know or chose to skip.
 - case_summary: the whole case so far in at most 120 words, facts only.
-- question, why, field, options: the next question when status is "ask"; otherwise empty strings and [].
+- question, why, field, options: the next question when status is "ask" or "clarify" (for "clarify", field is the
+  field being clarified); otherwise empty strings and [].
 - brief_answer: a short reply when the clinician asked you something; otherwise "".
-Never ask again about a field that is in facts or unknown. Never put an identifier in any field.
+Never ask again about a field that is in facts or unknown, except one "clarify" per field; a field listed in
+state.clarified has already been clarified. Never put an identifier in any field.
 """
 
 CONSULT_REPORT_CONTRACT = """\
@@ -191,7 +198,9 @@ INTAKE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "status": {"type": "string", "enum": ["ask", "ready", "risk_stop"]},
+        "status": {"type": "string", "enum": ["ask", "clarify", "ready", "risk_stop"]},
+        "case_type": {"type": "string"},
+        "info_needed": {"type": "array", "items": {"type": "string"}},
         "facts_patch": {"type": "array", "items": {
             "type": "object", "additionalProperties": False,
             "properties": {"field": {"type": "string"}, "value": {"type": "string"}},
@@ -204,8 +213,8 @@ INTAKE_SCHEMA = {
         "options": {"type": "array", "items": {"type": "string"}},
         "brief_answer": {"type": "string"},
     },
-    "required": ["status", "facts_patch", "unknown_fields", "case_summary", "question", "why", "field", "options",
-                 "brief_answer"],
+    "required": ["status", "case_type", "info_needed", "facts_patch", "unknown_fields", "case_summary", "question",
+                 "why", "field", "options", "brief_answer"],
 }
 
 

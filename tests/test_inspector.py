@@ -291,6 +291,14 @@ class TestIntakeOutput(unittest.TestCase):
     def test_good_question_passes(self):
         self.assertTrue(inspect_intake(self.GOOD).passed)
 
+    def test_case_type_and_plan_are_checked(self):
+        self.assertTrue(inspect_intake(dict(self.GOOD, case_type="Childhood OCD-like rituals",
+                                            info_needed=["age_gender", "family_response"])).passed)
+        self.assertIn("INTAKE_LENGTH", codes(inspect_intake(dict(self.GOOD, case_type="x" * 120))))
+        self.assertIn("INTAKE_LENGTH", codes(inspect_intake(dict(self.GOOD, info_needed=["f"] * 13))))
+        self.assertIn("IDENTIFIER", codes(inspect_intake(dict(self.GOOD, case_type="Client on 9876543210"))))
+        self.assertIn("ICD_CODE", codes(inspect_intake(dict(self.GOOD, case_type="6B20 OCD"))))
+
     def test_long_question_blocked(self):
         out = dict(self.GOOD, question="Tell me " + "more about it " * 40 + "?")
         self.assertIn("INTAKE_LENGTH", codes(inspect_intake(out)))
