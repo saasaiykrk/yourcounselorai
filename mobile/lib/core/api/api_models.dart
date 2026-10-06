@@ -375,6 +375,7 @@ class ConsultationQuestion {
     this.why = '',
     this.options = const [],
     this.number = 0,
+    this.clarify = false,
   });
 
   factory ConsultationQuestion.fromJson(Map<String, dynamic> j) => ConsultationQuestion(
@@ -383,6 +384,7 @@ class ConsultationQuestion {
     why: j['why'] as String? ?? '',
     options: [for (final o in (j['options'] as List? ?? const [])) '$o'],
     number: (j['number'] as num?)?.toInt() ?? 0,
+    clarify: j['clarify'] as bool? ?? false,
   );
 
   final String field;
@@ -390,6 +392,9 @@ class ConsultationQuestion {
   final String why;
   final List<String> options;
   final int number;
+
+  /// True when this follows up an unclear or contradictory answer (at most once per field).
+  final bool clarify;
 }
 
 /// A question already answered ("(don't know)" and "(skipped)" included).
@@ -411,9 +416,11 @@ class Consultation {
     required this.stage,
     this.question,
     this.briefAnswer = '',
+    this.caseType = '',
     this.caseSummary = '',
     this.facts = const {},
     this.unknown = const [],
+    this.infoNeeded = const [],
     this.questionsAsked = 0,
     this.maxQuestions = 8,
     this.transcript = const [],
@@ -427,9 +434,11 @@ class Consultation {
         ? ConsultationQuestion.fromJson(j['question'] as Map<String, dynamic>)
         : null,
     briefAnswer: j['brief_answer'] as String? ?? '',
+    caseType: j['case_type'] as String? ?? '',
     caseSummary: j['case_summary'] as String? ?? '',
     facts: {for (final e in ((j['facts'] as Map?) ?? const {}).entries) '${e.key}': '${e.value}'},
     unknown: [for (final u in (j['unknown'] as List? ?? const [])) '$u'],
+    infoNeeded: [for (final n in (j['info_needed'] as List? ?? const [])) '$n'],
     questionsAsked: (j['questions_asked'] as num?)?.toInt() ?? 0,
     maxQuestions: (j['max_questions'] as num?)?.toInt() ?? 8,
     transcript: [
@@ -444,6 +453,9 @@ class Consultation {
 
   /// The AI's short answer when the clinician asked something during the intake.
   final String briefAnswer;
+
+  /// The kind of case the AI identified (a planning label, not a diagnosis).
+  final String caseType;
   final String caseSummary;
 
   /// What the clinician has told us so far, by field (e.g. age_gender).
@@ -451,6 +463,9 @@ class Consultation {
 
   /// Fields the clinician did not know or skipped.
   final List<String> unknown;
+
+  /// What the report still needs for this case, most important first (field keys).
+  final List<String> infoNeeded;
   final int questionsAsked;
   final int maxQuestions;
   final List<ConsultationExchange> transcript;

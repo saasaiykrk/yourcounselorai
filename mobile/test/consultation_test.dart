@@ -111,6 +111,29 @@ class _Recording extends PreviewConsultationRepository {
   }
 }
 
+/// Starts with an identified case and a clarifying question (as after an unclear answer).
+class _ClarifyRepo extends _Recording {
+  @override
+  Future<Consultation> start({required String text, required Map<String, int> redactionCounts}) async {
+    starts.add(text);
+    return const Consultation(
+      id: 'k1',
+      stage: ConsultationStage.questioning,
+      caseType: 'Adolescent school refusal',
+      infoNeeded: ['age_gender', 'risk_screening', 'duration_onset', 'family', 'school', 'sleep', 'mood'],
+      facts: {'presenting_concern': 'stopped going to school'},
+      questionsAsked: 2,
+      question: ConsultationQuestion(
+        field: 'age_gender',
+        question: 'Roughly how old is he: under 12, or a teenager?',
+        why: 'Tools and guidance depend on age.',
+        number: 2,
+        clarify: true,
+      ),
+    );
+  }
+}
+
 /// Always answers with a safety stop until safety is confirmed.
 class _SafetyStopRepo extends _Recording {
   @override
@@ -172,6 +195,18 @@ void main() {
       expect(c.facts, {'age_gender': '9, male'});
       expect(c.unknown, ['prior_therapy']);
       expect(c.transcript.single.answer, '9, male');
+      expect(c.caseType, '');
+      expect(c.infoNeeded, isEmpty);
+      expect(c.question!.clarify, isFalse);
+      final assessed = Consultation.fromJson({
+        ..._view,
+        'case_type': 'Childhood OCD-like rituals',
+        'info_needed': ['duration_onset', 'family_response'],
+        'question': {...(_view['question']! as Map<String, dynamic>), 'clarify': true},
+      });
+      expect(assessed.caseType, 'Childhood OCD-like rituals');
+      expect(assessed.infoNeeded, ['duration_onset', 'family_response']);
+      expect(assessed.question!.clarify, isTrue);
       expect(ConsultationStage.fromApi('INFORMATION_SUFFICIENT'), ConsultationStage.ready);
       expect(ConsultationStage.fromApi('SAFETY_STOP'), ConsultationStage.safetyStop);
     });
@@ -317,6 +352,27 @@ void main() {
       expect(repo.steps.single.$1, 'safety_managed');
     });
 
+    testWidgets('shows the identified case, what is still needed, and a clarifying question', (tester) async {
+      await _pump(tester, '/consult', repo: _ClarifyRepo());
+      await _startFromConsultTab(tester);
+      expect(find.text('Case identified'), findsOneWidget);
+      expect(find.text('Adolescent school refusal'), findsOneWidget);
+      expect(find.text('A working label for planning the questions, not a diagnosis.'), findsOneWidget);
+      expect(find.text('Still needed for the report (7)'), findsOneWidget);
+      expect(find.text('Age / gender'), findsOneWidget);
+      expect(find.text('+2 more'), findsOneWidget);
+      expect(find.text('Checking your last answer'), findsOneWidget);
+      expect(find.text('Roughly how old is he: under 12, or a teenager?'), findsOneWidget);
+    });
+
+    testWidgets('a normal question has no clarifying label', (tester) async {
+      await _pump(tester, '/consult', repo: _Recording());
+      await _startFromConsultTab(tester);
+      expect(find.text('Case identified'), findsOneWidget);
+      expect(find.text('Sample case (preview)'), findsOneWidget);
+      expect(find.text('Checking your last answer'), findsNothing);
+    });
+
     testWidgets('generate now asks first and names what is missing', (tester) async {
       final repo = _Recording();
       await _pump(tester, '/consult', repo: repo);
@@ -325,7 +381,7 @@ void main() {
       await tester.tap(find.text('Report now'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Not answered yet'), findsOneWidget);
-      expect(find.textContaining('Age / gender'), findsOneWidget);
+      expect(find.textContaining('Not answered yet: Age / gender'), findsOneWidget);
       await tester.tap(find.text('Keep answering'));
       await tester.pumpAndSettle();
       expect(repo.reports, 0);

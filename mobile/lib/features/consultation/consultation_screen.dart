@@ -168,6 +168,7 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
 
   List<Widget> _stageBody(Consultation c) => switch (c.stage) {
     ConsultationStage.questioning when c.question != null => [
+      if (c.caseType.isNotEmpty) _CaseAssessment(caseType: c.caseType, needed: c.infoNeeded),
       _QuestionBubble(question: c.question!),
       if (c.facts.isNotEmpty) _KnownSoFar(facts: c.facts, unknown: c.unknown, onEdit: _editFact),
     ],
@@ -304,6 +305,24 @@ class _QuestionBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (question.clarify) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: AppColors.checkBg, borderRadius: BorderRadius.circular(999)),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.rule_rounded, size: 14, color: AppColors.checkInk),
+                    SizedBox(width: 4),
+                    Text(
+                      'Checking your last answer',
+                      style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.checkInk),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
             Semantics(
               header: true,
               child: Text(
@@ -324,6 +343,66 @@ class _QuestionBubble extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// What the AI understood the case to be, and what the report still needs — so the clinician
+/// sees a structured assessment, not open-ended chat.
+class _CaseAssessment extends StatelessWidget {
+  const _CaseAssessment({required this.caseType, required this.needed});
+
+  final String caseType;
+  final List<String> needed;
+
+  static const _shown = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final more = needed.length - _shown;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.lavender,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Case identified', style: AppText.caption),
+          const SizedBox(height: 2),
+          Text(caseType, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, height: 1.35)),
+          const SizedBox(height: 2),
+          const Text('A working label for planning the questions, not a diagnosis.', style: AppText.caption),
+          if (needed.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('Still needed for the report (${needed.length})', style: AppText.caption),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final f in needed.take(_shown))
+                  Chip(
+                    label: Text(consultationFieldLabel(f)),
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: AppColors.surface,
+                    side: const BorderSide(color: AppColors.line),
+                    labelStyle: const TextStyle(fontSize: 12.5, color: AppColors.ink),
+                  ),
+                if (more > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Text('+$more more', style: AppText.caption),
+                  ),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -439,9 +518,20 @@ class _ReadyCard extends StatelessWidget {
               ),
             ],
           ),
+          if (c.caseType.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('Case identified: ${c.caseType}', style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700)),
+          ],
           if (c.caseSummary.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(c.caseSummary, style: const TextStyle(fontSize: 14.5, height: 1.45)),
+          ],
+          if (c.infoNeeded.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Not available (the report will say so): ${c.infoNeeded.map(consultationFieldLabel).join(', ')}',
+              style: AppText.smallMuted,
+            ),
           ],
           const SizedBox(height: 10),
           Material(

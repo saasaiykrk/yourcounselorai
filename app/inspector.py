@@ -151,7 +151,8 @@ REPORT_R_LINK_DOMAINS = ("iocdf.org", "spacetreatment.net", "nice.org.uk", "bfrb
 URL_RE = re.compile(r"https?://(?:www\.)?(?P<host>[A-Za-z0-9.-]+)", re.I)
 
 # Intake (questioning) output limits — short by design (references/intake-questioning.md).
-INTAKE_LIMITS = {"question": 300, "why": 150, "brief_answer": 900, "case_summary": 1200, "option": 60, "fact": 300}
+INTAKE_LIMITS = {"question": 300, "why": 150, "brief_answer": 900, "case_summary": 1200, "case_type": 80,
+                 "option": 60, "fact": 300, "needed_item": 40, "needed_items": 12}
 
 
 @dataclass
@@ -497,10 +498,11 @@ def _check_report_r(rep: InspectionReport, body: str, sections: dict[int, tuple[
 # ---------------------------------------------------------------------------
 def inspect_intake(out: dict, user_input: str = "") -> InspectionReport:
     """Checks one intake (questioning) response before the clinician sees any of it:
-    the question, why, options, brief answer, case summary and recorded facts."""
+    the question, why, options, brief answer, case summary, case type, the plan and recorded facts."""
     rep = InspectionReport()
-    texts = {k: str(out.get(k) or "") for k in ("question", "why", "brief_answer", "case_summary")}
+    texts = {k: str(out.get(k) or "") for k in ("question", "why", "brief_answer", "case_summary", "case_type")}
     options = [str(o) for o in (out.get("options") or [])]
+    needed = [str(n) for n in (out.get("info_needed") or [])]
     facts = {str(k): str(v) for k, v in (out.get("facts") or {}).items()}
 
     for k, text in texts.items():
@@ -508,11 +510,13 @@ def inspect_intake(out: dict, user_input: str = "") -> InspectionReport:
             rep.block("INTAKE_LENGTH", f"'{k}' is too long ({len(text)} > {INTAKE_LIMITS[k]} characters).")
     if len(options) > 4 or any(len(o) > INTAKE_LIMITS["option"] for o in options):
         rep.block("INTAKE_LENGTH", "At most 4 short quick-reply options.")
+    if len(needed) > INTAKE_LIMITS["needed_items"] or any(len(n) > INTAKE_LIMITS["needed_item"] for n in needed):
+        rep.block("INTAKE_LENGTH", f"info_needed: at most {INTAKE_LIMITS['needed_items']} short field names.")
     for k, v in facts.items():
         if len(v) > INTAKE_LIMITS["fact"]:
             rep.block("INTAKE_LENGTH", f"Fact '{k}' is too long.")
 
-    everything = "\n".join(list(texts.values()) + options + list(facts.values()))
+    everything = "\n".join(list(texts.values()) + options + needed + list(facts.values()))
     flat = _norm(everything)
     for r in find_identifiers(everything):
         if r.type in ("NAME", "ORG", "ADDRESS"):

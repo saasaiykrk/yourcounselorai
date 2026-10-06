@@ -40,6 +40,7 @@ is unit-tested (tests/).
 """
 from __future__ import annotations
 
+import json
 import pathlib
 import re
 import uuid
@@ -88,13 +89,25 @@ class _FakeDevModel:
 
     def run_structured(self, system, user, schema):
         """Keyless intake: records the reply under the field just asked, then says "ready" — so the
-        app asks the intake guide's mandatory questions one by one and then offers the report."""
+        app asks the intake guide's mandatory questions one by one and then offers the report.
+        A one- or two-word answer gets one clarifying question, to show that step offline."""
         asked = re.search(r"\[Question just answered\] \(([a-z_]+)\)", user)
         message = user.split("[Clinician's message]\n", 1)[-1].split("\n\n[App note]")[0].strip()[:200]
-        facts = [{"field": asked.group(1) if asked else "presenting_concern", "value": message}]
-        return ({"status": "ready", "facts_patch": facts, "unknown_fields": [], "case_summary": "",
-                 "question": "", "why": "", "field": "", "options": [], "brief_answer": ""},
-                {"input_tokens": 0, "output_tokens": 0})
+        try:
+            state = json.loads(user.split("\n")[1])
+        except (IndexError, ValueError):
+            state = {}
+        field = asked.group(1) if asked else "presenting_concern"
+        facts = [{"field": field, "value": message}]
+        known = set(state.get("facts", {})) | set(state.get("unknown", [])) | {field}
+        needed = [f for f in ("presenting_concern", "age_gender", "risk_screening", "duration_onset") if f not in known]
+        out = {"status": "ready", "case_type": "Sample case (dev mode)", "info_needed": needed, "facts_patch": facts,
+               "unknown_fields": [], "case_summary": "", "question": "", "why": "", "field": "", "options": [],
+               "brief_answer": ""}
+        if asked and len(message.split()) <= 2 and field not in state.get("clarified", []):
+            out.update(status="clarify", question=f"Could you say a little more about that ({field.replace('_', ' ')})?",
+                       field=field, why="The answer was short; a little more detail makes the report specific.")
+        return out, {"input_tokens": 0, "output_tokens": 0}
 
 
 if CFG.dev_mode and not CFG.anthropic_api_key:

@@ -1,5 +1,28 @@
 # clinical-assist — change log
 
+## v2.3.0 — 2026-10-07
+**Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
+**Status:** draft — needs clinician review (`clinician-reviewed` label), the consultation evals at L1 and L2,
+and the grading pack.
+
+**Why:** the guided consultation should work as a structured case assessment: identify the case, plan what the
+report needs, ask, clarify unclear or contradictory answers, check, then report from the whole consultation.
+
+**Changed — `references/intake-questioning.md` only**
+- New "Identify the case first": a working case type (a label for planning, never a diagnosis) and
+  `info_needed`, the fields the report still needs for that case type, most important first, with examples
+  by case type.
+- New "Unclear, incomplete or contradictory answer" rule: one `clarify` question per field, named neutrally;
+  if still unclear, record it marked "(unclear)" and move on.
+- "When to stop" now checks the facts for contradictions before `ready`; clarifications count toward the
+  8-question limit.
+
+**App (not skill) changes in the same release:** the report is now written from the case type, summary, facts
+**and** the short questions and answers of the consultation (previously summary and facts only). The report
+template and the inspector's report checks are unchanged.
+
+**Not changed:** Modes A–G, the report template, the crisis register.
+
 ## v2.2.1 — 2026-10-06
 **Owner:** Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) · **Next review:** 2027-09-24
 **Status:** draft — needs clinician review (`clinician-reviewed` label), the consultation evals at L1 and L2,

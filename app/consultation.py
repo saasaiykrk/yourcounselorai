@@ -2,16 +2,18 @@
 Guided consultation: a short, case-specific intake (one question at a time), then the
 fixed Consultation Report (Mode R).
 
-  start(case) ─► intake call ─► next question │ ready │ safety stop
-  answer │ don't know │ skip ─► intake call ─► …
+  start(case) ─► identify the case type and what the report still needs (info_needed)
+              ─► next question │ clarifying question │ ready │ safety stop
+  answer │ don't know │ skip ─► intake call ─► …   (an unclear or contradictory answer gets
+                                                    one clarifying question per field)
   report ─► the existing Pipeline with "Requested mode: R" (cleaner, inspector, retry, hold-back)
 
 Token rules
   * An intake call sends only the small intake prompt, the COMPACT STATE (summary, facts,
     unknowns, question count) and the latest question + reply. Never the raw conversation,
     never the skill or the report template.
-  * The report is one call: the cached skill prompt + the report template part + a compact
-    case summary built from the state.
+  * The report is one call: the cached skill prompt + the report template part + the compact
+    case built from the state (case type, summary, facts, and the short questions and answers).
   * Stage changes, "don't know", fact edits, the question cap and the mandatory-field
     questions (taken from the intake guide) need no model call.
 
@@ -62,7 +64,8 @@ class ConsultationError(Exception):
 
 
 def new_state() -> dict:
-    return {"stage": INITIAL_CASE, "case_summary": "", "facts": {}, "unknown": [], "pending": None,
+    return {"stage": INITIAL_CASE, "case_type": "", "case_summary": "", "facts": {}, "unknown": [],
+            "info_needed": [], "clarified": [], "pending": None,
             "questions_asked": 0, "transcript": [], "brief_answer": "", "pending_input": "",
             "safety_confirmed": False, "usage": {"calls": 0}, "report": None}
 
@@ -77,6 +80,16 @@ def _clean_or_raise(text: str) -> str:
     if not check.is_clean:
         raise DeidRejected(check.counts)
     return text
+
+
+def _prune_needed(state: dict) -> None:
+    """The plan lists only what is still missing: no known or unknown fields, no repeats."""
+    seen, out = set(state["facts"]) | set(state["unknown"]), []
+    for key in state.get("info_needed", []):
+        if key and key not in seen:
+            seen.add(key)
+            out.append(key)
+    state["info_needed"] = out[:12]
 
 
 def _risky(text: str) -> bool:
@@ -123,6 +136,7 @@ class ConsultationEngine:
             self._record_answer(state, "(don't know)" if action == "dont_know" else "(skipped)")
             if pending["field"] not in state["unknown"]:
                 state["unknown"].append(pending["field"])
+            _prune_needed(state)
             state["pending"] = None
             if self._next_mandatory(state):
                 return state                                   # fixed question, no model call
@@ -164,14 +178,23 @@ class ConsultationEngine:
                 return self._safety_stop(state, value)
         if len(state["facts"]) > MAX_FACTS:
             raise ConsultationError(422, "too many facts")
+        _prune_needed(state)
         return state
 
     def case_text(self, state: dict) -> str:
         """The compact case the report is written from (no raw conversation)."""
-        lines = ["[Guided consultation — case collected by the app]",
-                 f"Case summary: {state['case_summary'] or '(not provided)'}", "",
-                 "Facts provided by the clinician:"]
+        lines = ["[Guided consultation — case collected by the app]"]
+        if state.get("case_type"):
+            lines.append(f"Case type (as identified): {state['case_type']}")
+        lines += [f"Case summary: {state['case_summary'] or '(not provided)'}", "",
+                  "Facts provided by the clinician:"]
         lines += [f"- {k}: {v}" for k, v in state["facts"].items()] or ["- (none)"]
+        answered = [t for t in state["transcript"] if t["answer"] is not None]
+        if answered:
+            lines += ["", "Consultation questions and answers:"]
+            for t in answered:
+                lines += ([f"Q: {t['question']}", f"A: {t['answer']}"] if t["question"]
+                          else [f"Additional information: {t['answer']}"])
         if state["unknown"]:
             lines += ["", "Not known to the clinician: " + ", ".join(state["unknown"])]
         missing = [m["field"] for m in self.prompts.mandatory
@@ -221,8 +244,10 @@ class ConsultationEngine:
             state["transcript"][-1]["answer"] = answer
 
     def _payload(self, state: dict, latest: str, header: str, final: bool, feedback: str = "") -> str:
-        compact = {"case_summary": state["case_summary"], "facts": state["facts"], "unknown": state["unknown"],
-                   "questions_asked": state["questions_asked"], "max_questions": self.max_questions}
+        compact = {"case_type": state.get("case_type", ""), "case_summary": state["case_summary"],
+                   "facts": state["facts"], "unknown": state["unknown"], "info_needed": state.get("info_needed", []),
+                   "clarified": state.get("clarified", []), "questions_asked": state["questions_asked"],
+                   "max_questions": self.max_questions}
         parts = ["[Consultation state]", json.dumps(compact, ensure_ascii=False, separators=(",", ":")), "",
                  header, "[Clinician's message]", latest]
         if final:
@@ -276,6 +301,11 @@ class ConsultationEngine:
                 state["unknown"].append(key)
         if (out.get("case_summary") or "").strip():
             state["case_summary"] = out["case_summary"].strip()
+        if (out.get("case_type") or "").strip():
+            state["case_type"] = out["case_type"].strip()[:80]
+        if "info_needed" in out:
+            state["info_needed"] = [_field(n) for n in out.get("info_needed") or []]
+        _prune_needed(state)
         state["brief_answer"] = (out.get("brief_answer") or "").strip()
 
         status = out.get("status")
@@ -285,9 +315,14 @@ class ConsultationEngine:
             return
         question, key = (out.get("question") or "").strip(), _field(out.get("field") or "")
         asks_known = key in state["facts"] or key in state["unknown"]
-        if status == "ask" and question and not final and not asks_known:
+        clarified = state.setdefault("clarified", [])          # absent in states saved before clarify existed
+        clarify = status == "clarify" and key and key not in clarified
+        if question and not final and ((status == "ask" and not asks_known) or clarify):
+            if clarify:
+                clarified.append(key)
             self._ask(state, {"field": key or "detail", "question": question, "why": (out.get("why") or "").strip(),
-                              "options": [str(o).strip() for o in (out.get("options") or []) if str(o).strip()][:4]})
+                              "options": [str(o).strip() for o in (out.get("options") or []) if str(o).strip()][:4],
+                              "clarify": bool(clarify)})
             return
         if not self._next_mandatory(state):
             state["stage"], state["pending"] = INFORMATION_SUFFICIENT, None
@@ -321,11 +356,13 @@ def public_view(state: dict, conv_id: str) -> dict:
     return {
         "id": conv_id,
         "stage": state["stage"],
-        "question": ({**pending, "number": state["questions_asked"]} if pending else None),
+        "question": ({"clarify": False, **pending, "number": state["questions_asked"]} if pending else None),
         "brief_answer": state.get("brief_answer", ""),
+        "case_type": state.get("case_type", ""),
         "case_summary": state["case_summary"],
         "facts": state["facts"],
         "unknown": state["unknown"],
+        "info_needed": state.get("info_needed", []),
         "questions_asked": state["questions_asked"],
         "max_questions": MAX_QUESTIONS,
         "transcript": [t for t in state["transcript"] if t["answer"] is not None],

@@ -7,7 +7,7 @@ description: Clinical case-consultation for psychologists and counsellors (YourC
 
 | Skill version | Governing spec | Released | Owner | Next review |
 |---|---|---|---|---|
-| **2.2.1** | YourCounselor master prompt v2.1 + guided consultation (Mode R) | 2026-10-06 | Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) | **2027-09-24** (annual; sooner on any change to crisis lines, licences or v2.x spec) |
+| **2.3.0** | YourCounselor master prompt v2.1 + guided consultation (Mode R) | 2026-10-07 | Clinical Safety Officer, Fabeminds Counselling Services (*name to be assigned*) | **2027-09-24** (annual; sooner on any change to crisis lines, licences or v2.x spec) |
 
 Sub-registers with their own owner and review date: `references/crisis-resources.md` (helplines) · Core 6 `NPS-00` (cognitive/neuropsychological tool licences). Change history: `CHANGELOG.md`.
 
