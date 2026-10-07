@@ -553,17 +553,18 @@ class _RegistrationsTabState extends ConsumerState<_RegistrationsTab> {
     super.dispose();
   }
 
-  Future<void> _decide(AdminClinician c, {required bool approve}) async {
-    final done = await showModalBottomSheet<bool>(
+  Future<void> _decide(AdminClinician c, {required bool approve, bool changeLevel = false}) async {
+    final level = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,
       showDragHandle: true,
-      builder: (_) => _DecisionSheet(clinician: c, approve: approve),
+      builder: (_) => _DecisionSheet(clinician: c, approve: approve, changeLevel: changeLevel),
     );
-    if (done == true && mounted) {
+    if (level != null && mounted) {
       final who = c.fullName ?? c.email;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(approve ? 'Approved $who' : 'Rejected $who')));
+      final message = changeLevel ? 'Level changed to $level for $who' : (approve ? 'Approved $who' : 'Rejected $who');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
       widget.onChanged();
     }
   }
@@ -642,6 +643,9 @@ class _RegistrationsTabState extends ConsumerState<_RegistrationsTab> {
                         onConsults: c.verificationStatus == 'verified'
                             ? () => context.push('/admin/consults', extra: (c.id, c.fullName ?? c.email))
                             : null,
+                        onChangeLevel: c.verificationStatus == 'verified'
+                            ? () => _decide(c, approve: true, changeLevel: true)
+                            : null,
                       ),
                     ),
                 ],
@@ -678,11 +682,12 @@ class _Avatar extends StatelessWidget {
 }
 
 class _ClinicianCard extends StatelessWidget {
-  const _ClinicianCard({required this.clinician, this.onApprove, this.onReject, this.onConsults});
+  const _ClinicianCard({required this.clinician, this.onApprove, this.onReject, this.onConsults, this.onChangeLevel});
 
   final AdminClinician clinician;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
+  final VoidCallback? onChangeLevel;
   final VoidCallback? onConsults;
 
   @override
@@ -804,15 +809,28 @@ class _ClinicianCard extends StatelessWidget {
               child: Text('How it was checked: ${c.verificationNote}', style: AppText.caption),
             ),
           ],
-          if (onConsults != null) ...[
+          if (onConsults != null || onChangeLevel != null) ...[
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: onConsults,
-                icon: const Icon(Icons.history_rounded, size: 18),
-                label: const Text('Consults'),
-              ),
+            Row(
+              children: [
+                if (onConsults != null)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onConsults,
+                      icon: const Icon(Icons.history_rounded, size: 18),
+                      label: const Text('Consults'),
+                    ),
+                  ),
+                if (onConsults != null && onChangeLevel != null) const SizedBox(width: 8),
+                if (onChangeLevel != null)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onChangeLevel,
+                      icon: const Icon(Icons.tune_rounded, size: 18),
+                      label: const Text('Change level'),
+                    ),
+                  ),
+              ],
             ),
           ],
           if (onApprove != null || onReject != null) ...[
@@ -844,21 +862,26 @@ class _ClinicianCard extends StatelessWidget {
 }
 
 class _DecisionSheet extends ConsumerStatefulWidget {
-  const _DecisionSheet({required this.clinician, required this.approve});
+  const _DecisionSheet({required this.clinician, required this.approve, this.changeLevel = false});
 
   final AdminClinician clinician;
   final bool approve;
+
+  /// A verified clinician's level is changed (same audit trail as approving).
+  final bool changeLevel;
 
   @override
   ConsumerState<_DecisionSheet> createState() => _DecisionSheetState();
 }
 
 class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
-  late String _level = switch (widget.clinician.role) {
-    'counsellor_trainee' => 'L1',
-    'psychiatrist' => 'L3',
-    _ => 'L2',
-  };
+  late String _level = widget.changeLevel && widget.clinician.level != null
+      ? widget.clinician.level!
+      : switch (widget.clinician.role) {
+          'counsellor_trainee' => 'L1',
+          'psychiatrist' => 'L3',
+          _ => 'L2',
+        };
   final _note = TextEditingController();
   bool _busy = false;
   String? _error;
@@ -871,8 +894,14 @@ class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
 
   Future<void> _confirm() async {
     final note = _note.text.trim();
+    if (widget.changeLevel && _level == widget.clinician.level) {
+      setState(() => _error = 'Choose a different level.');
+      return;
+    }
     if (note.length < 3) {
-      setState(() => _error = 'Say how you checked the registration.');
+      setState(
+        () => _error = widget.changeLevel ? 'Say why the level changes.' : 'Say how you checked the registration.',
+      );
       return;
     }
     setState(() {
@@ -883,7 +912,7 @@ class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
       await ref
           .read(adminRepositoryProvider)
           .decide(widget.clinician.id, approve: widget.approve, level: widget.approve ? _level : null, note: note);
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(_level);
     } catch (e) {
       if (mounted) setState(() => _error = _errorText(e));
     } finally {
@@ -900,7 +929,12 @@ class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.approve ? 'Approve registration' : 'Reject registration', style: AppText.sheetTitle),
+          Text(
+            widget.changeLevel
+                ? 'Change level · now ${c.level}'
+                : (widget.approve ? 'Approve registration' : 'Reject registration'),
+            style: AppText.sheetTitle,
+          ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
@@ -963,9 +997,11 @@ class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
           TextField(
             controller: _note,
             maxLength: 500,
-            decoration: const InputDecoration(
-              labelText: 'How you checked (required)',
-              hintText: 'e.g. RCI register, 3 Oct 2026',
+            decoration: InputDecoration(
+              labelText: widget.changeLevel ? 'Why the level changes (required)' : 'How you checked (required)',
+              hintText: widget.changeLevel
+                  ? 'e.g. Now a consultant psychiatrist, NMC register'
+                  : 'e.g. RCI register, 3 Oct 2026',
               counterText: '',
             ),
           ),
@@ -977,7 +1013,11 @@ class _DecisionSheetState extends ConsumerState<_DecisionSheet> {
           FilledButton(
             onPressed: _busy ? null : _confirm,
             style: widget.approve ? null : FilledButton.styleFrom(backgroundColor: AppColors.crisis),
-            child: Text(_busy ? 'Saving…' : (widget.approve ? 'Approve as $_level' : 'Reject')),
+            child: Text(
+              _busy
+                  ? 'Saving…'
+                  : (widget.changeLevel ? 'Change to $_level' : (widget.approve ? 'Approve as $_level' : 'Reject')),
+            ),
           ),
         ],
       ),
