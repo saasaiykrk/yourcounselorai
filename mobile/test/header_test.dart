@@ -17,6 +17,10 @@ class _VerifiedL3 implements ProfileRepository {
 
   @override
   Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
 
 void main() {

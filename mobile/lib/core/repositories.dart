@@ -193,6 +193,9 @@ abstract interface class ProfileRepository {
   Future<Me> me();
 
   Future<void> submit(ProfileSubmission profile);
+
+  /// Account → Edit profile.
+  Future<ProfileEditResult> edit(ProfileEdit profile);
 }
 
 abstract interface class ConsultRepository {
@@ -211,6 +214,9 @@ class ApiProfileRepository implements ProfileRepository {
 
   @override
   Future<void> submit(ProfileSubmission profile) => _api.submitProfile(profile);
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) => _api.editProfile(profile);
 }
 
 class ApiConsultRepository implements ConsultRepository {
@@ -241,17 +247,33 @@ class PreviewProfileRepository implements ProfileRepository {
       level: current == 'verified' ? 'L2' : null,
       role: 'psychologist',
       registrationBody: 'RCI',
-      fullName: current == 'none' ? null : 'Preview Clinician',
+      fullName: current == 'none' ? null : _name,
+      gender: 'female',
+      age: 34,
+      registrationNumber: _registration,
       // The preview account is an admin so the Admin area can be reviewed.
       isAdmin: current == 'verified',
       guidedConsultation: current == 'verified',
     );
   }
 
+  var _name = 'Preview Clinician';
+  String? _registration = 'A12345';
+
   @override
   Future<void> submit(ProfileSubmission profile) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     _status = 'pending';
+  }
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    final reverify = profile.registrationNumber != _registration || profile.role != 'psychologist';
+    _name = profile.fullName;
+    _registration = profile.registrationNumber;
+    if (reverify) _status = 'pending';
+    return ProfileEditResult(verificationStatus: reverify ? 'pending' : _status, reverify: reverify);
   }
 }
 

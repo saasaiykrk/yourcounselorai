@@ -388,30 +388,41 @@ function clinicianCard(c) {
       el("button", { type: "button", class: "btn danger", text: "Reject…", onclick: () => decide(c, "rejected") })));
   } else if (status === "verified") {
     card.append(el("div", { class: "actions" },
-      el("button", { type: "button", class: "btn ghost", text: "Consults ›", onclick: () => openConsults(c) })));
+      el("button", { type: "button", class: "btn ghost", text: "Consults ›", onclick: () => openConsults(c) }),
+      el("button", { type: "button", class: "btn ghost", text: "Change level…", onclick: () => decide(c, "verified", true) })));
   }
   return card;
 }
 
-function decide(c, decision) {
+// Approve, reject, or (changeLevel) set a verified clinician's level again. All three go through
+// the same audited PATCH; a level change needs a different level and a reason.
+function decide(c, decision, changeLevel = false) {
   const dlg = $("decide");
-  $("decide-title").textContent = decision === "verified" ? "Approve registration" : "Reject registration";
+  $("decide-title").textContent = changeLevel ? "Change level · now " + c.level
+    : decision === "verified" ? "Approve registration" : "Reject registration";
   $("decide-who").replaceChildren(el("b", { text: c.full_name || c.email || "" }),
     el("span", { text: [c.full_name ? c.email : null, ROLE[c.role] || c.role, registration(c)].filter(Boolean).join(" · ") }));
   $("decide-level-row").hidden = decision !== "verified";
-  const level = c.role === "counsellor_trainee" ? "L1" : c.role === "psychiatrist" ? "L3" : "L2";
+  const level = changeLevel && c.level ? c.level
+    : c.role === "counsellor_trainee" ? "L1" : c.role === "psychiatrist" ? "L3" : "L2";
   for (const r of document.querySelectorAll("input[name='decide-level']")) r.checked = r.value === level;
   $("decide-note").value = "";
+  $("decide-note").placeholder = changeLevel ? "e.g. Now a consultant psychiatrist, NMC register" : "e.g. RCI register, 2026-10-03";
+  $("decide-note-label").textContent = changeLevel ? "Why the level changes (required)" : "How you checked (required)";
   $("decide-error").textContent = "";
-  $("decide-ok").textContent = decision === "verified" ? "Approve" : "Reject";
+  $("decide-ok").textContent = changeLevel ? "Change level" : decision === "verified" ? "Approve" : "Reject";
   $("decide-ok").className = decision === "verified" ? "btn primary" : "btn danger solid";
 
   $("decide-cancel").onclick = () => dlg.close();
   $("decide-form").onsubmit = (e) => {
     e.preventDefault();
     const note = $("decide-note").value.trim();
-    if (note.length < 3) { $("decide-error").textContent = "Say how you checked the registration."; return; }
     const chosen = document.querySelector("input[name='decide-level']:checked");
+    if (changeLevel && chosen && chosen.value === c.level) { $("decide-error").textContent = "Choose a different level."; return; }
+    if (note.length < 3) {
+      $("decide-error").textContent = changeLevel ? "Say why the level changes." : "Say how you checked the registration.";
+      return;
+    }
     busy($("decide-ok"), async () => {
       try {
         await api("PATCH", "/v1/admin/clinicians/" + encodeURIComponent(c.id), {
@@ -420,7 +431,9 @@ function decide(c, decision) {
           evidence_note: note,
         });
         dlg.close();
-        toast(decision === "verified" ? "Approved " + (c.full_name || c.email) : "Rejected " + (c.full_name || c.email));
+        const who = c.full_name || c.email;
+        toast(changeLevel ? "Level changed to " + chosen.value + " for " + who
+          : decision === "verified" ? "Approved " + who : "Rejected " + who);
         loadClinicians();
         loadCounts();
       } catch (err) {
