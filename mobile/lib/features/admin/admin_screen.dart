@@ -13,6 +13,7 @@ import '../../core/security/screen_protection.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
+import '../consult/report_pdf_action.dart';
 import '../history/history_screen.dart';
 
 /// Admin area: approve or reject registrations, and triage "Report a problem"
@@ -1512,6 +1513,12 @@ class _AdminConsultScreenState extends ConsumerState<AdminConsultScreen> {
             final d = snap.data!;
             return ConsultTurnsView(
               detail: d,
+              onDownload: (t) => downloadReportPdf(
+                context,
+                ref,
+                replyFromTurn(t, d.id),
+                record: () => ref.read(adminRepositoryProvider).recordPdfDownload(d.id, t.id),
+              ),
               header: Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: Column(

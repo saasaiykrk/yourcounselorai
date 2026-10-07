@@ -101,15 +101,16 @@ class DevHistoryStore:
         for mode, text, hours in turns:
             self._convs[cid]["turns"].append({
                 "id": str(uuid.uuid4()), "created_at": _ago(hours), "requested_mode": mode, "level": "L2",
-                "input_deid": text, "status": "delivered",
+                "skill_version": "dev", "input_deid": text, "status": "delivered",
                 "output_shown": "### 1. Case History & MSE Audit\n(sample reply for local testing)"})
 
     def record(self, owner: str, conv_id: str, mode: str, level: str, text: str, shown: str, status: str,
-               turn_id: str | None = None) -> None:
+               turn_id: str | None = None, skill_version: str = "dev") -> None:
         conv = self._convs.setdefault(conv_id, {"id": conv_id, "clinician_id": owner, "title": None,
                                                 "hidden_at": None, "created_at": _ago(0), "turns": []})
         conv["turns"].append({"id": turn_id or str(uuid.uuid4()), "created_at": _ago(0), "requested_mode": mode,
-                              "level": level, "input_deid": text, "output_shown": shown, "status": status})
+                              "level": level, "skill_version": skill_version, "input_deid": text,
+                              "output_shown": shown, "status": status})
 
     def _summary(self, c: dict) -> dict:
         t = c["turns"]

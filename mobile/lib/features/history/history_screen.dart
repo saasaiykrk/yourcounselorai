@@ -360,10 +360,13 @@ class _HistoryConsultScreenState extends ConsumerState<HistoryConsultScreen> {
 
 /// The turns of a consult: each case as sent, then the reply as shown.
 class ConsultTurnsView extends StatelessWidget {
-  const ConsultTurnsView({super.key, required this.detail, this.header});
+  const ConsultTurnsView({super.key, required this.detail, this.header, this.onDownload});
 
   final ConsultDetail detail;
   final Widget? header;
+
+  /// When set, each delivered reply gets a "Download PDF" button (admin view).
+  final void Function(ConsultTurn turn)? onDownload;
 
   @override
   Widget build(BuildContext context) {
@@ -384,9 +387,20 @@ class ConsultTurnsView extends StatelessWidget {
             child: SelectableText(t.input, style: AppText.small),
           ),
           const SizedBox(height: 12),
-          if (t.delivered)
-            ReplyMarkdown(t.reply)
-          else
+          if (t.delivered) ...[
+            ReplyMarkdown(t.reply),
+            if (onDownload != null) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => onDownload!(t),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Download PDF'),
+                ),
+              ),
+            ],
+          ] else
             const NoticeBanner(
               icon: Icons.shield_outlined,
               text: 'This reply was held back by the safety check, so there is nothing to show.',

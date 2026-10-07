@@ -289,6 +289,9 @@ abstract interface class AdminRepository {
 
   Future<ConsultDetail> consult(String id);
 
+  /// Writes an admin's PDF download of one delivered reply to the audit log.
+  Future<void> recordPdfDownload(String consultId, String turnId);
+
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note});
 
   Future<List<AdminIncident>> incidents(String? status);
@@ -311,6 +314,9 @@ class ApiAdminRepository implements AdminRepository {
 
   @override
   Future<ConsultDetail> consult(String id) => _api.adminConsult(id);
+
+  @override
+  Future<void> recordPdfDownload(String consultId, String turnId) => _api.adminRecordPdfDownload(consultId, turnId);
 
   @override
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note}) =>
@@ -388,6 +394,12 @@ class PreviewAdminRepository implements AdminRepository {
 
   @override
   Future<ConsultDetail> consult(String id) => _history.get(id);
+
+  /// (consult id, turn id) of each PDF download, in order.
+  final pdfDownloads = <(String, String)>[];
+
+  @override
+  Future<void> recordPdfDownload(String consultId, String turnId) async => pdfDownloads.add((consultId, turnId));
 
   @override
   Future<void> decide(String clinicianId, {required bool approve, String? level, required String note}) async {
@@ -478,6 +490,9 @@ class PreviewHistoryRepository implements HistoryRepository {
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
       turns: [
         ConsultTurn(
+          id: 'h1-1',
+          level: 'L2',
+          skillVersion: 'preview',
           input: '34F, low mood for 3 months, poor sleep, lost interest in work. Full plan please.',
           reply: kPreviewReplyMarkdown,
           mode: 'A',
@@ -491,6 +506,9 @@ class PreviewHistoryRepository implements HistoryRepository {
       createdAt: DateTime.now().subtract(const Duration(hours: 6)),
       turns: [
         ConsultTurn(
+          id: 'h2-1',
+          level: 'L2',
+          skillVersion: 'preview',
           input: '19M, panic attacks before exams, no medical history. Quick review.',
           reply: kPreviewReplyMarkdown,
           mode: 'B',

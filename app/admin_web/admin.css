@@ -173,6 +173,50 @@ legend { font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 
 .radio-card b { color: var(--royal); margin-right: 4px; }
 .row { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
+/* --- a report, formatted (admin.js renderMarkdown) --- */
+.reply-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; }
+.reply-head h3 { margin: 0; }
+.reply-view { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 12px; max-height: 560px; overflow: auto; }
+.md { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.md h2, .md h3, .md h4, .md h5, .md h6 { text-transform: none; letter-spacing: 0; color: var(--deep); margin: 16px 0 6px; }
+.md .md-h1, .md .md-h2 { font-size: 18px; } .md .md-h3 { font-size: 16px; } .md .md-h4, .md .md-h5, .md .md-h6 { font-size: 14.5px; color: var(--royal); }
+.md p { margin: 0 0 8px; } .md ul, .md ol { margin: 0 0 8px; padding-left: 22px; } .md li { margin: 2px 0; } .md li.nested { margin-left: 18px; }
+.md em { color: var(--muted); } .md hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+.md blockquote { margin: 0 0 8px; padding: 8px 12px; background: var(--lav); border-left: 3px solid var(--royal); border-radius: 0 8px 8px 0; }
+.md-table { overflow-x: auto; margin: 4px 0 10px; }
+.md table { border-collapse: collapse; width: 100%; font-size: 13px; background: var(--surface); }
+.md th, .md td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+.md th { background: var(--lav); }
+.pdf-rules { margin: 10px 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
+#print-area { display: none; }
+
+/* --- print: only the report being saved as PDF --- */
+@page { size: A4; margin: 16mm 15mm 18mm;
+  @bottom-left { content: "YourCounselor · Confidential · De-identified · For professional use only"; font: 8pt "Nunito Sans", sans-serif; color: #5A5068; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8pt "Nunito Sans", sans-serif; color: #5A5068; } }
+@media print {
+  body { background: #fff; }
+  body > *:not(#print-area) { display: none !important; }
+  #print-area { display: block; color: #1E1030; font-size: 10pt; }
+  #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .pr-top { display: flex; align-items: center; gap: 10px; }
+  .pr-wordmark { font: 800 16pt var(--head); } .pr-wordmark .your { color: #E83C7D; } .pr-wordmark .counselor { color: #3F0079; }
+  .pr-conf { margin-left: auto; font: 800 9pt var(--head); letter-spacing: .08em; color: #8E2A2A; }
+  #print-area h1 { font-size: 22pt; margin: 10px 0 2px; }
+  .pr-meta { font-size: 8.5pt; color: #5A5068; margin: 0 0 10px; }
+  .pr-notice { background: #FAEBD8; border: 1px solid #C98A48; border-radius: 6px; padding: 8px 12px; color: #7F440A; font-size: 8.5pt; break-inside: avoid; }
+  .pr-notice ul { margin: 4px 0 6px; padding-left: 16px; }
+  .pr-crisis { margin: 0; padding: 5px 8px; background: #F7E2DF; color: #8E2A2A; font-weight: 700; border-radius: 4px; }
+  #print-area .md { font-size: 10pt; }
+  #print-area .md h2, #print-area .md h3, #print-area .md h4 { break-after: avoid; }
+  #print-area .md tr { break-inside: avoid; }
+  #print-area .md-table { overflow: visible; }
+  #print-area .md table { font-size: 8.5pt; }
+  #print-area .md thead { display: table-header-group; }
+  .pr-disclaimer { margin-top: 12px; padding: 10px 12px; background: #F1E7FB; color: #3F0079; font-weight: 700; border-radius: 6px; font-size: 9pt; break-inside: avoid; }
+  .pr-footer { margin-top: 10px; font-size: 7.5pt; color: #5A5068; }
+}
+
 /* --- toast --- */
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 12px; font-weight: 700; box-shadow: 0 10px 30px rgba(30, 16, 48, .3); z-index: 10; max-width: calc(100vw - 32px); }
 

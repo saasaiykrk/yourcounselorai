@@ -311,20 +311,29 @@ class ConsultTurn {
     required this.mode,
     required this.status,
     this.createdAt,
+    this.id = '',
+    this.level,
+    this.skillVersion = '',
   });
 
   factory ConsultTurn.fromJson(Map<String, dynamic> j) => ConsultTurn(
+    id: '${j['id'] ?? ''}',
     input: j['input_deid'] as String? ?? '',
     reply: j['output_shown'] as String? ?? '',
     mode: j['requested_mode'] as String? ?? '',
     status: j['status'] as String? ?? '',
+    level: j['level'] as String?,
+    skillVersion: j['skill_version'] as String? ?? '',
     createdAt: _date(j['created_at']),
   );
 
+  final String id;
   final String input;
   final String reply;
   final String mode;
   final String status;
+  final String? level;
+  final String skillVersion;
   final DateTime? createdAt;
 
   bool get delivered => status == 'delivered';

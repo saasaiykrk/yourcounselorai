@@ -184,6 +184,29 @@
     </form>
   </dialog>
 
+  <!-- Download a report as PDF -->
+  <dialog id="pdf-dialog">
+    <form method="dialog" id="pdf-form">
+      <h2>Download this report as a PDF?</h2>
+      <p class="muted small">Your browser's print screen opens: choose <b>Save as PDF</b>. The file leaves this page's
+        protection once saved. It contains de-identified information only. The download is recorded in the audit log.</p>
+      <ul class="pdf-rules">
+        <li>Save it only to a protected device or folder.</li>
+        <li>Do not add client names or contact details to it.</li>
+        <li>Do not send it by ordinary email or messaging apps.</li>
+        <li>Delete it when you no longer need it.</li>
+      </ul>
+      <p class="muted small">The PDF starts with these precautions and the crisis numbers, and ends with the disclaimer.</p>
+      <div class="row">
+        <button type="button" class="btn ghost" id="pdf-cancel">Cancel</button>
+        <button type="submit" class="btn primary">Download PDF</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Filled only while printing a report; hidden on screen -->
+  <div id="print-area" aria-hidden="true"></div>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>
