@@ -220,7 +220,7 @@ def get_conversation(conv_id, cid=None) -> dict | None:
         if cid is not None and (str(conv["clinician_id"]) != str(cid) or conv["hidden_at"] is not None):
             return None
         conv["turns"] = c.execute(
-            """select id, created_at, requested_mode, level, input_deid, output_shown, status
+            """select id, created_at, requested_mode, level, skill_version, input_deid, output_shown, status
                from turns where conversation_id = %s order by created_at""", (str(conv_id),)).fetchall()
         return conv
 

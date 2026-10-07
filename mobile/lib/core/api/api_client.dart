@@ -118,6 +118,10 @@ class ApiClient {
   Future<ConsultDetail> adminConsult(String id) async =>
       ConsultDetail.fromJson(await _send('GET', '/v1/admin/consults/${Uri.encodeComponent(id)}'));
 
+  /// Records an admin's PDF download of one delivered reply (audit log) before the phone builds it.
+  Future<void> adminRecordPdfDownload(String consultId, String turnId) =>
+      _send('POST', '/v1/admin/consults/${Uri.encodeComponent(consultId)}/pdf', body: {'turn_id': turnId});
+
   Future<List<AdminClinician>> adminClinicians(String status) async {
     final data = await _send('GET', '/v1/admin/clinicians', query: {'status': status});
     return [

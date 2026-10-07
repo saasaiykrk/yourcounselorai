@@ -209,6 +209,7 @@ const ICONS = {
   flag: "M14.4 6 14 4H5v17h2v-7h5.6l.4 2h7V6z",
   refresh: "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
   search: "M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z",
+  download: "M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z",
   shield: "M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z",
   copy: "M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z",
   inbox: "M19 3H4.99C3.88 3 3 3.9 3 5l-.01 14c0 1.1.89 2 2 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z",
@@ -472,6 +473,135 @@ function markSelected(list, item) {
   item?.classList.add("selected");
 }
 
+// --- a report as formatted text --------------------------------------------
+// The reply's markdown, built as DOM nodes with textContent only (never HTML), so
+// nothing in a report can run or style the page. Links show their address as text.
+const INLINE_RE = /\*\*(.+?)\*\*|__(.+?)__|\*([^*\s][^*]*?)\*|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)/g;
+
+function inline(text) {
+  const out = [];
+  let at = 0;
+  for (const m of text.matchAll(INLINE_RE)) {
+    if (m.index > at) out.push(text.slice(at, m.index));
+    if (m[1] != null || m[2] != null) out.push(el("strong", { text: m[1] ?? m[2] }));
+    else if (m[3] != null) out.push(el("em", { text: m[3] }));
+    else if (m[4] != null) out.push(m[4]);
+    else out.push(`${m[5]} (${m[6]})`);
+    at = m.index + m[0].length;
+  }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+}
+
+function renderMarkdown(md) {
+  const root = el("div", { class: "md" });
+  let para = [], quote = [], rows = [], list = null;
+  const flush = () => {
+    if (para.length) root.append(el("p", {}, ...inline(para.join(" "))));
+    if (quote.length) root.append(el("blockquote", {}, ...inline(quote.join(" "))));
+    if (rows.length) {
+      const [head, ...body] = rows;
+      root.append(el("div", { class: "md-table" }, el("table", {},
+        el("thead", {}, el("tr", {}, ...head.map((c) => el("th", {}, ...inline(c))))),
+        el("tbody", {}, ...body.map((r) => el("tr", {}, ...head.map((_, i) => el("td", {}, ...inline(r[i] ?? "")))))))));
+    }
+    para = []; quote = []; rows = []; list = null;
+  };
+  for (const raw of md.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
+    const line = raw.trimEnd(), t = line.trim();
+    let m;
+    if (!t) { flush(); continue; }
+    if (t.startsWith("|")) {
+      if (para.length || quote.length || list) { const keep = rows; rows = []; flush(); rows = keep; }
+      if (/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/.test(t)) continue;
+      const cells = t.split("|").map((c) => c.trim());
+      if (cells[0] === "") cells.shift();
+      if (cells.length && cells[cells.length - 1] === "") cells.pop();
+      rows.push(cells);
+      continue;
+    }
+    if (rows.length) flush();
+    if ((m = t.match(/^(#{1,6})\s+(.*?)\s*#*$/))) {
+      flush();
+      root.append(el("h" + Math.min(6, Math.max(2, m[1].length + 1)), { class: "md-h" + m[1].length }, ...inline(m[2])));
+      continue;
+    }
+    if (/^([-*_])(\s*\1){2,}$/.test(t)) { flush(); root.append(el("hr")); continue; }
+    if ((m = line.match(/^\s*>\s?(.*)$/))) { if (para.length || list) flush(); if (m[1].trim()) quote.push(m[1].trim()); continue; }
+    if ((m = line.match(/^(\s*)([-*+]|\d{1,3}[.)])\s+(.*)$/))) {
+      const ordered = /^\d/.test(m[2]);
+      if (para.length || quote.length) flush();
+      if (!list || list.ordered !== ordered) { list = { ordered, node: el(ordered ? "ol" : "ul") }; root.append(list.node); }
+      const li = el("li", {}, ...inline(m[3]));
+      if (m[1].length >= 2) li.className = "nested";
+      list.node.append(li);
+      continue;
+    }
+    if (quote.length) flush();
+    if (list && raw.startsWith(" ") && !para.length) { list.node.lastChild.append(" ", ...inline(t)); continue; }
+    list = null;
+    para.push(t);
+  }
+  flush();
+  return root;
+}
+
+// --- download a report as PDF ----------------------------------------------
+// The browser's own "Save as PDF": the page is laid out for print with the same
+// safety notice as the app's PDF (from /v1/admin/report-notice). The download is
+// recorded in the audit log first; nothing else is sent anywhere.
+let reportNotice = null;
+
+function pdfConfirm() {
+  return new Promise((resolve) => {
+    const dlg = $("pdf-dialog");
+    $("pdf-cancel").onclick = () => { dlg.close(); resolve(false); };
+    $("pdf-form").onsubmit = (e) => { e.preventDefault(); dlg.close(); resolve(true); };
+    dlg.oncancel = () => resolve(false);
+    dlg.showModal();
+  });
+}
+
+async function downloadPdf(convId, turn, button) {
+  if (!(await pdfConfirm())) return;
+  await busy(button, async () => {
+    try {
+      await api("POST", "/v1/admin/consults/" + encodeURIComponent(convId) + "/pdf", { turn_id: turn.id });
+      reportNotice = reportNotice || await api("GET", "/v1/admin/report-notice");
+    } catch (e) {
+      if (e.message !== "signed-out") toast("Couldn't prepare the PDF: " + e.message);
+      return;
+    }
+    const n = reportNotice;
+    const report = turn.requested_mode === "R";
+    const body = turn.output_shown.split("\n").filter((l) => !l.includes(n.disclaimer)).join("\n");
+    const meta = [report ? "Guided consultation" : "Direct consult", "Written " + when(turn.created_at),
+                  turn.level ? "Written for " + turn.level : null,
+                  turn.skill_version ? "Knowledge base " + turn.skill_version : null,
+                  "Passed the app's safety checks", "Downloaded by an admin " + when(new Date().toISOString())]
+      .filter(Boolean).join(" · ");
+    const area = $("print-area");
+    put(area,
+      el("div", { class: "pr-top" }, el("img", { src: "/admin/logo.png", alt: "", width: "44", height: "44" }),
+        el("span", { class: "pr-wordmark" }, el("span", { class: "your", text: "Your" }), " ",
+          el("span", { class: "counselor", text: "Counselor" })),
+        el("span", { class: "pr-conf", text: "CONFIDENTIAL" })),
+      el("h1", { text: report ? "Consultation report" : "Clinical work-up" }),
+      el("p", { class: "pr-meta", text: meta }),
+      el("div", { class: "pr-notice" },
+        el("b", { text: "Safety precautions: read before use" }),
+        el("ul", {}, ...n.precautions.map((p) => el("li", { text: p }))),
+        el("p", { class: "pr-crisis", text: n.crisis_line })),
+      renderMarkdown(body),
+      el("div", { class: "pr-disclaimer", text: n.disclaimer }),
+      el("div", { class: "pr-footer", text: n.footer }));
+    document.title = "YourCounselor-report-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    const done = () => { area.replaceChildren(); document.title = "Your Counselor Admin"; };
+    window.addEventListener("afterprint", done, { once: true });
+    window.print();
+  });
+}
+
 async function openConsult(id) {
   const box = $("consult-detail");
   box.hidden = false;
@@ -485,8 +615,15 @@ async function openConsult(id) {
       parts.push(el("h3", { text: (i === 0 ? "Case" : "Follow-up") + " · " + (MODE[t.requested_mode] || t.requested_mode) +
         " · " + t.level + " · " + when(t.created_at) }));
       parts.push(el("pre", { text: t.input_deid }));
-      parts.push(el("h3", { text: t.status === "delivered" ? "Reply as shown" : "Reply (held back by the safety check)" }));
-      parts.push(el("pre", { text: t.output_shown }));
+      if (t.status === "delivered") {
+        const dl = el("button", { type: "button", class: "btn ghost small", onclick: (e) => downloadPdf(d.id, t, e.currentTarget) },
+          icon("download"), "Download PDF");
+        parts.push(el("div", { class: "reply-head" }, el("h3", { text: "Reply as shown" }), dl));
+        parts.push(el("div", { class: "reply-view" }, renderMarkdown(t.output_shown)));
+      } else {
+        parts.push(el("h3", { text: "Reply (held back by the safety check)" }));
+        parts.push(el("pre", { text: t.output_shown }));
+      }
     });
     box.replaceChildren(...parts);
   } catch (e) {
@@ -574,7 +711,10 @@ async function openIncident(id) {
       i.note && i.source !== "inspector" ? el("pre", { text: i.note }) : null,
       el("h3", { text: "Safety checks" }), ...checksView(i.inspector_reports),
       el("h3", { text: "Case as sent (de-identified)" }), el("pre", { text: i.input_deid || "" }),
-      el("h3", { text: "Reply as shown to the clinician" }), el("pre", { text: i.output_shown || "" }),
+      el("h3", { text: "Reply as shown to the clinician" }),
+      i.turn_status === "delivered"
+        ? el("div", { class: "reply-view" }, renderMarkdown(i.output_shown || ""))
+        : el("pre", { text: i.output_shown || "" }),
       ...(i.turn_status === "blocked" || i.attempts > 1 ? heldBackView(id) : []),
       el("div", { class: "triage" },
         el("h3", { text: "Your review" }), seg,
