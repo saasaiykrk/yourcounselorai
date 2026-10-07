@@ -16,7 +16,7 @@ import 'check_sheet.dart';
 import 'consult_controller.dart';
 import 'reply_markdown.dart';
 import 'reply_sections.dart';
-import 'report_pdf.dart';
+import 'report_pdf_action.dart';
 import 'report_sheet.dart';
 
 /// Number of leading sections shown open as cards; the rest fold into a list.
@@ -56,69 +56,14 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
   bool _exporting = false;
 
   /// Builds the PDF on the phone (no AI, no upload) after the clinician confirms the precautions.
-  Future<void> _downloadPdf(ConsultReply reply) async {
-    final go = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Download this report as a PDF?'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'The file leaves the app\'s protection once you save or share it. It contains '
-                'de-identified information only.',
-                style: AppText.smallMuted,
-              ),
-              const SizedBox(height: 10),
-              for (final p in const [
-                'Save it only to a protected device or folder.',
-                'Do not add client names or contact details to it.',
-                'Do not send it by ordinary email or messaging apps.',
-                'Delete it when you no longer need it.',
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 2, right: 8),
-                        child: Icon(Icons.shield_outlined, size: 16, color: AppColors.royalPurple),
-                      ),
-                      Expanded(child: Text(p, style: const TextStyle(fontSize: 14.5, height: 1.4))),
-                    ],
-                  ),
-                ),
-              const SizedBox(height: 4),
-              const Text(
-                'The PDF starts with these precautions and the crisis numbers, and ends with the disclaimer.',
-                style: AppText.caption,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Download PDF')),
-        ],
-      ),
-    );
-    if (go != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    final export = ref.read(reportPdfExporterProvider);
-    setState(() => _exporting = true);
-    try {
-      final now = DateTime.now();
-      final bytes = await buildReportPdf(reply, generatedAt: now);
-      await export(bytes, reportPdfFileName(now));
-    } catch (_) {
-      messenger.showSnackBar(const SnackBar(content: Text("Couldn't create the PDF. Please try again.")));
-    } finally {
-      if (mounted) setState(() => _exporting = false);
-    }
-  }
+  Future<void> _downloadPdf(ConsultReply reply) => downloadReportPdf(
+    context,
+    ref,
+    reply,
+    onBusy: (busy) {
+      if (mounted) setState(() => _exporting = busy);
+    },
+  );
 
   Future<void> _sendFollowUp() async {
     if (_followUp.text.trim().length < AppConfig.minCaseLength) return;

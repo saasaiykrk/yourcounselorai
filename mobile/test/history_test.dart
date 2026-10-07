@@ -13,6 +13,8 @@ import 'package:your_counselor/core/api/api_models.dart';
 import 'package:your_counselor/core/providers.dart';
 import 'package:your_counselor/core/repositories.dart';
 import 'package:your_counselor/main.dart';
+import 'package:your_counselor/features/consult/report_pdf.dart';
+import 'package:your_counselor/features/history/history_screen.dart';
 import 'package:your_counselor/router.dart';
 
 class _Adapter implements HttpClientAdapter {
@@ -248,6 +250,56 @@ void main() {
       expect(find.textContaining('34F, low mood'), findsOneWidget);
       expect(find.textContaining('recorded in the audit log'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('an admin can download a report as PDF; the download is recorded first', (tester) async {
+      final admin = PreviewAdminRepository();
+      final exported = <String>[];
+      final router = buildRouter(initialLocation: '/admin');
+      tester.view.physicalSize = const Size(390, 844) * 3;
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            profileRepositoryProvider.overrideWithValue(_Profile()),
+            adminRepositoryProvider.overrideWithValue(admin),
+            reportPdfExporterProvider.overrideWithValue((bytes, name) async => exported.add(name)),
+          ],
+          child: YourCounselorApp(router: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      router.push('/admin/consult', extra: 'h1');
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Download PDF'),
+        300,
+        scrollable: find.descendant(of: find.byType(ConsultTurnsView), matching: find.byType(Scrollable)).first,
+      );
+      await tester.ensureVisible(find.text('Download PDF'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Download PDF'));
+      await tester.pumpAndSettle();
+      expect(find.text('Download this report as a PDF?'), findsOneWidget);
+      expect(find.textContaining('recorded in the audit log'), findsWidgets);
+      await tester.tap(find.widgetWithText(FilledButton, 'Download PDF'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
+      await tester.pumpAndSettle();
+      expect(admin.pdfDownloads, [('h1', 'h1-1')]);
+      expect(exported.single, startsWith('YourCounselor-report-'));
+    });
+
+    test('consult turns read their id, level and knowledge-base version', () {
+      final t = ConsultTurn.fromJson({
+        'id': 't1',
+        'level': 'L1',
+        'skill_version': '2.3.0',
+        'requested_mode': 'R',
+        'status': 'delivered',
+        'output_shown': 'x',
+      });
+      expect((t.id, t.level, t.skillVersion, t.mode), ('t1', 'L1', '2.3.0', 'R'));
     });
   });
 }

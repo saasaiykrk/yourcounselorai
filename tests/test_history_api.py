@@ -98,14 +98,40 @@ class HistoryApiTests(unittest.TestCase):
         self.assertEqual(self.ids()[0], conv)
         self.assertEqual(self.ids(q="grief"), [conv])
 
+    def test_admin_consult_turns_carry_the_knowledge_base_version(self):
+        turns = self.client.get(f"/v1/admin/consults/{MINE_A}", headers=ME).json()["turns"]
+        self.assertTrue(all(t["skill_version"] for t in turns))
+        self.assertTrue(all(t["id"] for t in turns))
+
+    def test_admin_pdf_download_is_recorded_for_delivered_reports_only(self):
+        turn = self.client.get(f"/v1/admin/consults/{MINE_A}", headers=ME).json()["turns"][0]
+        r = self.client.post(f"/v1/admin/consults/{MINE_A}/pdf", headers=ME, json={"turn_id": turn["id"]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json(), {"ok": True})
+        r = self.client.post(f"/v1/admin/consults/{MINE_A}/pdf", headers=ME,
+                             json={"turn_id": "99999999-9999-4999-8999-999999999999"})
+        self.assertEqual(r.status_code, 404)
+        main._dev_history._convs[MINE_A]["turns"][0]["status"] = "blocked"
+        r = self.client.post(f"/v1/admin/consults/{MINE_A}/pdf", headers=ME, json={"turn_id": turn["id"]})
+        self.assertEqual(r.status_code, 409)
+
+    def test_report_notice_for_the_web_pdf(self):
+        n = self.client.get("/v1/admin/report-notice", headers=ME).json()
+        self.assertEqual(set(n), {"precautions", "crisis_line", "disclaimer", "footer"})
+        self.assertIn("112", n["crisis_line"])
+
     def test_admin_consult_views_refuse_non_admins(self):
         main.app.dependency_overrides[main.current_user] = lambda: {"id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}
         original = main.db.get_clinician
         main.db.get_clinician = lambda cid: {"id": cid, "is_admin": False, "level": "L2",
                                              "verification_status": "verified", "consent_version": "x"}
         try:
-            for path in (f"/v1/admin/clinicians/{OTHER_CLINICIAN}/consults", f"/v1/admin/consults/{OTHERS}"):
+            for path in (f"/v1/admin/clinicians/{OTHER_CLINICIAN}/consults", f"/v1/admin/consults/{OTHERS}",
+                         "/v1/admin/report-notice"):
                 self.assertEqual(self.client.get(path, headers={"Authorization": "Bearer x"}).status_code, 403, path)
+            r = self.client.post(f"/v1/admin/consults/{OTHERS}/pdf", headers={"Authorization": "Bearer x"},
+                                 json={"turn_id": "99999999-9999-4999-8999-999999999999"})
+            self.assertEqual(r.status_code, 403)
         finally:
             main.db.get_clinician = original
 
