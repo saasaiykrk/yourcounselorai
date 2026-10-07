@@ -32,6 +32,21 @@ const kCrisisLines = <CrisisLine>[
   CrisisLine('Women Helpline', '181'),
 ];
 
+/// Printed at the top of every downloaded report (PDF), before the clinical content.
+/// Handling rules for the file itself; the clinical disclaimer [kDisclaimer] ends the document.
+const kPdfPrecautions = <String>[
+  'For the treating clinician\'s professional use only. It is not a diagnosis, a prescription or a '
+      'medico-legal record, and it does not replace your own assessment and clinical judgement.',
+  'It contains de-identified information only. Do not add names, contact details or any other '
+      'identifier to this file or to anything you attach it to.',
+  'Keep it secure: store it only on a protected device or folder, do not send it by ordinary email '
+      'or messaging apps, and delete it when you no longer need it.',
+  'Verify every suggestion before use: diagnostic codes, tools and timelines are to be confirmed by you. '
+      'Do not share it with the client or others without your clinical judgement.',
+  'If there is any immediate risk to the client, follow your local crisis pathway; do not wait for or '
+      'rely on this document.',
+];
+
 /// The register asks app screens to state when the numbers were last checked.
 const kCrisisVerifiedNote = 'Numbers verified to 24 Sep 2026; confirm your local pathway.';
 
