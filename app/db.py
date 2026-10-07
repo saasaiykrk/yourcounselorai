@@ -39,6 +39,26 @@ def upsert_clinician_profile(cid, p: dict) -> None:
              p.get("registration_number"), p["consent_version"]))
 
 
+def update_clinician_profile(cid, p: dict) -> dict | None:
+    """The clinician's own edit, in one transaction. A changed role or registration resets the
+    verification and the level, so an admin checks the register again. None if not registered."""
+    with _conn() as c, c.transaction():
+        old = c.execute("select role, registration_body, registration_number from clinicians where id=%s for update",
+                        (str(cid),)).fetchone()
+        if old is None:
+            return None
+        reverify = any((old[k] or None) != (p[k] or None) for k in ("role", "registration_body", "registration_number"))
+        row = c.execute(
+            """update clinicians set full_name=%s, gender=%s, age_at_registration=%s, role=%s, registration_body=%s,
+                 registration_number=%s,
+                 verification_status = case when %s then 'pending' else verification_status end,
+                 level = case when %s then null else level end
+               where id=%s returning verification_status""",
+            (p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"], p["registration_number"],
+             reverify, reverify, str(cid))).fetchone()
+        return {"verification_status": row["verification_status"], "reverify": reverify}
+
+
 def set_verification(cid, level, status, note, admin_id) -> bool:
     with _conn() as c:
         row = c.execute("""update clinicians set level=%s, verification_status=%s, verification_note=%s,

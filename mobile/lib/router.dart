@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/content/legal_content.dart';
 import 'features/account/account_screen.dart';
+import 'features/account/edit_profile_screen.dart';
 import 'features/account/info_screen.dart';
 import 'features/admin/admin_screen.dart';
 import 'features/consult/consult_screen.dart';
@@ -41,6 +42,7 @@ GoRouter buildRouter({String initialLocation = '/'}) {
           ),
         ],
       ),
+      GoRoute(path: '/account/profile', builder: (_, _) => const EditProfileScreen()),
       GoRoute(path: '/drafting', builder: (_, _) => const DraftingScreen()),
       GoRoute(path: '/consultation', builder: (_, _) => const ConsultationScreen()),
       GoRoute(path: '/reply', builder: (_, _) => const ReplyScreen()),

@@ -55,6 +55,17 @@ class AdminApiTests(unittest.TestCase):
         rejected = self.client.get("/v1/admin/clinicians?status=rejected", headers=ADMIN).json()["clinicians"]
         self.assertEqual(rejected[0]["level"], None)
 
+    def test_admin_can_change_the_level_of_a_verified_clinician(self):
+        self.client.patch(f"/v1/admin/clinicians/{PENDING_PSYCH}", headers=ADMIN,
+                          json={"verification_status": "verified", "level": "L2", "evidence_note": "RCI register"})
+        r = self.client.patch(f"/v1/admin/clinicians/{PENDING_PSYCH}", headers=ADMIN,
+                              json={"verification_status": "verified", "level": "L3",
+                                    "evidence_note": "Level change: now a consultant psychiatrist"})
+        self.assertEqual(r.status_code, 200, r.text)
+        row = next(c for c in self.client.get("/v1/admin/clinicians?status=verified", headers=ADMIN).json()["clinicians"]
+                   if c["id"] == PENDING_PSYCH)
+        self.assertEqual((row["level"], row["verification_note"]), ("L3", "Level change: now a consultant psychiatrist"))
+
     def test_unknown_clinician_is_404_and_admins_cannot_verify_themselves(self):
         r = self.client.patch("/v1/admin/clinicians/99999999-9999-4999-8999-999999999999", headers=ADMIN,
                               json={"verification_status": "rejected", "evidence_note": "n/a"})

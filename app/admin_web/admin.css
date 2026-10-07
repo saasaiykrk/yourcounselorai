@@ -79,7 +79,7 @@ input.code { font-size: 22px; letter-spacing: .4em; text-align: center; font-wei
 .count:empty { display: none; }
 .me { margin-top: auto; display: flex; align-items: center; gap: 8px; padding: 12px 6px 0; border-top: 1px solid var(--line); min-width: 0; }
 .who-email { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); }
-.main { padding: 28px 32px 56px; max-width: 1180px; width: 100%; }
+.main { padding: 28px 32px 56px; width: 100%; min-width: 0; }  /* fills the window: no width cap */
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .page-head p { max-width: 620px; }
 
@@ -177,6 +177,7 @@ legend { font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 
 .reply-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; }
 .reply-head h3 { margin: 0; }
 .reply-view { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 12px; max-height: 560px; overflow: auto; }
+.detail .reply-view { max-height: none; }  /* the detail pane scrolls as a whole */
 .md { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
 .md h2, .md h3, .md h4, .md h5, .md h6 { text-transform: none; letter-spacing: 0; color: var(--deep); margin: 16px 0 6px; }
 .md .md-h1, .md .md-h2 { font-size: 18px; } .md .md-h3 { font-size: 16px; } .md .md-h4, .md .md-h5, .md .md-h6 { font-size: 14.5px; color: var(--royal); }
@@ -219,6 +220,17 @@ legend { font-weight: 700; font-size: 13px; color: var(--muted); margin-bottom: 
 
 /* --- toast --- */
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 12px; font-weight: 700; box-shadow: 0 10px 30px rgba(30, 16, 48, .3); z-index: 10; max-width: calc(100vw - 32px); }
+
+/* --- laptops and wider: give the reading pane the extra width --- */
+@media (min-width: 1280px) {
+  .main { padding: 28px 40px 56px; }
+  .split { grid-template-columns: minmax(340px, 1fr) minmax(0, 2fr); gap: 20px; }
+  .two-col { gap: 18px; }
+}
+@media (min-width: 1680px) {
+  .split { grid-template-columns: minmax(380px, 1fr) minmax(0, 2.4fr); }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+}
 
 /* --- smaller screens: top bar + tabs instead of the sidebar --- */
 @media (max-width: 1060px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
