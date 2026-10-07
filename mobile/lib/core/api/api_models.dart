@@ -11,6 +11,9 @@ class Me {
     this.isAdmin = false,
     this.guidedConsultation = false,
     this.fullName,
+    this.gender,
+    this.age,
+    this.registrationNumber,
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -21,6 +24,9 @@ class Me {
     isAdmin: json['is_admin'] == true,
     guidedConsultation: (json['features'] as Map?)?['consultation'] == true,
     fullName: json['full_name'] as String?,
+    gender: json['gender'] as String?,
+    age: (json['age_at_registration'] as num?)?.toInt(),
+    registrationNumber: json['registration_number'] as String?,
   );
 
   /// none (no profile yet) · pending · verified · rejected
@@ -40,6 +46,11 @@ class Me {
 
   /// The clinician's own name, as given at registration.
   final String? fullName;
+
+  /// The clinician's own gender and age (Account → Edit profile).
+  final String? gender;
+  final int? age;
+  final String? registrationNumber;
 
   bool get needsProfile => verificationStatus == 'none';
   bool get isVerified => verificationStatus == 'verified' && level != null;
@@ -79,6 +90,49 @@ class ProfileSubmission {
     'registration_number': registrationNumber,
     'consent_version': consentVersion,
   };
+}
+
+/// `PATCH /v1/profile`: the clinician edits their own details. Never a level or status;
+/// a changed role or registration sends the account back for verification.
+class ProfileEdit {
+  const ProfileEdit({
+    required this.fullName,
+    required this.gender,
+    required this.age,
+    required this.role,
+    required this.registrationBody,
+    required this.registrationNumber,
+  });
+
+  final String fullName;
+  final String gender;
+  final int age;
+  final String role;
+  final String registrationBody;
+  final String? registrationNumber;
+
+  Map<String, dynamic> toJson() => {
+    'full_name': fullName,
+    'gender': gender,
+    'age': age,
+    'role': role,
+    'registration_body': registrationBody,
+    'registration_number': registrationNumber,
+  };
+}
+
+class ProfileEditResult {
+  const ProfileEditResult({required this.verificationStatus, required this.reverify});
+
+  factory ProfileEditResult.fromJson(Map<String, dynamic> j) => ProfileEditResult(
+    verificationStatus: j['verification_status'] as String? ?? 'pending',
+    reverify: j['reverify'] == true,
+  );
+
+  final String verificationStatus;
+
+  /// True when the role or registration changed and an admin must check it again.
+  final bool reverify;
 }
 
 /// `POST /v1/consult`. The text must already be cleaned on the phone.

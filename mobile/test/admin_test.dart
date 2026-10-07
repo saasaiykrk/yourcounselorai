@@ -58,6 +58,10 @@ class _Profile implements ProfileRepository {
 
   @override
   Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
 
 Future<void> _pump(WidgetTester tester, String location, {required bool admin, AdminRepository? repo}) async {
@@ -194,6 +198,35 @@ void main() {
 
       expect(find.text('Sample Psychologist Two'), findsNothing, reason: 'no longer waiting');
       expect((await repo.clinicians('verified')).single.level, 'L2');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('change the level of a verified clinician, with a reason', (tester) async {
+      final repo = PreviewAdminRepository();
+      final pending = await repo.clinicians('pending');
+      final psych = pending.firstWhere((c) => c.role == 'psychologist');
+      await repo.decide(psych.id, approve: true, level: 'L2', note: 'RCI register');
+      await _pump(tester, '/admin', admin: true, repo: repo);
+      await _openTab(tester, 'Registrations');
+      await tester.tap(find.text('Verified'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Change level'));
+      await tester.tap(find.text('Change level'));
+      await tester.pumpAndSettle();
+      expect(find.text('Change level · now L2'), findsOneWidget);
+      // The same level is not a change.
+      await tester.enterText(find.byType(TextField).last, 'Now a consultant psychiatrist');
+      await tester.tap(find.text('Change to L2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose a different level.'), findsOneWidget);
+
+      await tester.tap(find.text('L3'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Change to L3'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Level changed to L3'), findsOneWidget);
+      expect((await repo.clinicians('verified')).single.level, 'L3');
       expect(tester.takeException(), isNull);
     });
 

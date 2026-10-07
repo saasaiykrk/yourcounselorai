@@ -82,6 +82,10 @@ class _Profile implements ProfileRepository {
 
   @override
   Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
 
 /// The preview flow (three mandatory questions, then a sample report), recording every call.

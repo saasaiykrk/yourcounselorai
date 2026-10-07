@@ -7,6 +7,7 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   GET  /health    (same response; use this one on *.run.app)
   GET  /v1/me                         → profile, level, verification status
   POST /v1/profile                    → role + registration number at signup (status=pending)
+  PATCH /v1/profile                   → the clinician edits their details (role/registration change → re-verify)
   POST /v1/consult                    → one consult turn (inspected before return)
   POST /v1/incidents                  → "Report a problem" button on any reply
   GET  /v1/history?q=&mode=           → the clinician's own past consults (History tab)
@@ -51,7 +52,7 @@ from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
 from . import db, deid
@@ -193,6 +194,21 @@ class ProfileIn(BaseModel):
     consent_version: str = Field(max_length=20)
 
 
+class ProfileEditIn(BaseModel):
+    """The clinician edits their own details. No level or status here: those come only from an admin."""
+    model_config = ConfigDict(extra="forbid")
+    full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
+    gender: str = Field(pattern="^(female|male|other|prefer_not_to_say)$")
+    age: int = Field(ge=18, le=100)
+    role: str = Field(pattern="^(counsellor_trainee|psychologist|psychiatrist)$")
+    registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
+    registration_number: str | None = Field(default=None, max_length=40)
+
+
+# A change to these means the registration must be checked again (and the level set again).
+_PROFESSIONAL = ("role", "registration_body", "registration_number")
+
+
 class ConsultIn(BaseModel):
     text: str = Field(min_length=3, max_length=12000)
     mode: str = Field(default="auto", pattern="^(auto|A|B|C|D|E|F|G)$")
@@ -269,6 +285,26 @@ def me(user: dict = Depends(current_user)):
 def profile(body: ProfileIn, user: dict = Depends(current_user)):
     db.upsert_clinician_profile(user["id"], body.model_dump())
     return {"verification_status": "pending"}
+
+
+@app.patch("/v1/profile")
+def edit_profile(body: ProfileEditIn, user: dict = Depends(current_user)):
+    """Name, gender and age change directly. A changed role or registration sends the account back
+    to "pending" with no level until an admin checks the register again."""
+    p = body.model_dump()
+    p["registration_number"] = (p["registration_number"] or "").strip() or None
+    if CFG.dev_mode and user["id"] == "dev-clinician":
+        row = _DEV_CLINICIAN
+        reverify = any((row.get(k) or None) != p[k] for k in _PROFESSIONAL)
+        row.update(full_name=p["full_name"], gender=p["gender"], age_at_registration=p["age"],
+                   **{k: p[k] for k in _PROFESSIONAL})
+        if reverify:
+            row.update(verification_status="pending", level=None)
+        return {"verification_status": row["verification_status"], "reverify": reverify}
+    result = db.update_clinician_profile(user["id"], p)
+    if result is None:
+        raise HTTPException(404, "register first")
+    return result
 
 
 @app.post("/v1/consult")

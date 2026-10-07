@@ -65,6 +65,10 @@ class _Profile implements ProfileRepository {
 
   @override
   Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
 
 Future<void> _pump(WidgetTester tester, String location, {HistoryRepository? history, Size? size}) async {
