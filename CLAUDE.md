@@ -31,6 +31,9 @@ This is the backend for YourCounselor, a clinical consultation aid for registere
 - Evals (real model; needs keys): `python -m evals.run_evals`
 - Local API: `uvicorn app.main:app --reload`, with a `.env` built from `.env.example`
 
+## Superpowers plugin
+When using any Superpowers skill (brainstorming, plans, TDD, debugging, verification, review, finishing a branch, subagents), also follow `.claude/skills/superpowers-yourcounselor/SKILL.md`. It maps each workflow onto the rules above; the rules above win.
+
 ## Status notes
 - Tested: `deid.py`, `inspector.py`, `prompt.py`, `pipeline.py` (fake model).
 - Written but not yet run live: `main.py`, `db.py`, `icd.py`, `claude_client.py`. Verify each against real services before relying on it. The spec gives the day for each.
