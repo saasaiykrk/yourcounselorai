@@ -27,6 +27,8 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   PATCH /v1/admin/incidents/{id}      → admin: triage status + reviewer note
   GET  /v1/admin/clinicians/{id}/consults → admin: a clinician's consults, incl. hidden (audited)
   GET  /v1/admin/consults/{id}        → admin: one consult (audited)
+  POST /v1/admin/consults/{id}/pdf    → admin: records a PDF download of one delivered reply (audited)
+  GET  /v1/admin/report-notice        → admin: the safety notice printed on downloaded reports
   GET  /admin                         → web admin page (static; signs in with Supabase email code)
 
 DEV_MODE=1 (local only): accepts a `Bearer dev-L1|dev-L2|dev-L3` token as a
@@ -59,6 +61,7 @@ from .icd import ICD11Client, OfflineICD11
 from .inspector import ICD_CODE_RE
 from .pipeline import DeidRejected, ModelResult, Pipeline
 from .prompt import load_consult_prompts, load_skill
+from .report_notice import report_notice
 from .secrets import load_config
 
 CFG = load_config()
@@ -297,7 +300,8 @@ def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
 
     if CFG.dev_mode:
         turn_id = uuid.uuid4()
-        _dev_history.record(c["id"], str(conv_id), body.mode, level, body.text, r.display_text, r.status)
+        _dev_history.record(c["id"], str(conv_id), body.mode, level, body.text, r.display_text, r.status,
+                            skill_version=r.skill_version)
     else:
         turn_id = db.log_turn(conv_id, c["id"], level, body, r)
         if r.status == "blocked":
@@ -508,7 +512,8 @@ def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(ve
     case = SimpleNamespace(mode="R", text=CONSULT.case_text(state), client_redaction_counts={})
     if CFG.dev_mode:
         turn_id = str(uuid.uuid4())
-        _dev_history.record(c["id"], cid, "R", level, case.text, r.display_text, r.status, turn_id=turn_id)
+        _dev_history.record(c["id"], cid, "R", level, case.text, r.display_text, r.status, turn_id=turn_id,
+                            skill_version=r.skill_version)
     else:
         turn_id = str(db.log_turn(cid, c["id"], level, case, r))
         if r.status == "blocked":
@@ -565,6 +570,31 @@ def admin_consult(conv_id: uuid.UUID, a: dict = Depends(admin)):
     if not CFG.dev_mode:
         db.audit(a["id"], "view_consult", conv_id, {"clinician_id": str(conv["clinician_id"])})
     return conv
+
+
+class PdfDownloadIn(BaseModel):
+    turn_id: uuid.UUID
+
+
+@app.get("/v1/admin/report-notice")
+def admin_report_notice(a: dict = Depends(admin)):
+    """What the web admin prints around a report it saves as PDF (same wording as the app's PDF)."""
+    return report_notice()
+
+
+@app.post("/v1/admin/consults/{conv_id}/pdf")
+def admin_consult_pdf(conv_id: uuid.UUID, body: PdfDownloadIn, a: dict = Depends(admin)):
+    """Records an admin's PDF download of one delivered reply before the device builds it.
+    The PDF itself is made on the admin's device; no report text is sent back here."""
+    conv = _dev_history.get(str(conv_id)) if CFG.dev_mode else db.get_conversation(conv_id)
+    turn = next((t for t in (conv or {}).get("turns", []) if str(t["id"]) == str(body.turn_id)), None)
+    if not turn:
+        raise HTTPException(404, "report not found")
+    if turn["status"] != "delivered":
+        raise HTTPException(409, "a held-back reply cannot be downloaded")
+    if not CFG.dev_mode:
+        db.audit(a["id"], "download_pdf", conv_id, {"turn_id": str(body.turn_id)})
+    return {"ok": True}
 
 
 @app.get("/v1/admin/incidents")
