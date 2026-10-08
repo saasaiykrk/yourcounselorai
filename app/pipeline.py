@@ -87,9 +87,12 @@ class Pipeline:
         self.skill, self.model, self.icd, self.max_attempts = skill, model, icd, max_attempts
 
     def run(self, text: str, level: str, requested_mode: str = "auto", history: list[dict] | None = None,
-            today: str | None = None, extra_system: str | None = None, prompt_hash: str | None = None) -> TurnResult:
+            today: str | None = None, extra_system: str | None = None, prompt_hash: str | None = None,
+            postprocess=None) -> TurnResult:
         """extra_system: a second system part sent after the cached skill prompt (the guided
-        consultation's report template); the skill part stays byte-identical so its cache is shared."""
+        consultation's report template); the skill part stays byte-identical so its cache is shared.
+        postprocess: a deterministic change to the model's text (the guided consultation's own Case
+        Snapshot table) made BEFORE the inspector, so what is inspected is exactly what is shown."""
         t0 = time.monotonic()
         # Second line of defence: the phone should already have cleaned this.
         check = deid.clean(text)
@@ -129,6 +132,8 @@ class Pipeline:
         for attempt in range(1, self.max_attempts + 1):
             system = [self.skill.system_prompt, extra_system] if extra_system else self.skill.system_prompt
             result = self.model.run(system, messages, TOOLS, handle_tool)
+            if postprocess is not None:
+                result.text = postprocess(result.text)
             usage.append(result.usage)
             rep = inspect(result.text, ctx)
             reports.append(rep)

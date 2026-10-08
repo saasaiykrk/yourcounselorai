@@ -19,6 +19,7 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   GET  /v1/consultations/{id}         → one consultation (and its report once written)
   POST /v1/consultations/{id}/reply   → answer · don't know · skip · finish · confirm safety
   PATCH /v1/consultations/{id}/facts  → correct the collected facts (no model call)
+  PATCH /v1/consultations/{id}/snapshot → fill / correct the Case Snapshot (CR-001); "done" moves on
   POST /v1/consultations/{id}/report  → write the fixed Consultation Report (Mode R; inspected)
   GET  /v1/admin/clinicians?status=   → admin: pending / verified / rejected registrations
   PATCH /v1/admin/clinicians/{id}     → admin verifies registration, sets L1/L2/L3
@@ -94,7 +95,35 @@ class _FakeDevModel:
     def run_structured(self, system, user, schema):
         """Keyless intake: records the reply under the field just asked, then says "ready" — so the
         app asks the intake guide's mandatory questions one by one and then offers the report.
-        A one- or two-word answer gets one clarifying question, to show that step offline."""
+        A one- or two-word answer gets one clarifying question, to show that step offline.
+        Case Snapshot extraction: picks up an age/gender like "34F" and a duration like "4 weeks".
+        After the snapshot: one case-specific question, then "ready"."""
+        if "fields" in schema.get("properties", {}):
+            fields = []
+            m = re.search(r"\b(\d{1,2})\s*(?:y(?:ears?|rs?)?\s*(?:old)?\s*)?([MF])\b", user)
+            if m:
+                fields += [{"key": "age", "value": m.group(1)},
+                           {"key": "gender", "value": "Female" if m.group(2) == "F" else "Male"}]
+            m = re.search(r"\b(\d{1,2})\s*weeks?\b", user, re.I)
+            if m:
+                n = int(m.group(1))
+                fields.append({"key": "duration", "value": "<2 weeks" if n < 2 else "2–4 weeks" if n <= 4 else "1–6 months"})
+            for word, key, value in (("sudden", "onset", "Sudden"), ("gradual", "onset", "Gradual"),
+                                     ("no incident", "precipitant", "None reported")):
+                if word in user.lower():
+                    fields.append({"key": key, "value": value})
+            first = user.strip().split(".")[0][:200]
+            fields.append({"key": "presenting_concern", "value": first})
+            relevant = ["prior_therapy", "medications", "medical_history", "functioning", "sleep_appetite"]
+            return ({"fields": fields, "relevant": relevant, "case_type": "Sample case (dev mode)",
+                     "case_summary": user.strip()[:600]},
+                    {"input_tokens": 0, "output_tokens": 0})
+        if '"case_snapshot"' in user and "[Case Snapshot completed]" in user:
+            return ({"status": "ask", "case_type": "Sample case (dev mode)", "info_needed": ["episode_frequency"],
+                     "facts_patch": [], "unknown_fields": [], "case_summary": "", "field": "episode_frequency",
+                     "question": "How often do the episodes happen, and are they expected or out of the blue?",
+                     "why": "Frequency and cues shape the plan.", "options": ["Daily", "Weekly", "Less often"],
+                     "brief_answer": ""}, {"input_tokens": 0, "output_tokens": 0})
         asked = re.search(r"\[Question just answered\] \(([a-z_]+)\)", user)
         message = user.split("[Clinician's message]\n", 1)[-1].split("\n\n[App note]")[0].strip()[:200]
         try:
@@ -243,6 +272,7 @@ class ConsultationStartIn(BaseModel):
     text: str = Field(min_length=3, max_length=12000)
     deid_attested: bool
     client_redaction_counts: dict[str, int] = {}
+    snapshot: bool = False         # CR-001 Case Snapshot form (apps that show it say so; older apps keep the chat)
 
 
 class ConsultationReplyIn(BaseModel):
@@ -254,6 +284,21 @@ class ConsultationReplyIn(BaseModel):
 
 class FactsIn(BaseModel):
     facts: dict[str, str | None] = Field(max_length=30)
+
+
+class SnapshotEntryIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    chips: list[str] = Field(default=[], max_length=12)
+    text: str = Field(default="", max_length=400)
+    status: str | None = Field(default=None, pattern="^(not_known|not_yet_asked|not_applicable)$")
+
+
+class SnapshotIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fields: dict[str, SnapshotEntryIn] = Field(default={}, max_length=30)
+    done: bool = False             # the form is complete: go on to the case-specific questions
+    skip_remaining: bool = False   # "Skip remaining and generate": every empty field becomes Skipped
+    deid_attested: bool = False
 
 
 class ReportIn(BaseModel):
@@ -458,7 +503,7 @@ def consultation_start(body: ConsultationStartIn, c: dict = Depends(verified_cli
     if not CFG.dev_mode and db.turns_today(c["id"]) + db.consultations_today(c["id"]) >= CFG.daily_turn_limit:
         raise HTTPException(429, "daily limit reached")
     try:
-        state = CONSULT.start(body.text)
+        state = CONSULT.start(body.text, snapshot=body.snapshot)
     except DeidRejected as e:
         raise _identifiers(c, e)
     conv_id = str(_dev_consults.new(c["id"], state["stage"], state) if CFG.dev_mode
@@ -521,6 +566,29 @@ def consultation_facts(conv_id: uuid.UUID, body: FactsIn, c: dict = Depends(veri
     except ConsultationError as e:
         _release(cid)
         raise HTTPException(e.status, e.detail)
+    _save(cid, state)
+    return public_view(state, cid)
+
+
+@app.patch("/v1/consultations/{conv_id}/snapshot")
+def consultation_snapshot(conv_id: uuid.UUID, body: SnapshotIn, c: dict = Depends(verified_clinician)):
+    _consultations_on()
+    if any(e.text.strip() for e in body.fields.values()) and not body.deid_attested:
+        raise HTTPException(422, "de-identification attestation required")
+    cid = str(conv_id)
+    state = _claim(cid, c)["state"]
+    try:
+        CONSULT.update_snapshot(state, {k: e.model_dump() for k, e in body.fields.items()},
+                                done=body.done, skip_remaining=body.skip_remaining)
+    except DeidRejected as e:
+        _release(cid)
+        raise _identifiers(c, e)
+    except ConsultationError as e:
+        _release(cid)
+        raise HTTPException(e.status, e.detail)
+    except Exception:
+        _release(cid)
+        raise
     _save(cid, state)
     return public_view(state, cid)
 

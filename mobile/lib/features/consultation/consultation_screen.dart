@@ -15,6 +15,7 @@ import '../../core/widgets/surfaces.dart';
 import '../consult/check_sheet.dart';
 import '../consult/consult_controller.dart';
 import 'consultation_controller.dart';
+import 'snapshot_form.dart';
 
 /// The guided consultation: one question at a time, then "Your consultation is
 /// ready" and the report. Everything typed is cleaned on the phone before it is
@@ -30,6 +31,19 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
   // Answers live only in memory and are never written to disk.
   final _answer = TextEditingController();
   final _scroll = ScrollController();
+
+  /// Correcting a completed Case Snapshot (before or after the report).
+  bool _editingSnapshot = false;
+  bool _readExtra = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_readExtra) {
+      _readExtra = true;
+      _editingSnapshot = GoRouterState.of(context).extra == kEditSnapshot;
+    }
+  }
 
   ConsultationController get _ctrl => ref.read(consultationControllerProvider.notifier);
 
@@ -81,6 +95,12 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
     router.pushReplacement(route, extra: extra);
   }
 
+  Future<bool> _saveSnapshot(Map<String, SnapshotEntry> fields, {bool done = false, bool skipRemaining = false}) async {
+    final saved = await _ctrl.saveSnapshot(fields, done: done, skipRemaining: skipRemaining);
+    if (saved && _editingSnapshot && mounted) setState(() => _editingSnapshot = false);
+    return saved;
+  }
+
   Future<void> _editFact(String field, String current) async {
     final value = await showDialog<String>(
       context: context,
@@ -120,6 +140,25 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
         ),
         body: s.generating
             ? const _Generating()
+            : c?.snapshot != null && (c!.stage == ConsultationStage.snapshot || _editingSnapshot)
+            ? Column(
+                children: [
+                  if (s.error != null && !s.busy)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: _ErrorCard(error: s.error!, onRetry: null),
+                    ),
+                  Expanded(
+                    child: SnapshotForm(
+                      snapshot: c.snapshot!,
+                      busy: s.busy,
+                      editing: _editingSnapshot,
+                      onCancel: () => setState(() => _editingSnapshot = false),
+                      onSave: _saveSnapshot,
+                    ),
+                  ),
+                ],
+              )
             : SafeArea(
                 top: false,
                 child: Column(
@@ -149,7 +188,7 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
                         onSend: _send,
                         onDontKnow: _ctrl.dontKnow,
                         onSkip: _ctrl.skip,
-                        onGenerateNow: c.facts.isEmpty ? null : () => _confirmGenerateNow(c),
+                        onGenerateNow: c.facts.isEmpty && c.snapshot == null ? null : () => _confirmGenerateNow(c),
                       ),
                   ],
                 ),
@@ -173,7 +212,12 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
       if (c.facts.isNotEmpty) _KnownSoFar(facts: c.facts, unknown: c.unknown, onEdit: _editFact),
     ],
     ConsultationStage.ready => [
-      _ReadyCard(consultation: c, onEdit: _editFact, onGenerate: () => _generate(force: false)),
+      _ReadyCard(
+        consultation: c,
+        onEdit: _editFact,
+        onEditSnapshot: () => setState(() => _editingSnapshot = true),
+        onGenerate: () => _generate(force: false),
+      ),
     ],
     ConsultationStage.safetyStop => [
       _SafetyStop(
@@ -183,6 +227,7 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
     ],
     ConsultationStage.completed => [
       _DoneCard(
+        onEditSnapshot: c.snapshot == null ? null : () => setState(() => _editingSnapshot = true),
         onOpen: c.reply == null
             ? null
             : () {
@@ -196,8 +241,9 @@ class _ConsultationScreenState extends ConsumerState<ConsultationScreen> {
 
   Future<void> _confirmGenerateNow(Consultation c) async {
     final missing = [
-      for (final f in const ['presenting_concern', 'age_gender', 'risk_screening', 'duration_onset'])
-        if (!c.facts.containsKey(f) && !c.unknown.contains(f)) consultationFieldLabel(f),
+      if (c.snapshot == null) // the completed Case Snapshot already holds these
+        for (final f in const ['presenting_concern', 'age_gender', 'risk_screening', 'duration_onset'])
+          if (!c.facts.containsKey(f) && !c.unknown.contains(f)) consultationFieldLabel(f),
     ];
     final go = await showDialog<bool>(
       context: context,
@@ -491,10 +537,16 @@ class _FactList extends StatelessWidget {
 }
 
 class _ReadyCard extends StatelessWidget {
-  const _ReadyCard({required this.consultation, required this.onEdit, required this.onGenerate});
+  const _ReadyCard({
+    required this.consultation,
+    required this.onEdit,
+    required this.onEditSnapshot,
+    required this.onGenerate,
+  });
 
   final Consultation consultation;
   final void Function(String field, String current) onEdit;
+  final VoidCallback onEditSnapshot;
   final VoidCallback onGenerate;
 
   @override
@@ -526,28 +578,42 @@ class _ReadyCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(c.caseSummary, style: const TextStyle(fontSize: 14.5, height: 1.45)),
           ],
-          if (c.infoNeeded.isNotEmpty) ...[
+          if (c.infoNeeded.isNotEmpty && c.snapshot == null) ...[
             const SizedBox(height: 8),
             Text(
               'Not available (the report will say so): ${c.infoNeeded.map(consultationFieldLabel).join(', ')}',
               style: AppText.smallMuted,
             ),
           ],
-          const SizedBox(height: 10),
-          Material(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
-            child: _FactList(facts: c.facts, unknown: c.unknown, onEdit: onEdit),
-          ),
+          if (c.snapshot != null) ...[
+            const SizedBox(height: 10),
+            SnapshotSummary(snapshot: c.snapshot!, onEdit: onEditSnapshot),
+          ],
+          if (c.snapshot == null || c.facts.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Material(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              child: _FactList(facts: c.facts, unknown: c.unknown, onEdit: onEdit),
+            ),
+          ],
+          if (c.hasReport && c.snapshot != null) ...[
+            const SizedBox(height: 10),
+            Text(c.snapshot!.text('updated_note'), style: AppText.smallMuted, textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: onGenerate,
             icon: const Icon(Icons.description_outlined),
-            label: const Text('Generate report'),
+            label: Text(
+              c.snapshot == null ? 'Generate report' : c.snapshot!.text(c.hasReport ? 'update_report' : 'generate'),
+            ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Takes 1–3 minutes. The report always has the same sections; anything not provided is marked.',
+          Text(
+            c.snapshot == null
+                ? 'Takes 1–3 minutes. The report always has the same sections; anything not provided is marked.'
+                : 'Takes 1–3 minutes. The report always has the same sections.',
             textAlign: TextAlign.center,
             style: AppText.caption,
           ),
@@ -589,9 +655,12 @@ class _SafetyStop extends StatelessWidget {
 }
 
 class _DoneCard extends StatelessWidget {
-  const _DoneCard({required this.onOpen});
+  const _DoneCard({required this.onOpen, this.onEditSnapshot});
 
   final VoidCallback? onOpen;
+
+  /// Correct the Case Snapshot, then update the report.
+  final VoidCallback? onEditSnapshot;
 
   @override
   Widget build(BuildContext context) {
@@ -605,6 +674,10 @@ class _DoneCard extends StatelessWidget {
           if (onOpen != null) ...[
             const SizedBox(height: 12),
             FilledButton(onPressed: onOpen, child: const Text('Open the report')),
+          ],
+          if (onEditSnapshot != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton(onPressed: onEditSnapshot, child: const Text('Edit the Case Snapshot')),
           ],
         ],
       ),

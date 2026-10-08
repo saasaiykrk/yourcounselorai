@@ -126,6 +126,14 @@ class ConsultationController extends Notifier<GuidedState> {
     return _run(() => _repo.editFacts(c.id, {field: value}));
   }
 
+  /// Case Snapshot form: saves [fields] (text already cleaned on the phone). [done] moves on to the
+  /// case-specific questions; [skipRemaining] marks every empty field Skipped and goes to the report.
+  Future<bool> saveSnapshot(Map<String, SnapshotEntry> fields, {bool done = false, bool skipRemaining = false}) {
+    final c = state.consultation;
+    if (c == null) return Future.value(false);
+    return _run(() => _repo.updateSnapshot(c.id, fields, done: done, skipRemaining: skipRemaining));
+  }
+
   /// Writes the report. Returns it, or null on failure (the error is in [state]).
   Future<ConsultReply?> generateReport({bool force = false}) async {
     final c = state.consultation;
@@ -156,6 +164,9 @@ class ConsultationController extends Notifier<GuidedState> {
     state = const GuidedState();
   }
 }
+
+/// Route extra for `/consultation`: open the Case Snapshot form for editing.
+const kEditSnapshot = 'edit-snapshot';
 
 final consultationControllerProvider = NotifierProvider<ConsultationController, GuidedState>(
   ConsultationController.new,

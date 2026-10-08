@@ -46,6 +46,7 @@ class _OpenCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final status = switch (summary.stage) {
+      ConsultationStage.snapshot => 'Case Snapshot to complete',
       ConsultationStage.ready => 'Ready for the report',
       ConsultationStage.safetyStop => 'Waiting for your safety check',
       _ => 'Question ${summary.questionsAsked}',

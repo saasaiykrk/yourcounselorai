@@ -14,7 +14,7 @@ pull request ──► ci (backend tests) ──► merge to main ──► ci o
   tests, skill integrity, the cleaner parity check and the safety-file label guard. The mobile app is
   **not** built or tested here; it is released separately by its owner (its jobs only run by hand).
 - **Scope of CD:** the backend only, which is the API plus the `/admin` web page. A merge that changes nothing
-  under `app/`, `skill/`, `requirements.txt`, `Dockerfile` or `.gcloudignore` (e.g. app-only or docs-only)
+  under `app/`, `skill/`, `shared/`, `requirements.txt`, `Dockerfile` or `.gcloudignore` (e.g. app-only or docs-only)
   does not redeploy.
 - **deploy** (`.github/workflows/deploy.yml`) runs only after `ci` passes on `main`, or by hand
   (Actions → deploy → Run workflow). It builds the `Dockerfile` with Cloud Build, rolls out a new

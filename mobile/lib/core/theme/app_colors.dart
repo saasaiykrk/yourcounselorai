@@ -39,6 +39,11 @@ abstract final class AppColors {
   static const checkBorder = Color(0xFFC98A48);
   static const checkDot = Color(0xFFB8661C);
 
+  // "Already filled in" ticks (Case Snapshot fields taken from the case text)
+  static const doneInk = Color(0xFF1F6B3A);
+  static const doneBg = Color(0xFFE4F3E9);
+  static const doneBorder = Color(0xFF8CC7A1);
+
   // Risk and crisis only
   static const crisis = Color(0xFF8E2A2A);
   static const crisisBg = Color(0xFFF7E2DF);

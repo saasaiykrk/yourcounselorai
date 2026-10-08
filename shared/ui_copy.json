@@ -1,0 +1,41 @@
+{
+  "_comment": "Words the guided-consultation Case Snapshot shows (CR-001). Sent to the app by the server; change them here, no app update needed.",
+  "form_title": "Case Snapshot",
+  "form_intro": "We checked your case and ask only what it needs. Fields your case already answers have a ✓; give every other one a value or a status.",
+  "prefilled_badge": "From your case",
+  "needs_answer": "Needs an answer or a status",
+  "details_hint": "Details (optional)",
+  "required_hint": "Type a few words",
+  "number_hint": "Years",
+  "status_labels": {
+    "not_known": "Not known",
+    "not_yet_asked": "Not yet asked",
+    "not_applicable": "N/A",
+    "skipped": "Skipped"
+  },
+  "report_labels": {
+    "not_known": "Not known (clinician)",
+    "not_yet_asked": "Not yet asked — ask in next session",
+    "not_applicable": "N/A",
+    "skipped": "Skipped"
+  },
+  "optional_title": "More details (optional)",
+  "optional_intro": "Not needed for this case. Add anything you know; empty ones stay out of the report.",
+  "continue": "Continue",
+  "remaining": "{n} to go",
+  "skip_remaining": "Skip remaining and generate",
+  "skip_confirm_title": "Skip the remaining fields?",
+  "skip_confirm_body": "Skipped fields are left out of the table and listed under 'Ask in the next session'. The report will be less specific.",
+  "skip_confirm_ok": "Skip and continue",
+  "identifier_block": "This looks like an identifier. Remove it before continuing.",
+  "possible_name": "Possible name or employer: {words}. Replace it with the type only.",
+  "keep_anyway": "It's not a name — keep",
+  "ask_next_heading": "Ask in the next session",
+  "confirm_title": "Case Snapshot",
+  "confirm_intro": "The answered fields go into the report exactly as shown; anything not answered is left out.",
+  "left_out": "Left out of the report (not known or N/A)",
+  "edit": "Edit",
+  "generate": "Generate report",
+  "update_report": "Update report",
+  "updated_note": "You changed the snapshot. Update the report to include it."
+}
