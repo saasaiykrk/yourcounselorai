@@ -68,7 +68,8 @@ class ApiClient {
         await _send(
           'POST',
           '/v1/consultations',
-          body: {'text': text, 'deid_attested': true, 'client_redaction_counts': redactionCounts},
+          // snapshot: this app shows the Case Snapshot form (CR-001) before any question.
+          body: {'text': text, 'deid_attested': true, 'client_redaction_counts': redactionCounts, 'snapshot': true},
         ),
       );
 
@@ -100,6 +101,27 @@ class ApiClient {
 
   Future<Consultation> consultationFacts(String id, Map<String, String?> facts) async => Consultation.fromJson(
     await _send('PATCH', '/v1/consultations/${Uri.encodeComponent(id)}/facts', body: {'facts': facts}),
+  );
+
+  /// Fills or corrects Case Snapshot fields. [done]: the form is complete, go on;
+  /// [skipRemaining]: every empty field becomes "Skipped" and the report is next.
+  /// Text values must already be cleaned on the phone.
+  Future<Consultation> consultationSnapshot(
+    String id,
+    Map<String, SnapshotEntry> fields, {
+    bool done = false,
+    bool skipRemaining = false,
+  }) async => Consultation.fromJson(
+    await _send(
+      'PATCH',
+      '/v1/consultations/${Uri.encodeComponent(id)}/snapshot',
+      body: {
+        'fields': {for (final e in fields.entries) e.key: e.value.toJson()},
+        'done': done,
+        'skip_remaining': skipRemaining,
+        'deid_attested': true,
+      },
+    ),
   );
 
   /// Writes the Consultation Report (or returns the one already written).

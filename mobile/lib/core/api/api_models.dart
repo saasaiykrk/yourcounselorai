@@ -415,6 +415,8 @@ class ConsultDetail {
 
 /// Where a guided consultation is (the server decides; the app only shows it).
 enum ConsultationStage {
+  /// The case is in; the clinician is completing the Case Snapshot form (CR-001).
+  snapshot,
   questioning,
   ready,
   generating,
@@ -422,6 +424,7 @@ enum ConsultationStage {
   safetyStop;
 
   static ConsultationStage fromApi(String? s) => switch (s) {
+    'INITIAL_CASE' => snapshot,
     'INFORMATION_SUFFICIENT' => ready,
     'REPORT_GENERATION' => generating,
     'COMPLETED' => completed,
@@ -488,6 +491,8 @@ class Consultation {
     this.maxQuestions = 8,
     this.transcript = const [],
     this.reply,
+    this.snapshot,
+    this.hasReport = false,
   });
 
   factory Consultation.fromJson(Map<String, dynamic> j) => Consultation(
@@ -508,11 +513,21 @@ class Consultation {
       for (final t in (j['transcript'] as List? ?? const [])) ConsultationExchange.fromJson(t as Map<String, dynamic>),
     ],
     reply: j['reply'] is Map<String, dynamic> ? ConsultReply.fromJson(j['reply'] as Map<String, dynamic>) : null,
+    snapshot: j['snapshot'] is Map<String, dynamic>
+        ? CaseSnapshot.fromJson(j['snapshot'] as Map<String, dynamic>)
+        : null,
+    hasReport: j['report'] != null,
   );
 
   final String id;
   final ConsultationStage stage;
   final ConsultationQuestion? question;
+
+  /// The Case Snapshot form (CR-001); null for consultations started in the older chat flow.
+  final CaseSnapshot? snapshot;
+
+  /// A report was written before (so "Generate" becomes "Update report").
+  final bool hasReport;
 
   /// The AI's short answer when the clinician asked something during the intake.
   final String briefAnswer;
@@ -573,3 +588,121 @@ String consultationFieldLabel(String field) => switch (field) {
   'prior_therapy' => 'Prior therapy',
   _ => field.isEmpty ? 'Detail' : (field[0].toUpperCase() + field.substring(1)).replaceAll('_', ' '),
 };
+
+/// A Case Snapshot status the clinician can choose instead of a value.
+enum SnapshotStatus {
+  notKnown('not_known'),
+  notYetAsked('not_yet_asked'),
+  notApplicable('not_applicable'),
+  skipped('skipped');
+
+  const SnapshotStatus(this.api);
+
+  final String api;
+
+  static SnapshotStatus? fromApi(Object? s) => [
+    for (final v in values)
+      if (v.api == s) v,
+  ].firstOrNull;
+}
+
+/// One Case Snapshot field: its definition (from the server's shared/snapshot_fields.json) and
+/// what has been entered so far.
+class SnapshotField {
+  const SnapshotField({
+    required this.key,
+    required this.group,
+    required this.label,
+    required this.question,
+    this.chips = const [],
+    this.multi = false,
+    this.text = 'none',
+    this.statuses = const [],
+    this.helper = '',
+    this.selected = const [],
+    this.value = '',
+    this.status,
+    this.prefilled = false,
+    this.resolved = false,
+    this.optional = false,
+  });
+
+  factory SnapshotField.fromJson(Map<String, dynamic> j) => SnapshotField(
+    key: '${j['key']}',
+    group: j['group'] as String? ?? '',
+    label: j['label'] as String? ?? '',
+    question: j['question'] as String? ?? '',
+    chips: [for (final c in (j['chips'] as List? ?? const [])) '$c'],
+    multi: j['multi'] as bool? ?? false,
+    text: j['text'] as String? ?? 'none',
+    statuses: [for (final s in (j['statuses'] as List? ?? const [])) ?SnapshotStatus.fromApi(s)],
+    helper: j['helper'] as String? ?? '',
+    selected: [for (final c in (j['chips_selected'] as List? ?? const [])) '$c'],
+    value: j['value_text'] as String? ?? '',
+    status: SnapshotStatus.fromApi(j['status']),
+    prefilled: j['prefilled'] as bool? ?? false,
+    resolved: j['resolved'] as bool? ?? false,
+    optional: j['optional'] as bool? ?? false,
+  );
+
+  final String key;
+  final String group;
+  final String label;
+  final String question;
+  final List<String> chips;
+  final bool multi;
+
+  /// none · optional · required · number
+  final String text;
+  final List<SnapshotStatus> statuses;
+  final String helper;
+  final List<String> selected;
+  final String value;
+  final SnapshotStatus? status;
+
+  /// Filled from the case text (shown with a ✓ until changed).
+  final bool prefilled;
+  final bool resolved;
+
+  /// Not needed for this case (the case check decided): not required, left out of the report when empty.
+  final bool optional;
+}
+
+/// The whole Case Snapshot, with the words to show (shared/ui_copy.json).
+class CaseSnapshot {
+  const CaseSnapshot({this.fields = const [], this.copy = const {}, this.askNext = const []});
+
+  factory CaseSnapshot.fromJson(Map<String, dynamic> j) => CaseSnapshot(
+    fields: [for (final f in (j['fields'] as List? ?? const [])) SnapshotField.fromJson(f as Map<String, dynamic>)],
+    copy: (j['copy'] as Map<String, dynamic>?) ?? const {},
+    askNext: [for (final a in (j['ask_next'] as List? ?? const [])) '$a'],
+  );
+
+  final List<SnapshotField> fields;
+  final Map<String, dynamic> copy;
+
+  /// Not yet asked or skipped: the next session's checklist.
+  final List<String> askNext;
+
+  /// A word from ui_copy.json, with {placeholders} filled.
+  String text(String key, [Map<String, String> args = const {}]) {
+    var s = copy[key] is String ? copy[key] as String : '';
+    args.forEach((k, v) => s = s.replaceAll('{$k}', v));
+    return s;
+  }
+
+  String statusLabel(SnapshotStatus s) => ((copy['status_labels'] as Map?)?[s.api] as String?) ?? s.api;
+
+  String reportLabel(SnapshotStatus s) => ((copy['report_labels'] as Map?)?[s.api] as String?) ?? s.api;
+}
+
+/// What the form sends for one field: options and/or text, or a status.
+class SnapshotEntry {
+  const SnapshotEntry({this.chips = const [], this.text = '', this.status});
+
+  final List<String> chips;
+  final String text;
+  final SnapshotStatus? status;
+
+  Map<String, dynamic> toJson() => status != null ? {'status': status!.api} : {'chips': chips, 'text': text};
+}
