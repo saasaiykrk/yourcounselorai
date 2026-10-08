@@ -25,7 +25,7 @@
   "remaining": "{n} to go",
   "skip_remaining": "Skip remaining and generate",
   "skip_confirm_title": "Skip the remaining fields?",
-  "skip_confirm_body": "Skipped fields will be shown as 'Skipped' and the report will be less specific.",
+  "skip_confirm_body": "Skipped fields are left out of the table and listed under 'Ask in the next session'. The report will be less specific.",
   "skip_confirm_ok": "Skip and continue",
   "identifier_block": "This looks like an identifier. Remove it before continuing.",
   "possible_name": "Possible name or employer: {words}. Replace it with the type only.",
