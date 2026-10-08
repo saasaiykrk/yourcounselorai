@@ -90,8 +90,16 @@ The app is built and released by its owner; CI/CD only deploys the backend. On e
   - They are never written to disk.
   - The draft is cleared once a reply is delivered.
   - Everything is wiped on sign-out.
-- **Guided consultation** (Consult → Guided): the case, then one question at a time, then the fixed
-  Consultation Report. Every answer is cleaned on the phone first (the check panel opens only when something
+- **Guided consultation** (Consult → Guided): the case, then the **Case Snapshot** form (CR-001), then at most
+  4 case-specific questions, then the fixed Consultation Report.
+  - The case is checked first: what it already says is pre-filled (✓); a few fields are asked for every case
+    and the rest only when this case needs them (others fold into "More details (optional)").
+  - Every asked field needs a value or a status (Not known / Not yet asked / N/A), or "Skip remaining".
+  - "Risk present" shows the crisis numbers straight away. The report's snapshot table is drawn by the app
+    from the form: answered fields only, plus one "Ask in the next session" line. Field list and wording:
+    `shared/snapshot_fields.json`, `shared/ui_copy.json` (no app update needed to change them).
+  - After the report, the pencil icon on the report screen reopens the snapshot; saving offers "Update report".
+  - Every answer is cleaned on the phone first (the check panel opens only when something
   is found); the server cleans it again and keeps the compact, de-identified state so a consultation can be
   continued later. Risk in an answer pauses the questions and shows the crisis numbers. Shown only when the
   server has `CONSULTATION_ENABLED=1` (see `docs/DEPLOY.md`).

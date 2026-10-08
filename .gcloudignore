@@ -1,4 +1,4 @@
-# Only what the Dockerfile needs is uploaded to Cloud Build (app/, skill/,
+# Only what the Dockerfile needs is uploaded to Cloud Build (app/, skill/, shared/,
 # requirements.txt, Dockerfile). Keeps uploads small and keeps the rest out.
 .git
 .github

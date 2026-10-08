@@ -20,6 +20,14 @@ abstract interface class ConsultationRepository {
   Future<Consultation> editFacts(String id, Map<String, String?> facts);
 
   Future<(Consultation, ConsultReply)> report(String id, {bool force});
+
+  /// Case Snapshot form (CR-001): fill or correct fields; [done] moves on.
+  Future<Consultation> updateSnapshot(
+    String id,
+    Map<String, SnapshotEntry> fields, {
+    bool done = false,
+    bool skipRemaining = false,
+  });
 }
 
 class ApiConsultationRepository implements ConsultationRepository {
@@ -47,11 +55,29 @@ class ApiConsultationRepository implements ConsultationRepository {
   @override
   Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) =>
       _api.consultationReport(id, force: force);
+
+  @override
+  Future<Consultation> updateSnapshot(
+    String id,
+    Map<String, SnapshotEntry> fields, {
+    bool done = false,
+    bool skipRemaining = false,
+  }) => _api.consultationSnapshot(id, fields, done: done, skipRemaining: skipRemaining);
 }
 
 /// Preview: asks the four mandatory questions, then offers a sample report. In memory only.
+/// Offline preview: the older one-question-at-a-time flow (no Case Snapshot form, which needs
+/// the server's field list).
 class PreviewConsultationRepository implements ConsultationRepository {
   PreviewConsultationRepository({this.delay = const Duration(milliseconds: 700)});
+
+  @override
+  Future<Consultation> updateSnapshot(
+    String id,
+    Map<String, SnapshotEntry> fields, {
+    bool done = false,
+    bool skipRemaining = false,
+  }) async => _c ?? (throw const NotFound());
 
   final Duration delay;
   static const _questions = [
