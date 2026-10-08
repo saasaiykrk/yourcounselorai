@@ -121,6 +121,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
       - name: Check the eval settings
+        id: settings
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
@@ -142,7 +143,7 @@ jobs:
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - name: Guided consultation (Case Snapshot), L2
-        if: ${{ !cancelled() && inputs.eval_suite != 'vignettes' }}
+        if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
         run: python -m evals.run_consultation_evals --level L2
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -151,7 +152,7 @@ jobs:
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - name: Guided consultation (Case Snapshot), L1
-        if: ${{ !cancelled() && inputs.eval_suite != 'vignettes' }}
+        if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
         run: python -m evals.run_consultation_evals --level L1
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
