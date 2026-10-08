@@ -224,7 +224,7 @@ void main() {
     await tester.tap(find.text('Skip remaining and generate'));
     await tester.pumpAndSettle();
     expect(
-      find.text("Skipped fields will be shown as 'Skipped' and the report will be less specific."),
+      find.text("Skipped fields are left out of the table and listed under 'Ask in the next session'. The report will be less specific."),
       findsOneWidget,
     );
     await tester.tap(find.text('Skip and continue'));
