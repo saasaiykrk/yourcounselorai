@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/safety_widgets.dart';
 import '../../core/widgets/surfaces.dart';
+import '../consultation/consultation_controller.dart';
 import 'check_sheet.dart';
 import 'consult_controller.dart';
 import 'reply_markdown.dart';
@@ -54,6 +55,13 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
   }
 
   bool _exporting = false;
+
+  /// Guided report: reopen its consultation straight into the Case Snapshot form; saving a change
+  /// there offers "Update report".
+  void _editSnapshot(ConsultReply reply) {
+    ref.read(consultationControllerProvider.notifier).resume(reply.conversationId);
+    context.go('/consultation', extra: kEditSnapshot);
+  }
 
   /// Builds the PDF on the phone (no AI, no upload) after the clinician confirms the precautions.
   Future<void> _downloadPdf(ConsultReply reply) => downloadReportPdf(
@@ -108,6 +116,12 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
           title: const Text('New consult', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
           titleSpacing: 0,
           actions: [
+            if (isReport && !AppConfig.previewMode && reply.conversationId.isNotEmpty)
+              IconButton(
+                tooltip: 'Edit Case Snapshot',
+                onPressed: () => _editSnapshot(reply),
+                icon: const Icon(Icons.edit_note_rounded),
+              ),
             if (reply.delivered)
               IconButton(
                 tooltip: 'Download PDF',

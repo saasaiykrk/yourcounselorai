@@ -255,6 +255,7 @@ void main() {
         'text': 'cleaned case',
         'deid_attested': true,
         'client_redaction_counts': {'PHONE': 1},
+        'snapshot': true, // this app shows the Case Snapshot form (CR-001)
       });
       expect(adapter.requests[1].path, '/v1/consultations/k1/reply');
       expect(adapter.requests[1].data, {

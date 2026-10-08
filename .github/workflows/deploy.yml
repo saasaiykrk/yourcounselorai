@@ -1,7 +1,7 @@
 name: deploy
 # CD for the backend (API + /admin web page): after `ci` passes on main, build
 # and roll out the new Cloud Run revision, then check /health. Only runs when
-# backend files changed (app/, skill/, requirements.txt, Dockerfile,
+# backend files changed (app/, skill/, shared/, requirements.txt, Dockerfile,
 # .gcloudignore); the mobile app is released separately by its owner. No keys are stored in GitHub: the job
 # signs in to Google Cloud with Workload Identity Federation, which only trusts
 # this repository's main branch. Setup and rollback: docs/DEPLOY.md.
@@ -69,7 +69,7 @@ jobs:
           fi
           CHANGED=$(git diff --name-only HEAD^1 HEAD)
           echo "$CHANGED"
-          if echo "$CHANGED" | grep -qE '^(app/|skill/|requirements\.txt$|Dockerfile$|\.gcloudignore$)'; then
+          if echo "$CHANGED" | grep -qE '^(app/|skill/|shared/|requirements\.txt$|Dockerfile$|\.gcloudignore$)'; then
             echo "backend=true" >> "$GITHUB_OUTPUT"
           else
             echo "backend=false" >> "$GITHUB_OUTPUT"; echo "No backend changes: nothing to deploy."
