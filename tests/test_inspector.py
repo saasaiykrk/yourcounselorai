@@ -334,3 +334,19 @@ class TestNiceGuidelineIds(unittest.TestCase):
         out = MODE_A.replace("Panic disorder", "Panic disorder (see NICE guideline CG31)", 1)
         rep = inspect(out, ctx())
         self.assertTrue(rep.passed, rep.as_dict())
+
+    def test_three_digit_nice_guideline_is_not_a_helpline_number(self):
+        # Seen live (2026-10-06): "NICE guideline CG113" (GAD and panic) was blocked as an unknown
+        # helpline number, because "line" matched inside "guideline" and 113 is three digits.
+        out = MODE_A.replace("Panic disorder", "Panic disorder (see NICE guideline CG113)", 1)
+        rep = inspect(out, ctx())
+        self.assertNotIn("CRISIS_NUMBERS", codes(rep), rep.as_dict())
+        self.assertTrue(rep.passed, rep.as_dict())
+
+    def test_short_numbers_after_a_helpline_word_are_still_checked(self):
+        # The fix above must not let a made-up short helpline number through.
+        for text in ("call helpline 104", "dial 1056", "Tele-MANAS line 104", "helpline no. 155"):
+            out = MODE_A.replace("emergency care (112)", f"emergency care (112) or {text}")
+            self.assertIn("CRISIS_NUMBERS", codes(inspect(out, ctx())), text)
+        out = MODE_A.replace("emergency care (112)", "emergency care (112) or Child Helpline 1098")
+        self.assertNotIn("CRISIS_NUMBERS", codes(inspect(out, ctx())))
