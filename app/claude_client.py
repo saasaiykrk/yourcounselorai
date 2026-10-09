@@ -19,10 +19,14 @@ import json
 from .pipeline import ModelResult
 
 MAX_TOOL_ROUNDS = 8
+# Output cap per call, thinking included. A guided report is ~8k tokens of text plus thinking; at 16k
+# one was cut off mid-table, failed the inspector and had to be written (and paid for) twice.
+# A higher cap costs nothing unless the tokens are actually generated.
+REPLY_MAX_TOKENS = 32000
 
 
 class AnthropicClient:
-    def __init__(self, api_key: str, model: str, max_tokens: int = 16000):
+    def __init__(self, api_key: str, model: str, max_tokens: int = REPLY_MAX_TOKENS):
         import anthropic  # imported lazily so unit tests don't need the SDK
         self._client = anthropic.Anthropic(api_key=api_key, max_retries=2, timeout=300)
         self.model, self.max_tokens = model, max_tokens
@@ -44,6 +48,9 @@ class AnthropicClient:
             for k, v in (msg.usage.model_dump() if hasattr(msg.usage, "model_dump") else {}).items():
                 if isinstance(v, int):
                     usage_total[k] = usage_total.get(k, 0) + v
+            if msg.stop_reason == "max_tokens":
+                # Counted with the usage (turns.usage) so cut-off replies show up in the cost figures.
+                usage_total["max_tokens_stops"] = usage_total.get("max_tokens_stops", 0) + 1
             if msg.stop_reason == "refusal":
                 # Declined by the model's safety classifier: deliver nothing. The empty
                 # text fails the inspector, so the turn is retried once, then held back.

@@ -67,6 +67,18 @@ class ToolLoopTests(unittest.TestCase):
         result = c.run("SYSTEM", [{"role": "user", "content": "case"}], [], lambda n, i: "")
         self.assertEqual(result.text, "")
 
+    def test_a_reply_cut_off_at_the_output_cap_is_counted(self):
+        # A guided report hit the cap mid-table, failed the inspector and was paid for twice.
+        c = _client([_msg([_block("text", text="### 11. Plan | row")], "max_tokens")])
+        result = c.run("SYSTEM", [{"role": "user", "content": "case"}], [], lambda n, i: "")
+        self.assertEqual(result.usage.get("max_tokens_stops"), 1)
+        self.assertEqual(c._client.messages.requests[0]["max_tokens"], c.max_tokens)
+
+    def test_output_cap_leaves_room_for_a_full_consultation_report(self):
+        from app.claude_client import REPLY_MAX_TOKENS
+        # Reports run to ~8k tokens of text plus thinking; 16k cut one off. Opus 5.5 allows 128k.
+        self.assertGreaterEqual(REPLY_MAX_TOKENS, 32000)
+
 
 if __name__ == "__main__":
     unittest.main()
