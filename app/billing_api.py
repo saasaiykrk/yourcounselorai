@@ -16,7 +16,7 @@ Clinician (signed in):
 Razorpay:
   POST   /v1/payments/razorpay/webhook     → signed events; each applied once
 Admin (is_admin; every change audited):
-  GET/PUT /v1/admin/pricing                · GET /v1/admin/billing/users · GET /v1/admin/billing/users/{id}
+  GET/PUT /v1/admin/pricing · GET /v1/admin/pricing/history · GET /v1/admin/billing/users · GET /v1/admin/billing/users/{id}
   POST /v1/admin/billing/users/{id}/grant  · POST /v1/admin/billing/users/{id}/adjust
   POST /v1/admin/billing/entitlements/{id}/extend · POST /v1/admin/billing/entitlements/{id}/status
   GET  /v1/admin/payments · GET /v1/admin/payments/summary · POST /v1/admin/payments/{id}/refund
@@ -484,6 +484,11 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         return {"version": version, "config": cfg, "defaults": billing.DEFAULT_CONFIG,
                 "active": svc.store.active_counts() if svc.store_on() else {},
                 "payments_configured": svc.cfg.razorpay_configured, "byok_configured": svc.vault is not None}
+
+    @app.get("/v1/admin/pricing/history")
+    def admin_pricing_history(a: dict = Depends(admin)):
+        _need_store()
+        return {"history": [_order_view(r) for r in svc.store.pricing_history()]}
 
     @app.put("/v1/admin/pricing")
     def admin_save_pricing(body: PricingIn, a: dict = Depends(admin)):
