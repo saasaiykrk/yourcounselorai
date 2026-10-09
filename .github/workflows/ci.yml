@@ -6,6 +6,11 @@ on:
         description: "Also run the clinical evals (real model, costs money; needs the eval secrets in GitHub)"
         type: boolean
         default: false
+      eval_suite:
+        description: "Which evals: all, vignettes (direct consult) or consultation (guided, Case Snapshot; L2 and L1)"
+        type: choice
+        options: [all, vignettes, consultation]
+        default: all
   pull_request:
     types: [opened, synchronize, labeled, unlabeled]
   push:
@@ -116,6 +121,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
       - name: Check the eval settings
+        id: settings
         env:
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
@@ -127,7 +133,27 @@ jobs:
             echo "::error::Evals need these in Settings → Secrets and variables → Actions:$missing (see docs/DEPLOY.md)"
             exit 1
           fi
-      - run: python -m evals.run_evals
+      - name: Vignettes (direct consult)
+        if: inputs.eval_suite != 'consultation'
+        run: python -m evals.run_evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
+          WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
+          ICD_RELEASE: ${{ vars.ICD_RELEASE }}
+      - name: Guided consultation (Case Snapshot), L2
+        if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
+        run: python -m evals.run_consultation_evals --level L2
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
+          WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
+          ICD_RELEASE: ${{ vars.ICD_RELEASE }}
+      - name: Guided consultation (Case Snapshot), L1
+        if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
+        run: python -m evals.run_consultation_evals --level L1
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
@@ -135,4 +161,5 @@ jobs:
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with: { name: eval-grading-pack, path: evals/out }
