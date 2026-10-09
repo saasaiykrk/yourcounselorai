@@ -99,6 +99,10 @@ jobs:
         run: |
           gcloud run deploy "$SERVICE" --source . --region "$REGION" \
             --project "$PROJECT" --quiet
+          # A rollback pins traffic to one revision; without this, every later deploy would build a
+          # new revision that gets no traffic while the smoke test checks the old one.
+          gcloud run services update-traffic "$SERVICE" --region "$REGION" \
+            --project "$PROJECT" --to-latest --quiet
 
       - name: Smoke test /health
         if: steps.changes.outputs.backend == 'true'
