@@ -308,8 +308,10 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         try:
             ro = svc.razorpay.create_order(price.amount, price.currency, receipt=str(o["id"]),
                                            notes={"order": str(o["id"]), "plan": price.plan})
-        except RazorpayError:
-            svc.store.mark_order(o["id"], "failed", reason="could not create the Razorpay order")
+        except RazorpayError as e:
+            # Razorpay's own reason (e.g. "Razorpay 401: Authentication failed"), shown in /admin → Payments.
+            # RazorpayError never carries the keys.
+            svc.store.mark_order(o["id"], "failed", reason=f"could not create the Razorpay order ({e})"[:300])
             raise HTTPException(502, {"error": "payments_unreachable", "message": "Couldn't reach the payment service. Try again."})
         svc.store.set_provider_order(o["id"], ro["id"])
         plan = cfg["plans"][price.plan]
