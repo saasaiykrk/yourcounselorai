@@ -191,6 +191,10 @@ gcloud run services update-traffic yourcounselor-api --region asia-south1 \
 
 Or Cloud Console → Cloud Run → yourcounselor-api → **Revisions** → select an older one → **Manage traffic**.
 
+A rollback pins traffic to that revision. The next deploy from GitHub moves traffic back to the newest
+revision by itself. To do it by hand:
+`gcloud run services update-traffic yourcounselor-api --region asia-south1 --to-latest`
+
 ## Changing settings or secrets
 
 Deploys keep the service's existing environment variables and Secret Manager mounts. To change them, run
