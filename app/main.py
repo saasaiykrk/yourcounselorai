@@ -788,6 +788,7 @@ def admin_update_incident(incident_id: uuid.UUID, body: IncidentUpdateIn, a: dic
 # no CORS is needed. No third-party scripts; strict CSP; never cached.
 _ADMIN_DIR = pathlib.Path(__file__).parent / "admin_web"
 _ADMIN_FILES = {"": ("index.html", "text/html"), "admin.js": ("admin.js", "text/javascript"),
+                "billing.js": ("billing.js", "text/javascript"),
                 "admin.css": ("admin.css", "text/css"), "logo.png": ("logo.png", "image/png"),
                 # The app's brand fonts (SIL OFL, see fonts/OFL.txt), served from here: no third-party requests.
                 "nunito-extrabold.ttf": ("fonts/Nunito-ExtraBold.ttf", "font/ttf"),

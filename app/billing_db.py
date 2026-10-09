@@ -50,6 +50,14 @@ def save_config(cfg: dict, admin_id, changes: dict) -> int:
         return v
 
 
+def pricing_history(limit: int = 30) -> list[dict]:
+    """Who changed the pricing, when, and which values (old → new)."""
+    with _conn() as c:
+        return c.execute("""select a.created_at, a.detail, u.email as actor_email from admin_audit a
+                            left join auth.users u on u.id = a.actor_id
+                            where a.action='pricing_config' order by a.id desc limit %s""", (limit,)).fetchall()
+
+
 def active_counts() -> dict[str, int]:
     """Clinicians with a current entitlement per plan (for "this plan has N active subscribers")."""
     with _conn() as c:
@@ -499,7 +507,8 @@ def admin_users(plan: str | None, state: str | None, q: str | None, pay: str | N
 
 def admin_user(cid) -> dict:
     with _conn() as c:
-        audit = c.execute("""select a.created_at, a.action, a.detail, a.actor_id from admin_audit a
+        audit = c.execute("""select a.created_at, a.action, a.detail, a.actor_id, u.email as actor_email
+                             from admin_audit a left join auth.users u on u.id = a.actor_id
                              where a.target_id=%s and a.action like 'billing_%%' order by a.id desc limit 100""",
                           (str(cid),)).fetchall()
         byok = c.execute("select last4, status, last_error, validated_at, updated_at from byok_credentials "

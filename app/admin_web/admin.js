@@ -75,6 +75,7 @@ async function signOut(message) {
   $("incident-list").replaceChildren();
   $("incident-detail").replaceChildren();
   $("incident-detail").hidden = true;
+  clearBilling();
   resetSignIn();
   $("sign-in-error").textContent = message || "";
   show("view-sign-in");
@@ -122,8 +123,9 @@ async function api(method, path, body) {
   if (r.status === 401) { await signOut("Your session ended. Please sign in again."); throw new Error("signed-out"); }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const detail = typeof data.detail === "string" ? data.detail : "request failed";
-    const err = new Error(detail); err.status = r.status; throw err;
+    const detail = typeof data.detail === "string" ? data.detail
+      : (data.detail && data.detail.message) || "request failed";
+    const err = new Error(detail); err.status = r.status; err.data = data.detail; throw err;
   }
   return data;
 }
@@ -215,6 +217,9 @@ const ICONS = {
   inbox: "M19 3H4.99C3.88 3 3 3.9 3 5l-.01 14c0 1.1.89 2 2 2H19c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z",
   warn: "M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z",
   check: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
+  payments: "M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z",
+  sell: "m21.41 11.58-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z",
+  key: "M12.65 10A5.99 5.99 0 0 0 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6a5.99 5.99 0 0 0 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
   people: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
 };
 
@@ -253,7 +258,7 @@ function initials(name) {
 }
 
 // --- views ----------------------------------------------------------------------
-const VIEWS = ["overview", "clinicians", "incidents"];
+const VIEWS = ["overview", "clinicians", "incidents", "pricing", "subs", "payments"];   // the last three: billing.js
 
 function selectView(name, filter) {
   showConsults(false);
@@ -261,11 +266,15 @@ function selectView(name, filter) {
   $("consult-detail").replaceChildren();
   for (const v of VIEWS) {
     const tab = $("tab-" + v);
-    if (v === name) tab.setAttribute("aria-current", "page"); else tab.removeAttribute("aria-current");
+    if (v === name) { tab.setAttribute("aria-current", "page"); tab.scrollIntoView?.({ block: "nearest", inline: "nearest" }); }
+    else tab.removeAttribute("aria-current");
     $("panel-" + v).hidden = v !== name;
   }
   if (name === "clinicians") { if (filter != null) setSeg("clinician-filter", (clinicianStatus = filter)); loadClinicians(); }
   else if (name === "incidents") { if (filter != null) setSeg("incident-filter", (incidentStatus = filter)); loadIncidents(); }
+  else if (name === "pricing") loadPricing();
+  else if (name === "subs") loadSubs(filter);
+  else if (name === "payments") loadPayments();
   else loadOverview();
   loadCounts();
   window.scrollTo(0, 0);
@@ -773,6 +782,7 @@ async function start() {
   $("refresh-clinicians").addEventListener("click", () => { loadClinicians(); loadCounts(); });
   $("refresh-incidents").addEventListener("click", () => { loadIncidents(); loadCounts(); });
   $("consults-back").addEventListener("click", () => selectView("clinicians"));
+  wireBilling();
   for (const b of document.querySelectorAll("[data-goto]")) {
     b.addEventListener("click", () => { const [view, filter] = b.dataset.goto.split(":"); selectView(view, filter); });
   }

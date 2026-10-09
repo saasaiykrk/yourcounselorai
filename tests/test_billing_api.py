@@ -456,6 +456,9 @@ class BillingApiTests(unittest.TestCase):
             row = c.execute("select actor_id, detail from admin_audit where action='pricing_config' "
                             "order by created_at desc limit 1").fetchone()
         self.assertEqual((str(row[0]), row[1]["changes"]), (self.admin_id, {"plans.sub_30.enabled": [True, False]}))
+        hist = self.client.get("/v1/admin/pricing/history").json()["history"]
+        self.assertEqual(hist[0]["detail"]["changes"], {"plans.sub_30.enabled": [True, False]})
+        self.assertTrue(hist[0]["actor_email"].endswith("@test"))
         self.who = self.cid
         self.assertEqual(self.balance()["any"], 30, "people already on the plan keep it")
 
