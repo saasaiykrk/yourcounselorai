@@ -11,6 +11,10 @@ on:
         type: choice
         options: [all, vignettes, consultation]
         default: all
+      verify_icd:
+        description: "Check every ICD-11 code in skill/ against WHO (free; needs the WHO_ICD_* secrets)"
+        type: boolean
+        default: false
   pull_request:
     types: [opened, synchronize, labeled, unlabeled]
   push:
@@ -177,3 +181,20 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with: { name: eval-grading-pack, path: evals/out }
+
+  verify-icd:
+    # Manual (tick "verify_icd"): every ICD-11 code in skill/ looked up with WHO in the pinned release.
+    # Free; codes and titles only, no case text. Results appear in the run's summary.
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_icd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Check every ICD-11 code in skill/ with WHO
+        run: python -m evals.verify_icd_codes 6A70 6B23
+        env:
+          WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
+          WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
+          ICD_RELEASE: ${{ vars.ICD_RELEASE }}
