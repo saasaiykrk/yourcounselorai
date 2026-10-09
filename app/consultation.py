@@ -310,7 +310,9 @@ class ConsultationEngine:
         lines += ["", snap.REPORT_NOTE]
         return "\n".join(lines)
 
-    def report(self, state: dict, level: str, force: bool = False, today: str | None = None) -> TurnResult:
+    def report(self, state: dict, level: str, force: bool = False, today: str | None = None,
+               pipeline=None) -> TurnResult:
+        """pipeline: a different model's pipeline for this one report (the clinician's own key)."""
         stage = state["stage"]
         if "snapshot" in state and stage == SNAPSHOT:
             raise ConsultationError(409, "complete the Case Snapshot first")
@@ -322,7 +324,7 @@ class ConsultationEngine:
         state["stage"], state["pending"] = REPORT_GENERATION, None
         try:
             snapshot = state.get("snapshot")
-            r = self.pipeline.run(self.case_text(state), level=level, requested_mode="R", today=today,
+            r = (pipeline or self.pipeline).run(self.case_text(state), level=level, requested_mode="R", today=today,
                                   extra_system=self.prompts.report_addendum,
                                   prompt_hash=f"{self.pipeline.skill.prompt_hash}+{self.prompts.prompt_hash}",
                                   postprocess=(lambda text: snap.apply_table(text, snapshot)) if snapshot else None)

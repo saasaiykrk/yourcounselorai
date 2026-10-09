@@ -111,3 +111,5 @@ alter table consultations   enable row level security;
 
 -- Retention (beta): turns and incidents kept 12 months, then deleted by a scheduled job,
 -- unless an incident is open. Confirm the period with the data-protection lawyer (Phase 4).
+
+-- Pricing, payments, credits and BYOK: db/migrations/006_billing.sql (run after this file).

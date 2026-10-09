@@ -24,6 +24,13 @@ OPTIONAL = {
     "DEV_MODE": "0",
     "SUPABASE_PUBLISHABLE_KEY": "",   # public by design; only the web admin page uses it
     "CONSULTATION_ENABLED": "",       # guided consultation: "1" on, "0" off; default on in DEV_MODE only
+    # Payments and "use my own Anthropic key" (both optional; the features stay unavailable without them).
+    "RAZORPAY_KEY_ID": "",            # public by design (the app's checkout uses it)
+    "RAZORPAY_KEY_SECRET": "",
+    "RAZORPAY_WEBHOOK_SECRET": "",
+    "BYOK_ENCRYPTION_KEY": "",        # 32 random bytes, base64: `openssl rand -base64 32`
+    "BYOK_ENCRYPTION_KEY_PREVIOUS": "",  # the old key during a rotation, so stored keys still open
+    "BYOK_KEY_VERSION": "1",          # +1 on every rotation
 }
 _MASK = 4  # show only the last N chars of any secret when describing config
 
@@ -42,6 +49,16 @@ class Config:
     dev_mode: bool
     supabase_publishable_key: str = ""
     consultation_enabled: bool = False
+    razorpay_key_id: str = ""
+    razorpay_key_secret: str = ""
+    razorpay_webhook_secret: str = ""
+    byok_encryption_key: str = ""
+    byok_encryption_key_previous: str = ""
+    byok_key_version: int = 1
+
+    @property
+    def razorpay_configured(self) -> bool:
+        return bool(self.razorpay_key_id and self.razorpay_key_secret and self.razorpay_webhook_secret)
 
     @property
     def icd_enabled(self) -> bool:
@@ -56,6 +73,8 @@ class Config:
             "icd_enabled": self.icd_enabled,
             "dev_mode": self.dev_mode,
             "consultation_enabled": self.consultation_enabled,
+            "payments_configured": self.razorpay_configured,
+            "byok_configured": bool(self.byok_encryption_key),
             "database": _host_only(self.database_url),
         }
 
@@ -91,4 +110,10 @@ def load_config() -> Config:
         dev_mode=dev,
         supabase_publishable_key=g("SUPABASE_PUBLISHABLE_KEY"),
         consultation_enabled=(g("CONSULTATION_ENABLED") or ("1" if dev else "0")) == "1",
+        razorpay_key_id=g("RAZORPAY_KEY_ID"),
+        razorpay_key_secret=g("RAZORPAY_KEY_SECRET"),
+        razorpay_webhook_secret=g("RAZORPAY_WEBHOOK_SECRET"),
+        byok_encryption_key=g("BYOK_ENCRYPTION_KEY"),
+        byok_encryption_key_previous=g("BYOK_ENCRYPTION_KEY_PREVIOUS"),
+        byok_key_version=int(g("BYOK_KEY_VERSION") or "1"),
     )
