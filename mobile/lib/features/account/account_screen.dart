@@ -56,6 +56,7 @@ class AccountScreen extends ConsumerWidget {
           _LinkGroup(
             links: [
               if (me.value != null && !me.value!.needsProfile) ('Edit profile', () => context.push('/account/profile')),
+              if (me.value?.pricing == true) ('Plans & credits', () => context.push('/pricing')),
               if (me.value?.isAdmin == true) ('Admin: registrations and reports', () => context.push('/admin')),
               ('How we protect client data', () => context.push('/privacy')),
               ('Crisis numbers', () => context.push('/safety')),

@@ -139,6 +139,48 @@ production. The app shows the Guided option only when the server has it on. To s
    psychologist grade the reports in `evals/out/consult-*` against
    `skill/clinical-assist/references/example-consult-report-ocd.md`.
 
+## Pricing plans and payments (off until an admin switches pricing on)
+
+Until pricing is switched on in **/admin → Pricing Plans**, every report stays free, exactly as before.
+
+1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/006_billing.sql`
+   (safe to run again). Without it the server still starts and reports stay free, but the pricing pages fail.
+2. **Razorpay keys (Secret Manager only; never in the app, in GitHub or in chat).** Razorpay Dashboard →
+   *Account & Settings → API Keys* (use **Test mode** keys first). In Cloud Shell, paste each value when asked:
+   ```bash
+   for s in razorpay-key-id razorpay-key-secret razorpay-webhook-secret; do
+     read -rsp "$s: " v; echo; printf '%s' "$v" | gcloud secrets create $s --data-file=- --project yourcounselor-beta
+   done
+   # The key that encrypts clinicians' own Anthropic keys (generated, never shown):
+   openssl rand -base64 32 | tr -d '\n' | gcloud secrets create byok-encryption-key --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta --update-secrets \
+     RAZORPAY_KEY_ID=razorpay-key-id:latest,RAZORPAY_KEY_SECRET=razorpay-key-secret:latest,RAZORPAY_WEBHOOK_SECRET=razorpay-webhook-secret:latest,BYOK_ENCRYPTION_KEY=byok-encryption-key:latest
+   ```
+   If the update says *permission denied on secret*, give the service's account **Secret Manager Secret
+   Accessor** on the new secrets (IAM page), as was done for the Anthropic key.
+3. **Razorpay webhook:** Razorpay Dashboard → *Webhooks → Add New Webhook*:
+   - URL: `https://<your Cloud Run URL>/v1/payments/razorpay/webhook`
+   - Secret: the same value you stored as `razorpay-webhook-secret`
+   - Events: `payment.authorized`, `payment.captured`, `payment.failed`, `order.paid`, `refund.processed`,
+     `refund.failed`
+4. **Check:** `https://<your Cloud Run URL>/healthz` shows `"payments_configured": true` and
+   `"byok_configured": true`. Then /admin → Pricing Plans → set prices → switch pricing on.
+5. **Test before going live:** with Test-mode keys, buy each plan from the app using Razorpay's test cards/UPI,
+   check the credits, then refund one from /admin → Payments. Then replace the three Razorpay secrets with
+   the Live-mode values (`gcloud secrets versions add razorpay-key-id --data-file=-`, and so on) and redeploy.
+
+How it is protected:
+- Prices come only from the server's saved configuration; the app never sends an amount.
+- A payment counts only when Razorpay's signature is valid **and** Razorpay itself reports the payment as
+  captured for that order and amount. Webhooks are signed, and each event is applied once.
+- A report holds one credit while it is written. The credit is spent only if the report is delivered; a
+  held-back or failed report gives it back. A retried request is never charged twice.
+- Clinicians' own Anthropic keys are checked with Anthropic, encrypted (AES-256-GCM), never returned (only
+  the last 4 characters), never logged, and never replaced by the platform key when they fail.
+- **Never change or lose `byok-encryption-key`:** saved own keys can't be read without it. To rotate, store the
+  old value as `BYOK_ENCRYPTION_KEY_PREVIOUS`, the new one as `BYOK_ENCRYPTION_KEY`, and raise
+  `BYOK_KEY_VERSION` by 1. Each saved key is re-encrypted with the new value the next time it is used.
+
 ## Rolling back by hand
 
 ```bash

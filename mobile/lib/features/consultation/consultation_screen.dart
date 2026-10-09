@@ -707,6 +707,14 @@ class _ErrorCard extends StatelessWidget {
       NotVerified() => ('Your registration is not verified yet.', false),
       NotFound() => ('This consultation is no longer available.', false),
       ServerProblem() => ('Something went wrong on our side. Try again.', true),
+      PaymentRequired(:final message) => ('$message Your answers are saved.', false),
+      OwnKeyFailed(:final message, :final retry) => (message, retry),
+      BillingRefused(:final message) => (message, false),
+    };
+    final (fixLabel, fixRoute) = switch (error) {
+      PaymentRequired() => ('See plans', '/pricing'),
+      OwnKeyFailed() => ('Manage key', '/pricing/own-key'),
+      _ => (null, null),
     };
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -724,6 +732,7 @@ class _ErrorCard extends StatelessWidget {
             child: Text(text, style: const TextStyle(fontSize: 14.5, height: 1.4, color: AppColors.checkInk)),
           ),
           if (canRetry && onRetry != null) TextButton(onPressed: onRetry, child: const Text('Try again')),
+          if (fixRoute != null) TextButton(onPressed: () => context.push(fixRoute), child: Text(fixLabel!)),
         ],
       ),
     );

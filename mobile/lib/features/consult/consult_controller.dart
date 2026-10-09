@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_exceptions.dart';
@@ -41,6 +43,11 @@ class ConsultController extends Notifier<ConsultState> {
   @override
   ConsultState build() => const ConsultIdle();
 
+  static final _random = Random.secure();
+
+  String _requestId() =>
+      '${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}-${_random.nextInt(0x7fffffff).toRadixString(36)}';
+
   /// The latest reply, for follow-ups and "Report a problem".
   ConsultReply? get lastReply => switch (state) {
     ConsultReplied(:final reply) => reply,
@@ -64,8 +71,11 @@ class ConsultController extends Notifier<ConsultState> {
               mode: mode.apiCode,
               redactionCounts: redactionCounts,
               conversationId: _conversationId,
+              requestId: _requestId(),
+              useOwnKey: ref.read(useOwnKeyProvider),
             ),
           );
+      ref.invalidate(billingStatusProvider); // a credit may have been used
       if (request != _request) return; // cleared or superseded meanwhile
       _conversationId = reply.conversationId;
       state = ConsultReplied(reply);
@@ -112,6 +122,9 @@ final consultControllerProvider = NotifierProvider<ConsultController, ConsultSta
   ConsultFailed(error: DailyLimitReached()) => ('/limit', null),
   ConsultFailed(error: Unauthorized()) => ('/sign-in', null),
   ConsultFailed(error: NotVerified()) => ('/pending', null),
+  ConsultFailed(error: final PaymentRequired e) => ('/no-credit', e),
+  ConsultFailed(error: final OwnKeyFailed e) => ('/no-credit', e),
+  ConsultFailed(error: final BillingRefused e) => ('/no-credit', e),
   ConsultFailed(:final error) => ('/offline', error),
   ConsultIdle() || ConsultSending() => ('/consult', null),
 };

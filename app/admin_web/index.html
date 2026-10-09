@@ -8,6 +8,7 @@
   <link rel="icon" href="/admin/logo.png">
   <link rel="stylesheet" href="/admin/admin.css">
   <script src="/admin/admin.js" defer></script>
+  <script src="/admin/billing.js" defer></script>
 </head>
 <body>
   <!-- Sign in -->
@@ -69,6 +70,15 @@
         <button type="button" id="tab-incidents" data-view="incidents">
           <span class="ico" data-icon="flag"></span><span class="lbl">Reports</span>
           <span class="count alert" id="count-open"></span>
+        </button>
+        <button type="button" id="tab-pricing" data-view="pricing">
+          <span class="ico" data-icon="sell"></span><span class="lbl">Pricing Plans</span>
+        </button>
+        <button type="button" id="tab-subs" data-view="subs">
+          <span class="ico" data-icon="people"></span><span class="lbl">Subscriptions &amp; Users</span>
+        </button>
+        <button type="button" id="tab-payments" data-view="payments">
+          <span class="ico" data-icon="payments"></span><span class="lbl">Payments</span>
         </button>
       </nav>
       <div class="me" id="who" hidden>
@@ -160,8 +170,104 @@
           <article id="incident-detail" class="panel detail" hidden></article>
         </div>
       </section>
+
+      <!-- Pricing Plans (billing.js) -->
+      <section id="panel-pricing" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Pricing Plans</h1>
+            <p class="muted">What clinicians pay for reports. Changes apply to new purchases at once; plans already bought keep working.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-pricing"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div id="pricing-body"></div>
+      </section>
+
+      <!-- Subscriptions & Users (billing.js) -->
+      <section id="panel-subs" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Subscriptions &amp; Users</h1>
+            <p class="muted">Each clinician's plan, credits and payments. Every change needs a reason and is recorded.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-subs"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div class="toolbar wrap" id="subs-filters">
+          <label class="search"><span class="ico" data-icon="search"></span>
+            <input id="subs-q" type="search" placeholder="Search name or email" aria-label="Search clinicians">
+          </label>
+          <select id="subs-plan" aria-label="Plan">
+            <option value="">All plans</option><option value="sub_30">Monthly · 30</option>
+            <option value="sub_50">Monthly · 50</option><option value="byok">Own API key</option>
+            <option value="manual">Given by admin</option>
+          </select>
+          <select id="subs-state" aria-label="Status">
+            <option value="">Any status</option><option value="active">Active</option><option value="scheduled">Starts later</option>
+            <option value="exhausted">Used up</option><option value="expired">Expired</option>
+            <option value="cancelled">Cancelled</option><option value="none">No plan</option>
+          </select>
+          <select id="subs-pay" aria-label="Last payment">
+            <option value="">Any last payment</option><option value="paid">Paid</option><option value="pending">Pending</option>
+            <option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="created">Not completed</option>
+          </select>
+          <label class="date">Started from <input id="subs-since" type="date"></label>
+          <label class="date">Ends by <input id="subs-until" type="date"></label>
+        </div>
+        <div class="split">
+          <div id="subs-list" class="list"></div>
+          <article id="subs-detail" class="panel detail" hidden></article>
+        </div>
+      </section>
+
+      <!-- Payments & Transactions (billing.js) -->
+      <section id="panel-payments" hidden>
+        <header class="page-head">
+          <div>
+            <h1>Payments &amp; Transactions</h1>
+            <p class="muted">Only payments Razorpay confirmed count as collected. Pending and failed payments are shown apart.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-payments"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div class="toolbar wrap">
+          <div class="seg" role="group" aria-label="Show" id="pay-filter">
+            <button type="button" data-value="" aria-pressed="true">All</button>
+            <button type="button" data-value="paid" aria-pressed="false">Paid</button>
+            <button type="button" data-value="pending" aria-pressed="false">Pending</button>
+            <button type="button" data-value="failed" aria-pressed="false">Failed</button>
+            <button type="button" data-value="cancelled" aria-pressed="false">Cancelled</button>
+            <button type="button" data-value="refunded" aria-pressed="false">Refunds</button>
+          </div>
+          <select id="pay-plan" aria-label="Plan">
+            <option value="">All plans</option><option value="per_report">Per report</option><option value="sub_30">Monthly · 30</option>
+            <option value="sub_50">Monthly · 50</option><option value="byok">Own-key access fee</option>
+          </select>
+          <label class="search"><span class="ico" data-icon="search"></span>
+            <input id="pay-q" type="search" placeholder="Name, email, order or payment id" aria-label="Search payments">
+          </label>
+          <label class="date">From <input id="pay-since" type="date"></label>
+          <label class="date">To <input id="pay-until" type="date"></label>
+        </div>
+        <div class="stats" id="pay-stats"></div>
+        <section class="panel"><div class="panel-head"><h2>By plan</h2></div><div id="pay-by-plan"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Transactions</h2></div><div id="pay-list"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Own API key use (last 30 days)</h2></div>
+          <p class="muted small">Counts only. Clinicians' keys are never shown here.</p><div id="byok-usage"></div></section>
+      </section>
     </main>
   </div>
+
+  <!-- Billing actions (billing.js fills it) -->
+  <dialog id="bill-dialog">
+    <form method="dialog" id="bill-form" novalidate>
+      <h2 id="bill-title"></h2>
+      <div id="bill-body"></div>
+      <p class="error" id="bill-error" role="alert"></p>
+      <div class="row">
+        <button type="button" class="btn ghost" id="bill-cancel">Cancel</button>
+        <button type="submit" class="btn primary" id="bill-ok">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Decision dialog -->
   <dialog id="decide">
