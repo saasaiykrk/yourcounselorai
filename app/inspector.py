@@ -458,7 +458,9 @@ def _check_crisis_numbers(rep: InspectionReport, body: str, flat: str) -> None:
         digits = re.sub(r"\D", "", m.group(0))
         if len(digits) >= 7 and digits not in ALLOWED_CRISIS_NUMBERS:
             rep.block("CRISIS_NUMBERS", f"Phone-like number '{m.group(0)}' is not in the crisis register.")
-    for m in re.finditer(r"(?:helpline|hotline|call|dial|tele-manas|line|number)[^\d\n]{0,15}(\d{3,5})\b", flat, re.I):
+    # (?<![A-Za-z]): digits glued to letters are a reference code ("guideline CG113"), not a number to call.
+    for m in re.finditer(r"(?:helpline|hotline|call|dial|tele-manas|line|number)[^\d\n]{0,15}(?<![A-Za-z])(\d{3,5})\b",
+                         flat, re.I):
         if m.group(1) not in ALLOWED_CRISIS_NUMBERS:
             rep.block("CRISIS_NUMBERS", f"Number '{m.group(1)}' near '{m.group(0)[:20]}' is not in the crisis register.")
 
