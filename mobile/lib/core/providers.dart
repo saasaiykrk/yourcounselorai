@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api/api_client.dart';
 import 'api/api_models.dart';
 import 'auth/auth_service.dart';
+import 'billing/billing_repository.dart';
+import 'billing/payment_gateway.dart';
+import 'api/billing_models.dart';
 import 'config.dart';
 import 'repositories.dart';
 
@@ -42,3 +45,34 @@ final adminRepositoryProvider = Provider<AdminRepository>(
 
 /// The signed-in clinician's profile and verified level. Re-read with `ref.invalidate(meProvider)`.
 final meProvider = FutureProvider.autoDispose<Me>((ref) => ref.watch(profileRepositoryProvider).me());
+
+// --- plans, payments and the own Anthropic key ------------------------------------------------
+
+final billingRepositoryProvider = Provider<BillingRepository>(
+  (ref) => AppConfig.previewMode ? PreviewBillingRepository() : ApiBillingRepository(ref.watch(apiClientProvider)),
+);
+
+final paymentGatewayProvider = Provider<PaymentGateway>(
+  (ref) => AppConfig.previewMode ? const UnsupportedPaymentGateway() : RazorpayGateway(),
+);
+
+/// Credits, plans, own-key status and notices. Re-read after a report or a purchase.
+final billingStatusProvider = FutureProvider.autoDispose<BillingStatus>(
+  (ref) => ref.watch(billingRepositoryProvider).status(),
+);
+
+/// The plans on sale, straight from the admin's pricing (never hardcoded in the app).
+final billingPlansProvider = FutureProvider.autoDispose<BillingPlans>(
+  (ref) => ref.watch(billingRepositoryProvider).plans(),
+);
+
+/// The clinician chose to write reports with their own Anthropic key. Session only: it is asked
+/// again after the app restarts, so nobody pays Anthropic without knowing it.
+class OwnKeyChoice extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) => state = value;
+}
+
+final useOwnKeyProvider = NotifierProvider<OwnKeyChoice, bool>(OwnKeyChoice.new);

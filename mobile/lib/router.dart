@@ -4,7 +4,11 @@ import 'core/content/legal_content.dart';
 import 'features/account/account_screen.dart';
 import 'features/account/edit_profile_screen.dart';
 import 'features/account/info_screen.dart';
+import 'core/api/api_exceptions.dart';
 import 'features/admin/admin_screen.dart';
+import 'features/billing/billing_history_screen.dart';
+import 'features/billing/own_key_screen.dart';
+import 'features/billing/pricing_screen.dart';
 import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
 import 'features/consult/reply_screen.dart';
@@ -65,6 +69,13 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         builder: (_, state) => IdentifiersScreen(types: state.extra as List<String>? ?? const ['ID']),
       ),
       GoRoute(path: '/limit', builder: (_, _) => const LimitScreen()),
+      GoRoute(path: '/pricing', builder: (_, _) => const PricingScreen()),
+      GoRoute(path: '/pricing/own-key', builder: (_, _) => const OwnKeyScreen()),
+      GoRoute(path: '/pricing/history', builder: (_, _) => const BillingHistoryScreen()),
+      GoRoute(
+        path: '/no-credit',
+        builder: (_, state) => NoCreditScreen(error: state.extra as ApiException?),
+      ),
       GoRoute(
         path: '/offline',
         builder: (_, state) => OfflineScreen(error: state.extra),

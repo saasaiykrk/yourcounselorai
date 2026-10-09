@@ -12,6 +12,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
+import '../billing/pricing_screen.dart';
 import '../consultation/consultation_controller.dart';
 import '../consultation/open_consultations.dart';
 import 'check_sheet.dart';
@@ -99,6 +100,7 @@ class _ConsultScreenState extends ConsumerState<ConsultScreen> {
                   : 'Describe the case. Leave out names, contact details and ID numbers.',
             ),
             _CaseField(controller: _text, onChanged: () => setState(() {})),
+            if (ref.watch(meProvider).value?.pricing == true) CreditsStrip(reportType: guided ? 'guided' : 'direct'),
             if (guided) const OpenConsultations(),
             if (!guided)
               Column(
