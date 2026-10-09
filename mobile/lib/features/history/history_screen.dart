@@ -14,6 +14,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/layout.dart';
 import '../../core/widgets/surfaces.dart';
 import '../consult/reply_markdown.dart';
+import '../consult/report_pdf_action.dart';
 
 /// The clinician's past consults. Fetched from the server each time and kept
 /// in memory only; nothing is written to the phone.
@@ -348,7 +349,10 @@ class _HistoryConsultScreenState extends ConsumerState<HistoryConsultScreen> {
                   child: CircularProgressIndicator(),
                 ),
                 AsyncSnapshot(:final error?) => _Message(_errorText(error), action: ('Try again', _reload)),
-                _ => ConsultTurnsView(detail: d!),
+                _ => ConsultTurnsView(
+                  detail: d!,
+                  onDownload: (t) => downloadReportPdf(context, ref, replyFromTurn(t, widget.consultId)),
+                ),
               },
             );
           },
@@ -365,7 +369,8 @@ class ConsultTurnsView extends StatelessWidget {
   final ConsultDetail detail;
   final Widget? header;
 
-  /// When set, each delivered reply gets a "Download PDF" button (admin view).
+  /// When set, each delivered reply gets a "Download PDF" button (History, and the admin view, which
+  /// also records the download).
   final void Function(ConsultTurn turn)? onDownload;
 
   @override

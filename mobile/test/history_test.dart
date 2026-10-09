@@ -71,7 +71,13 @@ class _Profile implements ProfileRepository {
       const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
 
-Future<void> _pump(WidgetTester tester, String location, {HistoryRepository? history, Size? size}) async {
+Future<void> _pump(
+  WidgetTester tester,
+  String location, {
+  HistoryRepository? history,
+  Size? size,
+  ReportPdfExporter? exporter,
+}) async {
   tester.view.physicalSize = (size ?? const Size(390, 844)) * 3;
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -81,6 +87,7 @@ Future<void> _pump(WidgetTester tester, String location, {HistoryRepository? his
         profileRepositoryProvider.overrideWithValue(_Profile()),
         historyRepositoryProvider.overrideWithValue(history ?? _History()),
         adminRepositoryProvider.overrideWithValue(PreviewAdminRepository()),
+        if (exporter != null) reportPdfExporterProvider.overrideWithValue(exporter),
       ],
       child: YourCounselorApp(router: buildRouter(initialLocation: location)),
     ),
@@ -210,6 +217,28 @@ void main() {
       expect(find.text('History'), findsWidgets, reason: 'back on the list');
       expect(find.text('exam panic review'), findsNothing);
       expect((await history.list()).map((c) => c.id), ['h1']);
+    });
+
+    testWidgets('a past report can be downloaded as PDF (no audit record for your own consult)', (tester) async {
+      final exported = <String>[];
+      await _pump(tester, '/history', exporter: (bytes, name) async => exported.add(name));
+      await tester.tap(find.textContaining('panic attacks'));
+      await tester.pumpAndSettle();
+      final button = find.text('Download PDF');
+      // The button sits under the (long) report: go to the end of the list.
+      final list = find.descendant(of: find.byType(ConsultTurnsView), matching: find.byType(Scrollable)).first;
+      tester.state<ScrollableState>(list).position.jumpTo(tester.state<ScrollableState>(list).position.maxScrollExtent);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(button.first);
+      await tester.pumpAndSettle();
+      await tester.tap(button.first);
+      await tester.pumpAndSettle();
+      expect(find.text('Download this report as a PDF?'), findsOneWidget);
+      expect(find.textContaining('recorded in the audit log'), findsNothing);
+      await tester.tap(find.widgetWithText(FilledButton, 'Download PDF'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
+      await tester.pumpAndSettle();
+      expect(exported.single, startsWith('YourCounselor-report-'));
     });
 
     for (final size in [const Size(320, 640), const Size(360, 640)]) {
