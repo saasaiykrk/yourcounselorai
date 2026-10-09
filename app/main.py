@@ -180,7 +180,7 @@ if CFG.dev_mode:
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^http://(localhost|127\.0\.0\.1)(:\d+)?$",
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
 

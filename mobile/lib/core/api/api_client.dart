@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import 'api_exceptions.dart';
 import 'api_models.dart';
+import 'billing_models.dart';
 
 /// Returns the bearer token for the signed-in clinician, or null.
 typedef TokenProvider = Future<String?> Function();
@@ -125,11 +126,76 @@ class ApiClient {
   );
 
   /// Writes the Consultation Report (or returns the one already written).
-  Future<(Consultation, ConsultReply)> consultationReport(String id, {bool force = false}) async {
-    final data = await _send('POST', '/v1/consultations/${Uri.encodeComponent(id)}/report', body: {'force': force});
+  /// [useOwnKey]: write it with the clinician's own Anthropic key (never falls back to the platform key).
+  Future<(Consultation, ConsultReply)> consultationReport(
+    String id, {
+    bool force = false,
+    bool useOwnKey = false,
+  }) async {
+    final data = await _send(
+      'POST',
+      '/v1/consultations/${Uri.encodeComponent(id)}/report',
+      body: {'force': force, if (useOwnKey) 'use_own_key': true},
+    );
     final reply = ConsultReply.fromJson(data['reply'] as Map<String, dynamic>);
     return (Consultation.fromJson(data['consultation'] as Map<String, dynamic>), reply);
   }
+
+  // --- plans, payments and the clinician's own Anthropic key ---
+
+  Future<BillingPlans> billingPlans() async => BillingPlans.fromJson(await _send('GET', '/v1/billing/plans'));
+
+  Future<BillingStatus> billingStatus() async => BillingStatus.fromJson(await _send('GET', '/v1/billing/me'));
+
+  /// Starts a purchase. The server prices it; the app never sends an amount.
+  Future<OrderStart> createOrder({required String plan, String? reportType}) async =>
+      OrderStart.fromJson(await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType}));
+
+  /// Checkout finished: the server checks the signature AND asks Razorpay before granting anything.
+  Future<BillingOrder> verifyPayment(
+    String orderId, {
+    required String razorpayOrderId,
+    required String paymentId,
+    required String signature,
+  }) async => BillingOrder.fromJson(
+    (await _send(
+          'POST',
+          '/v1/billing/orders/${Uri.encodeComponent(orderId)}/verify',
+          body: {
+            'razorpay_order_id': razorpayOrderId,
+            'razorpay_payment_id': paymentId,
+            'razorpay_signature': signature,
+          },
+        ))['order']
+        as Map<String, dynamic>,
+  );
+
+  Future<void> cancelOrder(String orderId) =>
+      _send('POST', '/v1/billing/orders/${Uri.encodeComponent(orderId)}/cancel');
+
+  /// One order; the server also asks Razorpay about a payment still being confirmed.
+  Future<BillingOrder> order(String orderId) async => BillingOrder.fromJson(
+    (await _send('GET', '/v1/billing/orders/${Uri.encodeComponent(orderId)}'))['order'] as Map<String, dynamic>,
+  );
+
+  Future<List<BillingOrder>> orders() async => [
+    for (final o in ((await _send('GET', '/v1/billing/orders'))['orders'] as List? ?? const []))
+      BillingOrder.fromJson(o as Map<String, dynamic>),
+  ];
+
+  Future<List<LedgerEntry>> ledger() async => [
+    for (final l in ((await _send('GET', '/v1/billing/ledger'))['ledger'] as List? ?? const []))
+      LedgerEntry.fromJson(l as Map<String, dynamic>),
+  ];
+
+  /// Sends the key once over TLS; the server checks it with Anthropic and stores it encrypted.
+  /// Only the last 4 characters ever come back.
+  Future<OwnKeyCheck> saveOwnKey(String apiKey) async =>
+      OwnKeyCheck.fromJson(await _send('PUT', '/v1/billing/byok', body: {'api_key': apiKey}));
+
+  Future<OwnKeyCheck> checkOwnKey() async => OwnKeyCheck.fromJson(await _send('POST', '/v1/billing/byok/check'));
+
+  Future<void> removeOwnKey() => _send('DELETE', '/v1/billing/byok');
 
   // --- admin (the backend re-checks admin rights on every call) ---
 
@@ -226,6 +292,27 @@ ApiException mapDioException(DioException e) {
 /// Maps an HTTP status and FastAPI error body (`{"detail": …}`) to an [ApiException].
 ApiException mapStatus(int? status, Object? body) {
   final detail = body is Map ? body['detail'] : null;
+  final error = detail is Map ? detail['error'] as String? : null;
+  final message = detail is Map ? detail['message'] as String? : null;
+  if (status == 402 && error == 'payment_required') {
+    return PaymentRequired(
+      message: message ?? 'You have no report credits left.',
+      reportType: detail['report_type'] as String?,
+      plan: detail['plan'] as String?,
+      price: (detail['price'] as num?)?.toInt(),
+      currency: detail['currency'] as String? ?? 'INR',
+    );
+  }
+  if (status == 424 && error == 'byok_failed') {
+    return OwnKeyFailed(
+      code: detail['code'] as String? ?? 'provider_error',
+      message: message ?? 'Your Anthropic API key could not be used.',
+      retry: detail['retry'] == true,
+    );
+  }
+  if (error != null && message != null && error != 'identifiers_detected') {
+    return BillingRefused(code: (detail['code'] as String?) ?? error, message: message, status: status);
+  }
   return switch (status) {
     401 => const Unauthorized(),
     403 => const NotVerified(),

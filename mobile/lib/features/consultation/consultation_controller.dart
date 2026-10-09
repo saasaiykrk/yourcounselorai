@@ -141,7 +141,8 @@ class ConsultationController extends Notifier<GuidedState> {
     final generation = _generation;
     state = state.copyWith(busy: true, generating: true, clearError: true);
     try {
-      final (next, reply) = await _repo.report(c.id, force: force);
+      final (next, reply) = await _repo.report(c.id, force: force, useOwnKey: ref.read(useOwnKeyProvider));
+      ref.invalidate(billingStatusProvider); // a credit may have been used
       if (generation != _generation) return null;
       state = state.copyWith(consultation: next, busy: false, generating: false);
       return reply;
