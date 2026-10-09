@@ -161,6 +161,16 @@ class _ReplyScreenState extends ConsumerState<ReplyScreen> {
                       ),
                       const SizedBox(height: 16),
                       _SummaryCard(meta: reply.meta),
+                      if (reply.delivered) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          key: const ValueKey('reply-download-pdf'),
+                          onPressed: _exporting ? null : () => _downloadPdf(reply),
+                          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                          icon: const Icon(Icons.picture_as_pdf_outlined),
+                          label: Text(_exporting ? 'Preparing PDF…' : 'Download PDF'),
+                        ),
+                      ],
                       if (sections.length > 1) ...[
                         const SizedBox(height: 16),
                         _JumpBar(
