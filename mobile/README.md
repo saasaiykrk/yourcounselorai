@@ -109,6 +109,18 @@ The app is built and released by its owner; CI/CD only deploys the backend. On e
     until the 12-month retention ends.
   - Admins can open any clinician's consults from the Admin area; every view is recorded in `admin_audit`.
   - Needs `db/migrations/002_consult_history.sql` run once in Supabase.
+- **Plans & credits** (Account → Plans & credits, or the credits line on the Consult screen). Shown only when an
+  admin has switched pricing on; until then every report is free.
+  - Plans, prices and features come from the server (/admin → Pricing Plans); nothing is hardcoded in the app.
+  - Payment: the server creates and prices the order → Razorpay checkout (`razorpay_flutter`) → the server checks
+    the signature **and** asks Razorpay before any credit is added. The app never treats the checkout's
+    "success" as proof. The app holds only Razorpay's public key id, sent by the server with each order.
+  - No credit for a report → "No report credits left" with **See plans**; nothing is generated or charged.
+  - **Use My Anthropic API Key:** typed once on a screenshot-blocked screen, sent to the server (checked with
+    Anthropic, stored encrypted), never stored on the phone, and only its last 4 characters are shown again.
+    The clinician switches it on for their reports; if it fails, the app says why and offers "Write without my
+    key" — it never switches to the platform's key by itself.
+  - Payments run on Android and iPhone only (not in the browser preview).
 - **Keyboard learning and suggestions are off** in case fields.
 - **Send is locked** until the clinician ticks "no identifiers". The server cleans the text again anyway.
 - **Screen protection:** Android blocks screenshots and recording on case screens; iPhone blurs the app in the app switcher (iOS can't block screenshots).

@@ -109,7 +109,7 @@ class _Recording extends PreviewConsultationRepository {
   }
 
   @override
-  Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) {
+  Future<(Consultation, ConsultReply)> report(String id, {bool force = false, bool useOwnKey = false}) {
     reports++;
     return super.report(id, force: force);
   }

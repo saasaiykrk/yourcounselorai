@@ -19,7 +19,8 @@ abstract interface class ConsultationRepository {
 
   Future<Consultation> editFacts(String id, Map<String, String?> facts);
 
-  Future<(Consultation, ConsultReply)> report(String id, {bool force});
+  /// [useOwnKey]: write it with the clinician's own Anthropic key (never the platform key instead).
+  Future<(Consultation, ConsultReply)> report(String id, {bool force, bool useOwnKey});
 
   /// Case Snapshot form (CR-001): fill or correct fields; [done] moves on.
   Future<Consultation> updateSnapshot(
@@ -53,8 +54,8 @@ class ApiConsultationRepository implements ConsultationRepository {
   Future<Consultation> editFacts(String id, Map<String, String?> facts) => _api.consultationFacts(id, facts);
 
   @override
-  Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) =>
-      _api.consultationReport(id, force: force);
+  Future<(Consultation, ConsultReply)> report(String id, {bool force = false, bool useOwnKey = false}) =>
+      _api.consultationReport(id, force: force, useOwnKey: useOwnKey);
 
   @override
   Future<Consultation> updateSnapshot(
@@ -193,7 +194,7 @@ class PreviewConsultationRepository implements ConsultationRepository {
   }
 
   @override
-  Future<(Consultation, ConsultReply)> report(String id, {bool force = false}) async {
+  Future<(Consultation, ConsultReply)> report(String id, {bool force = false, bool useOwnKey = false}) async {
     await Future<void>.delayed(delay * 3);
     final c = _c ?? (throw const NotFound());
     final reply = ConsultReply(

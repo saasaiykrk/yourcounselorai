@@ -10,6 +10,7 @@ class Me {
     this.registrationBody,
     this.isAdmin = false,
     this.guidedConsultation = false,
+    this.pricing = false,
     this.fullName,
     this.gender,
     this.age,
@@ -23,6 +24,7 @@ class Me {
     registrationBody: json['registration_body'] as String?,
     isAdmin: json['is_admin'] == true,
     guidedConsultation: (json['features'] as Map?)?['consultation'] == true,
+    pricing: (json['features'] as Map?)?['billing'] == true,
     fullName: json['full_name'] as String?,
     gender: json['gender'] as String?,
     age: (json['age_at_registration'] as num?)?.toInt(),
@@ -43,6 +45,9 @@ class Me {
 
   /// The server has guided consultations switched on (`CONSULTATION_ENABLED`).
   final bool guidedConsultation;
+
+  /// Reports are paid for (pricing switched on by an admin): show plans and credits.
+  final bool pricing;
 
   /// The clinician's own name, as given at registration.
   final String? fullName;
@@ -137,7 +142,14 @@ class ProfileEditResult {
 
 /// `POST /v1/consult`. The text must already be cleaned on the phone.
 class ConsultRequest {
-  const ConsultRequest({required this.text, required this.mode, required this.redactionCounts, this.conversationId});
+  const ConsultRequest({
+    required this.text,
+    required this.mode,
+    required this.redactionCounts,
+    this.conversationId,
+    this.requestId,
+    this.useOwnKey = false,
+  });
 
   final String text;
 
@@ -148,10 +160,18 @@ class ConsultRequest {
   final Map<String, int> redactionCounts;
   final String? conversationId;
 
+  /// Same id on a retry: the server never charges one request twice.
+  final String? requestId;
+
+  /// Generate with the clinician's own Anthropic key (pricing on, key connected).
+  final bool useOwnKey;
+
   Map<String, dynamic> toJson() => {
     'text': text,
     'mode': mode,
     'conversation_id': conversationId,
+    'request_id': ?requestId,
+    if (useOwnKey) 'use_own_key': true,
     // The clinician ticked "no identifiers"; the app cannot send without it.
     'deid_attested': true,
     'client_redaction_counts': redactionCounts,
