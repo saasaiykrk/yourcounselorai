@@ -18,6 +18,12 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    services:
+      postgres:            # throwaway database for the credit/payment tests (no real data, no secrets)
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: yc_test }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -38,10 +44,18 @@ jobs:
           pip install -r requirements.txt
           python - <<'PY'
           import importlib.util, sys
-          missing = [m for m in ("fastapi", "httpx", "psycopg") if not importlib.util.find_spec(m)]
+          missing = [m for m in ("fastapi", "httpx", "psycopg", "cryptography") if not importlib.util.find_spec(m)]
           sys.exit(f"missing {missing}: API tests would be skipped" if missing else 0)
           PY
           python -m unittest tests.test_admin_api tests.test_history_api -v
+      - name: Billing tests (credits and payments against a real Postgres; fake Razorpay)
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/yc_test
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
+            -c "create schema auth; create table auth.users (id uuid primary key, email text);" \
+            -f db/schema.sql -f db/migrations/006_billing.sql
+          python -m unittest tests.test_billing_db tests.test_billing_api -v
       # The app's port of the cleaner must match app/deid.py (a CLAUDE.md safety file). This is a
       # quick Python check of the committed parity data; it does not build or test the app.
       - name: Cleaner parity data matches app/deid.py

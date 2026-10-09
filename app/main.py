@@ -56,7 +56,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import db, deid
+from . import billing_api, db, deid
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
 from .icd import ICD11Client, OfflineICD11
@@ -152,6 +152,21 @@ else:
 PIPELINE = Pipeline(SKILL, MODEL, ICD)
 CONSULT = ConsultationEngine(load_consult_prompts(CFG.skill_dir), MODEL, PIPELINE)
 
+
+def _own_key_model(api_key: str):
+    """A clinician's own Anthropic key, for their reports only. Never a fallback to the platform key."""
+    from .claude_client import AnthropicClient
+    return AnthropicClient(api_key, CFG.claude_model)
+
+
+def _billing_store():
+    from . import billing_db
+    return billing_db
+
+
+BILLING = billing_api.BillingService(CFG, None if CFG.dev_mode else _billing_store(), _own_key_model,
+                                     lambda: not CFG.dev_mode)
+
 if not CFG.dev_mode:
     import jwt  # PyJWT
     JWKS = jwt.PyJWKClient(CFG.supabase_jwks_url)
@@ -245,6 +260,8 @@ class ConsultIn(BaseModel):
     deid_attested: bool
     client_redaction_counts: dict[str, int] = {}
     level: str | None = Field(default=None, pattern="^(L1|L2|L3)$")   # honoured only in DEV_MODE
+    request_id: str | None = Field(default=None, pattern="^[A-Za-z0-9_-]{8,64}$")  # a retry is never charged twice
+    use_own_key: bool = False      # generate with the clinician's own Anthropic key (BYOK)
 
 
 class IncidentIn(BaseModel):
@@ -303,6 +320,7 @@ class SnapshotIn(BaseModel):
 
 class ReportIn(BaseModel):
     force: bool = False            # "Generate report now" before the intake has finished
+    use_own_key: bool = False      # generate with the clinician's own Anthropic key (BYOK)
 
 
 class CleanIn(BaseModel):
@@ -319,7 +337,7 @@ def healthz():
 
 @app.get("/v1/me")
 def me(user: dict = Depends(current_user)):
-    features = {"consultation": CFG.consultation_enabled}
+    features = {"consultation": CFG.consultation_enabled, "billing": BILLING.enabled()}
     if CFG.dev_mode and user["id"] == "dev-clinician":
         return {**_DEV_CLINICIAN, "features": features}
     row = db.get_clinician(user["id"])
@@ -371,13 +389,23 @@ def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
         except PermissionError:
             raise HTTPException(404, "conversation not found")
 
+    # Pricing: a credit is held before the report and spent only if the report is delivered.
+    funding = BILLING.authorize(c, "direct", f"consult:{body.request_id or uuid.uuid4().hex}", body.use_own_key)
+    pipeline = Pipeline(SKILL, BILLING.model_for(funding), ICD) if funding.kind == "byok" else PIPELINE
     try:
-        r = PIPELINE.run(body.text, level=level, requested_mode=body.mode, history=history,
+        r = pipeline.run(body.text, level=level, requested_mode=body.mode, history=history,
                          today=date.today().isoformat())
     except DeidRejected as e:
+        BILLING.cancel(c, funding)
         if not CFG.dev_mode:
             db.log_deid_rejection(c["id"], e.counts)
         raise HTTPException(422, {"error": "identifiers_detected", "types": sorted(e.counts)})
+    except Exception as e:
+        err = BILLING.failed(c, funding, e)
+        if err:
+            raise err
+        raise
+    BILLING.settle(c, funding, r.status == "delivered")
 
     if CFG.dev_mode:
         turn_id = uuid.uuid4()
@@ -603,16 +631,28 @@ def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(ve
         return {"consultation": public_view(state, cid), "reply": _report_reply(cid, c, state)}
     level = c["level"]
     try:
-        r = CONSULT.report(state, level, force=body.force, today=date.today().isoformat())
+        funding = BILLING.authorize(c, "guided", f"consultation:{cid}", body.use_own_key)
+    except HTTPException:
+        _release(cid)
+        raise
+    pipeline = Pipeline(SKILL, BILLING.model_for(funding), ICD) if funding.kind == "byok" else None
+    try:
+        r = CONSULT.report(state, level, force=body.force, today=date.today().isoformat(), pipeline=pipeline)
     except DeidRejected as e:
+        BILLING.cancel(c, funding)
         _release(cid)
         raise _identifiers(c, e)
     except ConsultationError as e:
+        BILLING.cancel(c, funding)
         _release(cid)
         raise HTTPException(e.status, e.detail)
-    except Exception:
+    except Exception as e:
+        err = BILLING.failed(c, funding, e)
         _release(cid)
+        if err:
+            raise err
         raise
+    BILLING.settle(c, funding, r.status == "delivered")
     case = SimpleNamespace(mode="R", text=CONSULT.case_text(state), client_redaction_counts={})
     if CFG.dev_mode:
         turn_id = str(uuid.uuid4())
@@ -627,6 +667,10 @@ def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(ve
     reply = {"turn_id": turn_id, "conversation_id": cid, "status": r.status, "text": r.display_text,
              "skill_version": r.skill_version, "report": r.reports[-1]}
     return {"consultation": public_view(state, cid), "reply": reply}
+
+
+# --- pricing, payments and "use my own key" (app/billing_api.py) ------------
+billing_api.install(app, BILLING, current_user, verified_clinician, admin)
 
 
 # --- admin panel (app Admin area and /admin web page) -------------------------
