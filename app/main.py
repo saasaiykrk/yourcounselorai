@@ -56,7 +56,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import billing_api, db, deid
+from . import billing_api, booking_api, db, deid
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
 from .icd import ICD11Client, OfflineICD11
@@ -671,6 +671,16 @@ def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(ve
 
 # --- pricing, payments and "use my own key" (app/billing_api.py) ------------
 billing_api.install(app, BILLING, current_user, verified_clinician, admin)
+
+
+# --- calendar and public booking (app/booking_api.py) -------------------------
+def _booking_store():
+    from . import booking_db
+    return booking_db
+
+
+BOOKING = booking_api.BookingService(CFG, None if CFG.dev_mode else _booking_store(), lambda: not CFG.dev_mode)
+booking_api.install(app, BOOKING, verified_clinician)
 
 
 # --- admin panel (app Admin area and /admin web page) -------------------------

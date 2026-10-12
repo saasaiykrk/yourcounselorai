@@ -31,6 +31,15 @@ OPTIONAL = {
     "BYOK_ENCRYPTION_KEY": "",        # 32 random bytes, base64: `openssl rand -base64 32`
     "BYOK_ENCRYPTION_KEY_PREVIOUS": "",  # the old key during a rotation, so stored keys still open
     "BYOK_KEY_VERSION": "1",          # +1 on every rotation
+    # Calendar and public booking (optional; booking stays unavailable without the encryption key).
+    "BOOKING_ENCRYPTION_KEY": "",     # 32 random bytes, base64: seals clients' first name + email
+    "PUBLIC_BASE_URL": "",            # e.g. https://book.yourcounselor.in; default: this server's own address
+    "SMTP_HOST": "",                  # email for booking notices; unset = notices are recorded, not sent
+    "SMTP_PORT": "587",
+    "SMTP_USERNAME": "",
+    "SMTP_PASSWORD": "",
+    "SMTP_FROM": "",                  # e.g. "YourCounselor <bookings@yourcounselor.in>"
+    "CRON_TOKEN": "",                 # lets Cloud Scheduler trigger reminder delivery
 }
 _MASK = 4  # show only the last N chars of any secret when describing config
 
@@ -55,6 +64,18 @@ class Config:
     byok_encryption_key: str = ""
     byok_encryption_key_previous: str = ""
     byok_key_version: int = 1
+    booking_encryption_key: str = ""
+    public_base_url: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    cron_token: str = ""
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from)
 
     @property
     def razorpay_configured(self) -> bool:
@@ -75,6 +96,8 @@ class Config:
             "consultation_enabled": self.consultation_enabled,
             "payments_configured": self.razorpay_configured,
             "byok_configured": bool(self.byok_encryption_key),
+            "booking_configured": bool(self.booking_encryption_key),
+            "email_configured": self.email_configured,
             "database": _host_only(self.database_url),
         }
 
@@ -116,4 +139,12 @@ def load_config() -> Config:
         byok_encryption_key=g("BYOK_ENCRYPTION_KEY"),
         byok_encryption_key_previous=g("BYOK_ENCRYPTION_KEY_PREVIOUS"),
         byok_key_version=int(g("BYOK_KEY_VERSION") or "1"),
+        booking_encryption_key=g("BOOKING_ENCRYPTION_KEY"),
+        public_base_url=g("PUBLIC_BASE_URL").rstrip("/"),
+        smtp_host=g("SMTP_HOST"),
+        smtp_port=int(g("SMTP_PORT") or "587"),
+        smtp_username=g("SMTP_USERNAME"),
+        smtp_password=g("SMTP_PASSWORD"),
+        smtp_from=g("SMTP_FROM"),
+        cron_token=g("CRON_TOKEN"),
     )
