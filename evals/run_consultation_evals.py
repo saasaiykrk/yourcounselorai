@@ -29,13 +29,13 @@ import os
 import pathlib
 import time
 
-from app.claude_client import AnthropicClient
 from app import snapshot as snap
 from app.consultation import COMPLETED, INFORMATION_SUFFICIENT, QUESTIONING, SAFETY_STOP, ConsultationEngine
 from app.icd import ICD11Client, OfflineICD11
 from app.inspector import risk_indicated
 from app.pipeline import Pipeline
 from app.prompt import load_consult_prompts, load_skill
+from evals.models import model_from_env
 
 
 def run_case(engine: ConsultationEngine, case: dict, level: str, write_report: bool) -> dict:
@@ -166,6 +166,8 @@ def main() -> None:
     ap.add_argument("--level", default="L2")
     ap.add_argument("--no-report", action="store_true", help="check the questioning only (cheaper)")
     ap.add_argument("--chat", action="store_true", help="the older question-by-question flow (no Case Snapshot)")
+    ap.add_argument("--provider", choices=("anthropic", "gemini"), default="anthropic",
+                    help="which AI writes the replies (gemini: for side-by-side comparison)")
     args = ap.parse_args()
 
     skill_dir = os.environ.get("SKILL_DIR", "skill/clinical-assist")
@@ -173,7 +175,7 @@ def main() -> None:
     icd = (ICD11Client(os.environ["WHO_ICD_CLIENT_ID"], os.environ["WHO_ICD_CLIENT_SECRET"],
                        os.environ.get("ICD_RELEASE", "2025-01"))
            if os.environ.get("WHO_ICD_CLIENT_ID") else OfflineICD11())
-    model = AnthropicClient(os.environ["ANTHROPIC_API_KEY"], os.environ["CLAUDE_MODEL"])
+    model = model_from_env(args.provider)
     engine = ConsultationEngine(load_consult_prompts(skill_dir), model, Pipeline(skill, model, icd))
 
     cases = load_cases(args.file)

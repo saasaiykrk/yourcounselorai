@@ -143,7 +143,11 @@ class _FakeDevModel:
         return out, {"input_tokens": 0, "output_tokens": 0}
 
 
-if CFG.dev_mode and not CFG.anthropic_api_key:
+if CFG.model_provider == "gemini" and CFG.gemini_api_key:
+    # Optional: Gemini writes the replies. Same skill, tools, cleaner and inspector (app/gemini_client.py).
+    from .gemini_client import GeminiClient
+    MODEL = GeminiClient(CFG.gemini_api_key, CFG.gemini_model)
+elif CFG.dev_mode and not CFG.anthropic_api_key:
     MODEL = _FakeDevModel(CFG.skill_dir)
 else:
     from .claude_client import AnthropicClient
