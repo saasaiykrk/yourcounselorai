@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Book an appointment · YourCounselor</title>
+  <link rel="icon" href="/admin/logo.png">
+  <link rel="stylesheet" href="/book/assets/booking.css">
+  <script src="/book/assets/booking.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap row">
+      <img src="/admin/logo.png" alt="" class="logo" width="32" height="32">
+      <p class="wordmark"><span class="your">Your</span><span class="counselor">Counselor</span></p>
+    </div>
+  </header>
+
+  <main class="wrap" id="main" aria-live="polite">
+    <section id="loading" class="card center"><span class="spinner" aria-hidden="true"></span><p class="muted">Loading…</p></section>
+
+    <section id="missing" class="card center" hidden>
+      <h1>Page not found</h1>
+      <p class="muted" id="missing-text">This booking page does not exist or is not taking bookings right now.</p>
+    </section>
+
+    <!-- booking -->
+    <section id="book" hidden>
+      <div class="card profile">
+        <div class="avatar" id="avatar" aria-hidden="true"></div>
+        <div>
+          <h1 id="name"></h1>
+          <p class="tag" id="role"></p>
+          <p class="bio" id="bio"></p>
+          <p class="facts"><span id="length"></span> · <span id="tz"></span></p>
+        </div>
+      </div>
+
+      <div class="card" id="step-time">
+        <div class="row between">
+          <h2>1. Choose a date</h2>
+          <div class="row gap">
+            <button class="btn ghost small" id="prev" type="button" aria-label="Earlier dates">‹</button>
+            <button class="btn ghost small" id="next" type="button" aria-label="Later dates">›</button>
+          </div>
+        </div>
+        <div class="dates" id="dates" role="listbox" aria-label="Dates"></div>
+        <h2 class="mt">2. Choose a time</h2>
+        <p class="muted small" id="tz-note"></p>
+        <div class="slots" id="slots" role="listbox" aria-label="Times"></div>
+        <p class="muted empty" id="no-slots" hidden>No free times on this day. Please choose another date.</p>
+        <p class="muted empty" id="no-dates" hidden>No free times in these dates. Try later dates.</p>
+      </div>
+
+      <form class="card" id="step-details" hidden novalidate>
+        <h2>3. Your details</h2>
+        <p class="chosen" id="chosen"></p>
+        <label for="first_name">First name</label>
+        <input id="first_name" name="first_name" autocomplete="given-name" maxlength="40" required>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+        <div class="hp" aria-hidden="true">
+          <label for="website">Leave this empty</label>
+          <input id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+        <label class="check"><input type="checkbox" id="consent" required>
+          <span>I agree to share my first name and email with this consultant so they can manage this appointment.
+            They are stored encrypted and deleted 90 days after the appointment.</span></label>
+        <p class="error" id="form-error" role="alert"></p>
+        <div class="row gap">
+          <button class="btn ghost" type="button" id="back">Back</button>
+          <button class="btn primary grow" type="submit" id="submit">Book appointment</button>
+        </div>
+        <p class="fine">Please don't include health details here. Your consultant will discuss everything at the appointment.</p>
+      </form>
+    </section>
+
+    <!-- confirmation -->
+    <section id="done" class="card center" hidden>
+      <div class="badge" id="done-badge" aria-hidden="true">✓</div>
+      <h1 id="done-title"></h1>
+      <p class="when" id="done-when"></p>
+      <p class="muted" id="done-text"></p>
+      <div class="linkbox">
+        <p class="small muted">Keep this link to see or cancel your appointment:</p>
+        <div class="row gap"><input id="manage-link" readonly aria-label="Your appointment link"><button class="btn ghost small" id="copy" type="button">Copy</button></div>
+      </div>
+    </section>
+
+    <!-- manage -->
+    <section id="manage" class="card center" hidden>
+      <h1>Your appointment</h1>
+      <p class="pill" id="m-status"></p>
+      <p class="when" id="m-when"></p>
+      <p class="muted" id="m-with"></p>
+      <p class="error" id="m-error" role="alert"></p>
+      <button class="btn danger" id="m-cancel" type="button" hidden>Cancel appointment</button>
+      <div id="m-confirm" hidden>
+        <p>Cancel this appointment? This cannot be undone.</p>
+        <div class="row gap center-row">
+          <button class="btn ghost" id="m-keep" type="button">Keep it</button>
+          <button class="btn danger solid" id="m-yes" type="button">Yes, cancel</button>
+        </div>
+      </div>
+      <a class="btn ghost" id="m-rebook" hidden>Book another time</a>
+    </section>
+
+    <p class="fine foot">This page is for booking appointments only. If you need urgent help, contact your local emergency services.</p>
+  </main>
+</body>
+</html>
