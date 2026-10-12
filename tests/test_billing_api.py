@@ -323,6 +323,19 @@ class BillingApiTests(unittest.TestCase):
         self.assertTrue(self.client.post(f"/v1/billing/orders/{o2['order']['id']}/cancel").json()["cancelled"])
         self.assertEqual(self.balance()["any"], 0)
 
+    def test_razorpay_refusing_the_order_records_its_reason(self):
+        # Seen live: every purchase failed with only "could not create the Razorpay order" — no way to
+        # tell wrong keys from an outage. Razorpay's own reason is kept (never the keys).
+        self.configure({"enabled": True})
+        main.BILLING.razorpay = Razorpay("rzp_test_x", "wrong-secret", transport=httpx.MockTransport(self.rzp.handler))
+        r = self.client.post("/v1/billing/orders", json={"plan": "sub_30"})
+        self.assertEqual(r.status_code, 502)
+        o = billing_db.orders(self.cid)[0]
+        self.assertEqual(o["status"], "failed")
+        self.assertIn("Razorpay 401", o["failure_reason"])
+        self.assertNotIn("wrong-secret", o["failure_reason"])
+        self.assertNotIn("wrong-secret", r.text)
+
     def test_disabled_plan_cannot_be_bought_and_prices_are_server_side(self):
         c = billing.validate({"enabled": True})
         c["plans"]["sub_50"]["enabled"] = False

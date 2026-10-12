@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'api_exceptions.dart';
 import 'api_models.dart';
 import 'billing_models.dart';
+import 'calendar_models.dart';
 
 /// Returns the bearer token for the signed-in clinician, or null.
 typedef TokenProvider = Future<String?> Function();
@@ -246,6 +247,89 @@ class ApiClient {
     '/v1/admin/incidents/${Uri.encodeComponent(id)}',
     body: {'status': status, 'reviewer_note': reviewerNote},
   );
+
+  // --- calendar and online booking (the consultant's own) ---
+
+  Future<CalendarHome> calendar() async => CalendarHome.fromJson(await _send('GET', '/v1/calendar'));
+
+  Future<void> saveCalendarSettings(BookingSettings s) => _send('PUT', '/v1/calendar/settings', body: s.toJson());
+
+  Future<void> saveAvailability(List<WorkWindow> windows) => _send(
+    'PUT',
+    '/v1/calendar/availability',
+    body: {
+      'windows': [for (final w in windows) w.toJson()],
+    },
+  );
+
+  /// Whole days off, [from]–[to] inclusive, in the consultant's timezone. Returns how many existing
+  /// appointments fall inside (they are kept; the consultant decides).
+  Future<int> addTimeOff({required DateTime from, required DateTime to, String label = ''}) async => _intOf(
+    (await _send(
+      'POST',
+      '/v1/calendar/time-off',
+      body: {'date_from': isoDate(from), 'date_to': isoDate(to), 'label': label},
+    ))['conflicts'],
+  );
+
+  Future<void> deleteTimeOff(int id) => _send('DELETE', '/v1/calendar/time-off/$id');
+
+  Future<List<Appointment>> appointments(DateTime start, DateTime end) async => [
+    for (final a
+        in ((await _send(
+                  'GET',
+                  '/v1/calendar/appointments',
+                  query: {'start': isoDate(start), 'end': isoDate(end)},
+                ))['appointments']
+                as List? ??
+            const []))
+      Appointment.fromJson(a as Map<String, dynamic>),
+  ];
+
+  /// Free times from [start] for [days] days ([ignore]: the appointment being moved).
+  Future<List<FreeDay>> freeSlots(DateTime start, {int days = 7, String? ignore}) async => [
+    for (final d
+        in ((await _send(
+                  'GET',
+                  '/v1/calendar/slots',
+                  query: {'start': isoDate(start), 'days': days, 'ignore': ?ignore},
+                ))['days']
+                as List? ??
+            const []))
+      FreeDay.fromJson(d as Map<String, dynamic>),
+  ];
+
+  /// [startsLocal]: a wall time in the consultant's timezone, "2026-10-13T18:00".
+  Future<Appointment> addAppointment({required String startsLocal, String? firstName, String? email}) async =>
+      Appointment.fromJson(
+        (await _send(
+              'POST',
+              '/v1/calendar/appointments',
+              body: {'starts_local': startsLocal, 'first_name': ?firstName, 'email': ?email},
+            ))['appointment']
+            as Map<String, dynamic>,
+      );
+
+  Future<Appointment> rescheduleAppointment(
+    String id, {
+    required String startsLocal,
+    bool outsideHours = false,
+  }) async => Appointment.fromJson(
+    (await _send(
+          'POST',
+          '/v1/calendar/appointments/${Uri.encodeComponent(id)}/reschedule',
+          body: {'starts_local': startsLocal, 'outside_hours': outsideHours},
+        ))['appointment']
+        as Map<String, dynamic>,
+  );
+
+  /// [action]: confirm · reject · cancel · complete.
+  Future<Appointment> appointmentAction(String id, String action) async => Appointment.fromJson(
+    (await _send('POST', '/v1/calendar/appointments/${Uri.encodeComponent(id)}/$action'))['appointment']
+        as Map<String, dynamic>,
+  );
+
+  static int _intOf(Object? v) => (v as num?)?.toInt() ?? 0;
 
   Future<Map<String, dynamic>> _send(
     String method,

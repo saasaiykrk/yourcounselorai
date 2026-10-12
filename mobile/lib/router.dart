@@ -9,6 +9,8 @@ import 'features/admin/admin_screen.dart';
 import 'features/billing/billing_history_screen.dart';
 import 'features/billing/own_key_screen.dart';
 import 'features/billing/pricing_screen.dart';
+import 'features/calendar/calendar_screen.dart';
+import 'features/calendar/calendar_settings_screen.dart';
 import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
 import 'features/consult/reply_screen.dart';
@@ -42,11 +44,17 @@ GoRouter buildRouter({String initialLocation = '/'}) {
             routes: [GoRoute(path: '/history', builder: (_, _) => const HistoryScreen())],
           ),
           StatefulShellBranch(
+            routes: [GoRoute(path: '/calendar', builder: (_, _) => const CalendarScreen())],
+          ),
+          StatefulShellBranch(
             routes: [GoRoute(path: '/account', builder: (_, _) => const AccountScreen())],
           ),
         ],
       ),
       GoRoute(path: '/account/profile', builder: (_, _) => const EditProfileScreen()),
+      GoRoute(path: '/calendar/settings', builder: (_, _) => const CalendarSettingsScreen()),
+      GoRoute(path: '/calendar/hours', builder: (_, _) => const WorkingHoursScreen()),
+      GoRoute(path: '/calendar/time-off', builder: (_, _) => const TimeOffScreen()),
       GoRoute(path: '/drafting', builder: (_, _) => const DraftingScreen()),
       GoRoute(path: '/consultation', builder: (_, _) => const ConsultationScreen()),
       GoRoute(path: '/reply', builder: (_, _) => const ReplyScreen()),
