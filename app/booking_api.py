@@ -77,13 +77,16 @@ class TimeOffIn(BaseModel):
 
 
 class ConsultantBookingIn(BaseModel):
-    starts_at: str
+    """starts_at: a UTC instant; or starts_local: a wall time in the consultant's timezone (2026-10-13T18:00)."""
+    starts_at: str | None = None
+    starts_local: str | None = Field(default=None, max_length=16)
     first_name: str | None = Field(default=None, max_length=40)
     email: str | None = Field(default=None, max_length=254)
 
 
 class RescheduleIn(BaseModel):
-    starts_at: str
+    starts_at: str | None = None
+    starts_local: str | None = Field(default=None, max_length=16)
     outside_hours: bool = False        # the consultant may move it outside their published hours
 
 
@@ -98,6 +101,11 @@ class PublicBookingIn(BaseModel):
 
 def _iso(d):
     return d.astimezone(UTC).isoformat().replace("+00:00", "Z") if isinstance(d, datetime) else d
+
+
+def _local(d: datetime, tz_name: str) -> str:
+    """Wall-clock time in the consultant's timezone, e.g. 2026-10-13T10:30 (the app has no tz database)."""
+    return d.astimezone(booking.zone(tz_name)).strftime("%Y-%m-%dT%H:%M")
 
 
 class _RateLimit:
@@ -144,9 +152,10 @@ class BookingService:
         except Exception:      # noqa: BLE001 - a row sealed under another key: show no details, never crash
             return None
 
-    def view(self, row: dict) -> dict:
+    def view(self, row: dict, tz_name: str) -> dict:
         d = self.details(row)
         return {"id": str(row["id"]), "starts_at": _iso(row["starts_at"]), "ends_at": _iso(row["ends_at"]),
+                "local_start": _local(row["starts_at"], tz_name), "local_end": _local(row["ends_at"], tz_name),
                 "status": row["status"], "source": row["source"],
                 "client": {"first_name": d.get("first_name"), "email": d.get("email")} if d else None,
                 "pending_until": _iso(row["pending_until"]), "cancelled_by": row["cancelled_by"],
@@ -178,6 +187,20 @@ class BookingService:
         return counts
 
 
+def _start(body, tz_name: str) -> datetime:
+    """The requested start as UTC, from starts_at (UTC) or starts_local (consultant's wall time)."""
+    if body.starts_local:
+        try:
+            wall = datetime.strptime(body.starts_local, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            raise booking.BookingError("starts_local: a date and time like 2026-10-13T18:00")
+        at = booking.local_instant(wall.date(), wall.time(), tz_name)
+        if at is None:
+            raise booking.BookingError("That time does not exist on that day (the clocks change).")
+        return at
+    return booking.parse_utc(body.starts_at or "")
+
+
 def _slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
     s = re.sub(r"^(dr|mr|mrs|ms|prof)-", "", s)
@@ -189,6 +212,9 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
     def need_store():
         if not svc.store_on():
             raise HTTPException(503, {"error": "calendar_unavailable", "message": "The calendar needs the database."})
+
+    def tz_of(c) -> str:
+        return (svc.store.get_settings(c["id"]) or booking.DEFAULT_SETTINGS)["timezone"]
 
     def settings_of(c) -> dict:
         s = svc.store.get_settings(c["id"])
@@ -218,8 +244,10 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
                 "booking_url": f"{svc.base_url(request)}/book/{settings['slug']}" if s else None,
                 "windows": [{"weekday": w, "start": f"{a:%H:%M}", "end": f"{b:%H:%M}"} for w, a, b in svc.store.windows(c["id"])],
                 "time_off": [{"id": t["id"], "starts_at": _iso(t["starts_at"]), "ends_at": _iso(t["ends_at"]),
+                              "local_start": _local(t["starts_at"], tz), "local_end": _local(t["ends_at"], tz),
                               "label": t["label"]} for t in svc.store.time_off(c["id"])],
                 "summary": svc.store.summary(c["id"], tz) if s else None,
+                "today": datetime.now(UTC).astimezone(booking.zone(tz)).date().isoformat(),
                 "ready": {"booking": svc.sealer is not None, "email": svc.mailer is not None},
                 "timezones": TIMEZONES}
 
@@ -287,10 +315,11 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         need_store()
         if end < start or (end - start).days > 62:
             raise HTTPException(422, {"error": "invalid", "message": "Choose up to 62 days."})
-        tz = booking.zone((svc.store.get_settings(c["id"]) or booking.DEFAULT_SETTINGS)["timezone"])
+        tz_name = tz_of(c)
+        tz = booking.zone(tz_name)
         lo = datetime.combine(start, datetime.min.time(), tzinfo=tz).astimezone(UTC)
         hi = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=tz).astimezone(UTC)
-        return {"appointments": [svc.view(r) for r in svc.store.list_between(c["id"], lo, hi)]}
+        return {"timezone": tz_name, "appointments": [svc.view(r, tz_name) for r in svc.store.list_between(c["id"], lo, hi)]}
 
     @app.get("/v1/calendar/slots")
     def calendar_slots(start: date, days: int = Query(7, ge=1, le=31), ignore: uuid.UUID | None = None,
@@ -298,8 +327,9 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         need_store()
         s = settings_of(c)
         slots = svc.store.free_slots(c["id"], s, start, days, honour_notice=False, ignore=str(ignore) if ignore else None)
-        return {"timezone": s["timezone"], "days": [{"date": d.isoformat(), "slots": [_iso(t) for t in ts]}
-                                                    for d, ts in sorted(slots.items())]}
+        return {"timezone": s["timezone"], "days": [
+            {"date": d.isoformat(), "slots": [{"starts_at": _iso(t), "local": _local(t, s["timezone"])} for t in ts]}
+            for d, ts in sorted(slots.items())]}
 
     @app.post("/v1/calendar/appointments")
     def calendar_add(body: ConsultantBookingIn, request: Request, bg: BackgroundTasks,
@@ -307,7 +337,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         need_store()
         s = settings_of(c)
         try:
-            start = booking.parse_utc(body.starts_at)
+            start = _start(body, s["timezone"])
             details = None
             if body.first_name or body.email:
                 if svc.sealer is None:
@@ -327,7 +357,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         except svc.store.SlotTaken:
             raise HTTPException(409, {"error": "slot_taken", "message": "That time overlaps another appointment or time off."})
         deliver_later(bg, request)
-        return {"appointment": svc.view(row)}
+        return {"appointment": svc.view(row, s["timezone"])}
 
     @app.post("/v1/calendar/appointments/{appt_id}/reschedule")
     def calendar_reschedule(appt_id: uuid.UUID, body: RescheduleIn, request: Request, bg: BackgroundTasks,
@@ -335,7 +365,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         need_store()
         s = settings_of(c)
         try:
-            start = booking.parse_utc(body.starts_at)
+            start = _start(body, s["timezone"])
         except booking.BookingError as e:
             raise problems(e)
         try:
@@ -348,7 +378,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         except svc.store.SlotTaken:
             raise HTTPException(409, {"error": "slot_taken", "message": "That time is not free."})
         deliver_later(bg, request)
-        return {"appointment": svc.view(r["new"]), "previous_id": str(appt_id)}
+        return {"appointment": svc.view(r["new"], s["timezone"]), "previous_id": str(appt_id)}
 
     @app.post("/v1/calendar/appointments/{appt_id}/{action}")
     def calendar_action(appt_id: uuid.UUID, action: str, request: Request, bg: BackgroundTasks,
@@ -363,7 +393,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         except svc.store.NotAllowed:
             raise HTTPException(409, {"error": "not_allowed", "message": "This appointment can't be changed that way now."})
         deliver_later(bg, request)
-        return {"appointment": svc.view(row)}
+        return {"appointment": svc.view(row, tz_of(c))}
 
     # --- public -----------------------------------------------------------------------------------
     def public_settings(slug: str) -> dict:

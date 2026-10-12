@@ -2,15 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers.dart';
 import '../history/history_screen.dart';
 
-/// Bottom navigation between Consult, History and Account.
+/// Bottom navigation between Consult, History, Calendar and Account.
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
 
   static const historyBranch = 1;
+  static const calendarBranch = 2;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,6 +23,8 @@ class HomeShell extends ConsumerWidget {
         onDestinationSelected: (i) {
           // History is re-read every time it is opened (a consult may have just finished).
           if (i == historyBranch) ref.read(historyRefreshProvider.notifier).bump();
+          // The calendar too: bookings arrive from clients at any time.
+          if (i == calendarBranch) ref.invalidate(calendarHomeProvider);
           shell.goBranch(i, initialLocation: i == shell.currentIndex);
         },
         destinations: const [
@@ -33,6 +37,11 @@ class HomeShell extends ConsumerWidget {
             icon: Icon(Icons.history_rounded),
             selectedIcon: Icon(Icons.history_toggle_off_rounded),
             label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month_rounded),
+            label: 'Calendar',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),

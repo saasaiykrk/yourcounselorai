@@ -132,6 +132,8 @@ class BookingApiTests(unittest.TestCase):
         home = self.client.get("/v1/calendar").json()
         self.assertTrue(home["configured"])
         self.assertEqual(home["booking_url"], f"https://yc.test/book/{self.slug}")
+        slots = self.client.get("/v1/calendar/slots", params={"start": DAY.isoformat(), "days": 1}).json()["days"][0]["slots"]
+        self.assertEqual(slots[0], {"starts_at": at(9), "local": f"{DAY}T09:00"})
         self.assertEqual(len(home["windows"]), 3)
         prof = self.client.get(f"/v1/public/booking/{self.slug}")
         self.assertEqual(prof.status_code, 200)
@@ -277,6 +279,9 @@ class BookingApiTests(unittest.TestCase):
                          409)
         self.assertEqual(self.client.post("/v1/calendar/appointments", json={"starts_at": at(19)}).status_code, 200,
                          "an appointment with no client details")
+        r = self.client.post("/v1/calendar/appointments", json={"starts_local": f"{DAY}T20:00"})
+        self.assertEqual((r.status_code, r.json()["appointment"]["starts_at"]), (200, at(20)), "a wall time in India")
+        self.assertEqual(self.client.post("/v1/calendar/appointments", json={"starts_local": "tomorrow 8pm"}).status_code, 422)
 
     # --- reschedule and cancel ----------------------------------------------------------------------
     def test_reschedule_moves_without_duplicates_and_the_client_link_follows(self):
@@ -292,6 +297,7 @@ class BookingApiTests(unittest.TestCase):
         new = r.json()["appointment"]
         self.assertEqual((new["status"], new["starts_at"], new["rescheduled_from"]), ("confirmed", at(10, 30), a["id"]))
         self.assertEqual(new["client"]["first_name"], "Meera", "details re-sealed for the new appointment")
+        self.assertEqual(new["local_start"], f"{DAY}T10:30", "wall-clock time in the consultant's timezone")
         active = [x for x in self.appts() if x["status"] in booking.ACTIVE]
         self.assertEqual(sorted(x["starts_at"] for x in active), [at(10, 30), at(12)])
         self.assertIn(at(9), self.slots(), "the old time is free again")
