@@ -8,8 +8,10 @@ import 'api/api_client.dart';
 import 'api/api_models.dart';
 import 'auth/auth_service.dart';
 import 'billing/billing_repository.dart';
+import 'calendar/calendar_repository.dart';
 import 'billing/payment_gateway.dart';
 import 'api/billing_models.dart';
+import 'api/calendar_models.dart';
 import 'config.dart';
 import 'repositories.dart';
 
@@ -76,3 +78,14 @@ class OwnKeyChoice extends Notifier<bool> {
 }
 
 final useOwnKeyProvider = NotifierProvider<OwnKeyChoice, bool>(OwnKeyChoice.new);
+
+// --- calendar and online booking ----------------------------------------------------------------
+
+final calendarRepositoryProvider = Provider<CalendarRepository>(
+  (ref) => AppConfig.previewMode ? PreviewCalendarRepository() : ApiCalendarRepository(ref.watch(apiClientProvider)),
+);
+
+/// Settings, booking link, hours, time off and counts. Re-read after any change.
+final calendarHomeProvider = FutureProvider.autoDispose<CalendarHome>(
+  (ref) => ref.watch(calendarRepositoryProvider).home(),
+);

@@ -181,6 +181,60 @@ How it is protected:
   old value as `BYOK_ENCRYPTION_KEY_PREVIOUS`, the new one as `BYOK_ENCRYPTION_KEY`, and raise
   `BYOK_KEY_VERSION` by 1. Each saved key is re-encrypted with the new value the next time it is used.
 
+## Calendar and online booking (each consultant switches it on for themselves)
+
+Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
+buffer, notice, how far ahead clients can book, and whether requests need their approval. They share a link
+`https://<your Cloud Run URL>/book/<link name>` where clients pick a free time and give **only a first name
+and an email**.
+
+1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/007_booking.sql`
+   (safe to run again). Without it the server still starts but the Calendar tab shows an error.
+2. **Encryption key for client details (required for online booking):** in Cloud Shell
+   ```bash
+   openssl rand -base64 32 | tr -d '\n' | gcloud secrets create booking-encryption-key --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-secrets BOOKING_ENCRYPTION_KEY=booking-encryption-key:latest
+   ```
+   Give the service's account **Secret Manager Secret Accessor** on it if asked. `/healthz` then shows
+   `"booking_configured": true`. Without it, consultants can still use their calendar, but can't switch
+   booking on. **Never change or lose this key:** stored client names and emails can't be read without it.
+3. **Emails (optional).** Without SMTP everything works and no email is sent (the client keeps their own
+   link to see or cancel). To send confirmations, cancellations and 24-hour reminders, use any SMTP provider
+   (for example the one that sends your sign-in codes):
+   ```bash
+   read -rsp "SMTP password: " v; echo; printf '%s' "$v" | gcloud secrets create smtp-password --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-env-vars SMTP_HOST=smtp.example.com,SMTP_PORT=587,SMTP_USERNAME=apikey,SMTP_FROM="YourCounselor <bookings@yourdomain>" \
+     --update-secrets SMTP_PASSWORD=smtp-password:latest
+   ```
+4. **Reminders (only with email):** a Cloud Scheduler job calls the server every 15 minutes. It also deletes
+   appointments (and their client details) 90 days after they ended.
+   ```bash
+   openssl rand -hex 24 | tr -d '\n' | gcloud secrets create cron-token --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-secrets CRON_TOKEN=cron-token:latest
+   gcloud scheduler jobs create http booking-deliver --location asia-south1 --project yourcounselor-beta \
+     --schedule "*/15 * * * *" --http-method POST \
+     --uri "https://<your Cloud Run URL>/v1/internal/booking/deliver" \
+     --headers "X-Cron-Token=$(gcloud secrets versions access latest --secret cron-token --project yourcounselor-beta)"
+   ```
+   Even without this job, emails for each booking are sent straight away; only reminders and the 90-day
+   clean-up need it.
+5. **Privacy text:** the booking page tells clients what is stored and for how long. Ask the data-protection
+   lawyer to review it, and to add client booking details (first name, email, appointment time; 90 days) to
+   the privacy policy before inviting the public.
+
+How it is protected:
+- One time can never be booked twice: each change takes a per-consultant lock, re-checks the time inside it,
+  and the database refuses overlapping pending/confirmed appointments (an exclusion constraint) as a last line.
+- A request waiting for approval holds its time for up to 24 hours, then expires and frees it.
+- Client details are encrypted (AES-256-GCM, bound to the appointment) and never logged or shown publicly.
+  The client's cancel link is stored only as a hash. One email can hold at most two upcoming bookings
+  with a consultant; the public form is rate-limited and has a hidden spam trap.
+- Only verified consultants have a booking page; each sees and changes only their own calendar.
+- Times are stored in UTC and shown in the consultant's timezone, so daylight-saving changes are handled.
+
 ## Rolling back by hand
 
 ```bash

@@ -52,14 +52,14 @@ jobs:
           sys.exit(f"missing {missing}: API tests would be skipped" if missing else 0)
           PY
           python -m unittest tests.test_admin_api tests.test_history_api -v
-      - name: Billing tests (credits and payments against a real Postgres; fake Razorpay)
+      - name: Billing and booking tests (against a real Postgres; fake Razorpay; no email sent)
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/yc_test
         run: |
           psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -q \
             -c "create schema auth; create table auth.users (id uuid primary key, email text);" \
-            -f db/schema.sql -f db/migrations/006_billing.sql
-          python -m unittest tests.test_billing_db tests.test_billing_api -v
+            -f db/schema.sql -f db/migrations/006_billing.sql -f db/migrations/007_booking.sql
+          python -m unittest tests.test_billing_db tests.test_billing_api tests.test_booking_api -v
       # The app's port of the cleaner must match app/deid.py (a CLAUDE.md safety file). This is a
       # quick Python check of the committed parity data; it does not build or test the app.
       - name: Cleaner parity data matches app/deid.py

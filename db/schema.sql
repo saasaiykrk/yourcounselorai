@@ -113,3 +113,4 @@ alter table consultations   enable row level security;
 -- unless an incident is open. Confirm the period with the data-protection lawyer (Phase 4).
 
 -- Pricing, payments, credits and BYOK: db/migrations/006_billing.sql (run after this file).
+-- Consultant calendar and public booking: db/migrations/007_booking.sql (run after 006).
