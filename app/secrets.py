@@ -15,6 +15,8 @@ import os
 from dataclasses import dataclass
 
 REQUIRED = ["ANTHROPIC_API_KEY", "CLAUDE_MODEL", "DATABASE_URL", "SUPABASE_JWKS_URL"]
+# With MODEL_PROVIDER=gemini the platform model is Gemini, so these replace ANTHROPIC_API_KEY/CLAUDE_MODEL.
+GEMINI_REQUIRED = ["GEMINI_API_KEY", "GEMINI_MODEL"]
 OPTIONAL = {
     "SKILL_DIR": "skill/clinical-assist",
     "ICD_RELEASE": "2025-01",
@@ -40,6 +42,11 @@ OPTIONAL = {
     "SMTP_PASSWORD": "",
     "SMTP_FROM": "",                  # e.g. "YourCounselor <bookings@yourcounselor.in>"
     "CRON_TOKEN": "",                 # lets Cloud Scheduler trigger reminder delivery
+    # Which AI writes the replies: "anthropic" (default, the pinned Claude model) or "gemini".
+    # Switching for clinicians is a model change (CLAUDE.md rule 3): evals + clinician sign-off first.
+    "MODEL_PROVIDER": "anthropic",
+    "GEMINI_API_KEY": "",
+    "GEMINI_MODEL": "",
 }
 _MASK = 4  # show only the last N chars of any secret when describing config
 
@@ -72,6 +79,13 @@ class Config:
     smtp_password: str = ""
     smtp_from: str = ""
     cron_token: str = ""
+    model_provider: str = "anthropic"
+    gemini_api_key: str = ""
+    gemini_model: str = ""
+
+    @property
+    def platform_model(self) -> str:
+        return self.gemini_model if self.model_provider == "gemini" else self.claude_model
 
     @property
     def email_configured(self) -> bool:
@@ -89,6 +103,8 @@ class Config:
         """Safe to log or return from /healthz — never contains secret values."""
         return {
             "claude_model": self.claude_model,
+            "model_provider": self.model_provider,
+            "gemini_configured": bool(self.gemini_api_key and self.gemini_model),
             "skill_dir": self.skill_dir,
             "icd_release": self.icd_release,
             "icd_enabled": self.icd_enabled,
@@ -111,7 +127,12 @@ def _host_only(dsn: str) -> str:
 
 
 def load_config() -> Config:
-    missing = [k for k in REQUIRED if not os.environ.get(k)]
+    provider = (os.environ.get("MODEL_PROVIDER") or "anthropic").strip().lower()
+    if provider not in ("anthropic", "gemini"):
+        raise RuntimeError("MODEL_PROVIDER must be 'anthropic' or 'gemini'.")
+    required = REQUIRED if provider == "anthropic" else \
+        [k for k in REQUIRED if k not in ("ANTHROPIC_API_KEY", "CLAUDE_MODEL")] + GEMINI_REQUIRED
+    missing = [k for k in required if not os.environ.get(k)]
     dev = os.environ.get("DEV_MODE", "0") == "1"
     if missing and not dev:
         raise RuntimeError(
@@ -147,4 +168,7 @@ def load_config() -> Config:
         smtp_password=g("SMTP_PASSWORD"),
         smtp_from=g("SMTP_FROM"),
         cron_token=g("CRON_TOKEN"),
+        model_provider=provider,
+        gemini_api_key=g("GEMINI_API_KEY"),
+        gemini_model=g("GEMINI_MODEL"),
     )

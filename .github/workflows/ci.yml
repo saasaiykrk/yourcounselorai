@@ -11,6 +11,11 @@ on:
         type: choice
         options: [all, vignettes, consultation]
         default: all
+      eval_provider:
+        description: "Which AI writes the eval replies: anthropic (the pinned Claude model) or gemini (to compare)"
+        type: choice
+        options: [anthropic, gemini]
+        default: anthropic
       verify_icd:
         description: "Check every ICD-11 code in skill/ against WHO (free; needs the WHO_ICD_* secrets)"
         type: boolean
@@ -141,46 +146,60 @@ jobs:
       - name: Check the eval settings
         id: settings
         env:
+          PROVIDER: ${{ inputs.eval_provider }}
           HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          HAS_GEMINI_KEY: ${{ secrets.GEMINI_API_KEY != '' }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
         run: |
           missing=""
-          [ "$HAS_KEY" = "true" ] || missing="$missing secret:ANTHROPIC_API_KEY"
-          [ -n "$CLAUDE_MODEL" ] || missing="$missing variable:CLAUDE_MODEL"
+          if [ "$PROVIDER" = "gemini" ]; then
+            [ "$HAS_GEMINI_KEY" = "true" ] || missing="$missing secret:GEMINI_API_KEY"
+            [ -n "$GEMINI_MODEL" ] || missing="$missing variable:GEMINI_MODEL"
+          else
+            [ "$HAS_KEY" = "true" ] || missing="$missing secret:ANTHROPIC_API_KEY"
+            [ -n "$CLAUDE_MODEL" ] || missing="$missing variable:CLAUDE_MODEL"
+          fi
           if [ -n "$missing" ]; then
             echo "::error::Evals need these in Settings → Secrets and variables → Actions:$missing (see docs/DEPLOY.md)"
             exit 1
           fi
       - name: Vignettes (direct consult)
         if: inputs.eval_suite != 'consultation'
-        run: python -m evals.run_evals
+        run: python -m evals.run_evals --provider "${{ inputs.eval_provider }}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - name: Guided consultation (Case Snapshot), L2
         if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
-        run: python -m evals.run_consultation_evals --level L2
+        run: python -m evals.run_consultation_evals --level L2 --provider "${{ inputs.eval_provider }}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - name: Guided consultation (Case Snapshot), L1
         if: ${{ !cancelled() && steps.settings.outcome == 'success' && inputs.eval_suite != 'vignettes' }}
-        run: python -m evals.run_consultation_evals --level L1
+        run: python -m evals.run_consultation_evals --level L1 --provider "${{ inputs.eval_provider }}"
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           WHO_ICD_CLIENT_ID: ${{ secrets.WHO_ICD_CLIENT_ID }}
           WHO_ICD_CLIENT_SECRET: ${{ secrets.WHO_ICD_CLIENT_SECRET }}
           ICD_RELEASE: ${{ vars.ICD_RELEASE }}
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
-        with: { name: eval-grading-pack, path: evals/out }
+        with: { name: "eval-grading-pack-${{ inputs.eval_provider }}", path: evals/out }
 
   verify-icd:
     # Manual (tick "verify_icd"): every ICD-11 code in skill/ looked up with WHO in the pinned release.
