@@ -23,23 +23,25 @@ import os
 import pathlib
 import time
 
-from app.claude_client import AnthropicClient
 from app.icd import ICD11Client, OfflineICD11
 from app.pipeline import DeidRejected, Pipeline
 from app.prompt import load_skill
+from evals.models import model_from_env
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--file", default="evals/evals.json")
     ap.add_argument("--level", default="L2")
+    ap.add_argument("--provider", choices=("anthropic", "gemini"), default="anthropic",
+                    help="which AI writes the replies (gemini: for side-by-side comparison)")
     args = ap.parse_args()
 
     skill = load_skill(os.environ.get("SKILL_DIR", "skill/clinical-assist"))
     icd = (ICD11Client(os.environ["WHO_ICD_CLIENT_ID"], os.environ["WHO_ICD_CLIENT_SECRET"],
                        os.environ.get("ICD_RELEASE", "2025-01"))
            if os.environ.get("WHO_ICD_CLIENT_ID") else OfflineICD11())
-    model = AnthropicClient(os.environ["ANTHROPIC_API_KEY"], os.environ["CLAUDE_MODEL"])
+    model = model_from_env(args.provider)
     pipe = Pipeline(skill, model, icd)
 
     cases = json.loads(pathlib.Path(args.file).read_text())["evals"]

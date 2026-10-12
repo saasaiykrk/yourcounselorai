@@ -235,6 +235,30 @@ How it is protected:
 - Only verified consultants have a booking page; each sees and changes only their own calendar.
 - Times are stored in UTC and shown in the consultant's timezone, so daylight-saving changes are handled.
 
+## Comparing with Google Gemini (optional; Claude stays in use)
+
+The server can use Gemini instead of Claude to write replies. The same knowledge base, tools, identifier
+cleaner and safety inspector apply to both. **Gemini is off by default**, and switching the live app to it is a
+model change (CLAUDE.md rule 3): run the evals with both, have the clinician grade both packs without knowing
+which is which, add a CHANGELOG entry, and only then switch.
+
+1. **Get a key:** Google AI Studio (aistudio.google.com) → *Get API key*. Note the exact model name you want
+   to test.
+2. **Store it in GitHub (for evals), never in chat:** repo → *Settings → Secrets and variables → Actions*:
+   - *Secrets* tab → **New repository secret** → name `GEMINI_API_KEY`, paste the key.
+   - *Variables* tab → **New repository variable** → name `GEMINI_MODEL`, value: the model name.
+3. **Run the comparison:** *Actions → ci → Run workflow*, tick **run_evals**, choose **eval_provider: gemini**.
+   Run it again with **anthropic**. Each run uploads a grading pack named after the provider. Both cost money.
+4. **Only if the clinician approves Gemini** (and after the privacy policy names Google as a processor),
+   switch the live server in Cloud Shell:
+   ```bash
+   read -rsp "Gemini key: " v; echo; printf '%s' "$v" | gcloud secrets create gemini-api-key --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-env-vars MODEL_PROVIDER=gemini,GEMINI_MODEL=<model name> --update-secrets GEMINI_API_KEY=gemini-api-key:latest
+   ```
+   To go back: `--update-env-vars MODEL_PROVIDER=anthropic`. `/healthz` shows `"model_provider"` and the model.
+   Clinicians' own keys ("use my own key") stay Anthropic keys either way.
+
 ## Rolling back by hand
 
 ```bash
