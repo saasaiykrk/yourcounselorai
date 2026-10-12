@@ -137,6 +137,11 @@ def _local(d: date, t: time, tz: ZoneInfo) -> datetime | None:
     return dt.astimezone(UTC)
 
 
+def local_instant(d: date, t: time, tz_name: str) -> datetime | None:
+    """Wall time t on day d in tz_name, as UTC; None if it does not exist that day."""
+    return _local(d, t, zone(tz_name))
+
+
 def _overlaps(a0: datetime, a1: datetime, ranges) -> bool:
     return any(a0 < r1 and r0 < a1 for r0, r1 in ranges)
 
