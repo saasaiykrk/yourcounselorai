@@ -120,7 +120,12 @@ class ModelRouter:
     def admin_key(self, provider: str, rows: dict | None = None) -> str | None:
         if self.store is None or self.vault is None:
             return None
-        row = (rows if rows is not None else self.store.keys()).get(provider)
+        if rows is None:
+            try:
+                rows = self.store.keys()
+            except Exception:  # noqa: BLE001 - table missing (migration 008 not run) or DB down: use the server key
+                return None
+        row = rows.get(provider)
         if not row:
             return None
         try:
