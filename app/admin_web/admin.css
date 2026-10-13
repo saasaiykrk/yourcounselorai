@@ -305,3 +305,13 @@ input.money { font-variant-numeric: tabular-nums; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* --- AI Model (ai.js) --- */
+#panel-ai .panel { margin-bottom: 16px; }
+.ai-models, .ai-keys { display: grid; gap: 10px; }
+.ai-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px;
+  border: 1.5px solid var(--line); border-radius: 12px; }
+.ai-row.active { border-color: var(--royal); background: var(--lav); }
+.ai-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ai-row .actions { flex: none; flex-wrap: nowrap; }
+@media (max-width: 560px) { .ai-row { flex-direction: column; align-items: stretch; } .ai-row .actions .btn { flex: 1; } }

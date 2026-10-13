@@ -259,7 +259,29 @@ which is which, add a CHANGELOG entry, and only then switch.
    To go back: `--update-env-vars MODEL_PROVIDER=anthropic`. `/healthz` shows `"model_provider"` and the model.
    Clinicians' own keys ("use my own key") stay Anthropic keys either way.
 
-## Rolling back by hand
+## AI model and keys from the web admin (AI Model page)
+
+Admins can switch between the **approved** models in `app/ai_models.py` and add or replace the Anthropic
+and Gemini API keys, from **/admin → AI Model**. Nothing changes until an admin does something there:
+until then the server uses its own model and keys, as before.
+
+1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/008_ai_settings.sql`
+   in the **yourcounselor-beta** project (safe to run again).
+2. **Encryption key:** keys added on the page are encrypted with `BYOK_ENCRYPTION_KEY`, the same secret that
+   protects clinicians' own keys. If `/healthz` shows `"byok_configured": false`, set it up first (see
+   *Pricing plans and payments*, step 2). **Never change or lose it:** saved keys can't be read without it.
+3. **Use it:** /admin → **AI Model** → *Add key* (the key is checked with the provider first, at no cost) →
+   *Switch to this* on the model you want → type its name to confirm. Every server picks it up within 30 s.
+   The change history on the page (and `admin_audit`) records who did what; keys show only their last 4.
+
+Rules that still apply:
+- Only models in `app/ai_models.py` can be chosen. Adding one needs the evals, the clinician grading pack,
+  a CHANGELOG entry and the `clinician-reviewed` label (CI enforces the label for that file).
+- Before switching to Gemini, the privacy policy must name Google as a processor of case text
+  (identifiers are removed before anything is sent to any model).
+- The key that is in use by the active model can't be removed unless the server has its own key for it.
+
+
 
 ```bash
 gcloud run revisions list --service yourcounselor-api --region asia-south1          # newest first
