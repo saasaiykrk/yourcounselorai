@@ -50,7 +50,7 @@ Plain `http` is allowed only to your own computer, and only in debug builds.
 ```bash
 flutter run --release --dart-define-from-file=config/live.json
 ```
-No Flutter on your computer? Start **Actions → ci → Run workflow** (manual; the app isn't built on pull requests) and, when it finishes, download **yourcounselor-live-android** from *Artifacts*, unzip it and install on the phone (allow "install unknown apps" when asked):
+No Flutter on your computer? Start **Actions → ci → Run workflow** (manual; the app isn't built on pull requests; tick **android_only** to build just the APK, which is quicker and skips the iPhone build and server tests) and, when it finishes, download **yourcounselor-live-android** from *Artifacts*, unzip it and install on the phone (allow "install unknown apps" when asked):
 - `app-arm64-v8a-release.apk` for almost every phone from the last ~8 years;
 - `app-armeabi-v7a-release.apk` only if that one says "problem parsing the package" on an old 32-bit phone.
 
