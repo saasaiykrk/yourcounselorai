@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="/admin/admin.css">
   <script src="/admin/admin.js" defer></script>
   <script src="/admin/billing.js" defer></script>
+  <script src="/admin/ai.js" defer></script>
 </head>
 <body>
   <!-- Sign in -->
@@ -79,6 +80,9 @@
         </button>
         <button type="button" id="tab-payments" data-view="payments">
           <span class="ico" data-icon="payments"></span><span class="lbl">Payments</span>
+        </button>
+        <button type="button" id="tab-ai" data-view="ai">
+          <span class="ico" data-icon="key"></span><span class="lbl">AI Model</span>
         </button>
       </nav>
       <div class="me" id="who" hidden>
@@ -181,6 +185,18 @@
           <button type="button" class="btn ghost" id="refresh-pricing"><span class="ico" data-icon="refresh"></span>Refresh</button>
         </header>
         <div id="pricing-body"></div>
+      </section>
+
+      <!-- AI Model (ai.js) -->
+      <section id="panel-ai" hidden>
+        <header class="page-head">
+          <div>
+            <h1>AI Model</h1>
+            <p class="muted">Which approved model writes replies, and the API keys it uses.</p>
+          </div>
+          <button type="button" class="btn ghost" id="refresh-ai"><span class="ico" data-icon="refresh"></span>Refresh</button>
+        </header>
+        <div id="ai-body"></div>
       </section>
 
       <!-- Subscriptions & Users (billing.js) -->

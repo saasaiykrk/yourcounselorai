@@ -56,7 +56,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import billing_api, booking_api, db, deid
+from . import ai_admin_api, billing_api, booking_api, byok, db, deid
+from .ai_settings import AiStore, ModelRouter
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
 from .icd import ICD11Client, OfflineICD11
@@ -143,15 +144,15 @@ class _FakeDevModel:
         return out, {"input_tokens": 0, "output_tokens": 0}
 
 
-if CFG.model_provider == "gemini" and CFG.gemini_api_key:
-    # Optional: Gemini writes the replies. Same skill, tools, cleaner and inspector (app/gemini_client.py).
-    from .gemini_client import GeminiClient
-    MODEL = GeminiClient(CFG.gemini_api_key, CFG.gemini_model)
-elif CFG.dev_mode and not CFG.anthropic_api_key:
+# Which model writes replies: an approved model chosen in the web admin (AI Model), with keys added
+# there or the server's own (app/ai_settings.py). Same skill, tools, cleaner and inspector for all.
+AI_ROUTER = ModelRouter(CFG, None if CFG.dev_mode else AiStore(db._conn),
+                        byok.Vault.from_secrets(CFG.byok_encryption_key, CFG.byok_encryption_key_previous,
+                                                CFG.byok_key_version))
+if CFG.dev_mode and not (CFG.anthropic_api_key or CFG.gemini_api_key):
     MODEL = _FakeDevModel(CFG.skill_dir)
 else:
-    from .claude_client import AnthropicClient
-    MODEL = AnthropicClient(CFG.anthropic_api_key, CFG.claude_model)
+    MODEL = AI_ROUTER
 
 PIPELINE = Pipeline(SKILL, MODEL, ICD)
 CONSULT = ConsultationEngine(load_consult_prompts(CFG.skill_dir), MODEL, PIPELINE)
@@ -677,6 +678,10 @@ def consultation_report(conv_id: uuid.UUID, body: ReportIn, c: dict = Depends(ve
 billing_api.install(app, BILLING, current_user, verified_clinician, admin)
 
 
+# --- AI model and provider keys (web admin → AI Model; app/ai_admin_api.py) ----
+ai_admin_api.install(app, AI_ROUTER, admin)
+
+
 # --- calendar and public booking (app/booking_api.py) -------------------------
 def _booking_store():
     from . import booking_db
@@ -802,7 +807,7 @@ def admin_update_incident(incident_id: uuid.UUID, body: IncidentUpdateIn, a: dic
 # no CORS is needed. No third-party scripts; strict CSP; never cached.
 _ADMIN_DIR = pathlib.Path(__file__).parent / "admin_web"
 _ADMIN_FILES = {"": ("index.html", "text/html"), "admin.js": ("admin.js", "text/javascript"),
-                "billing.js": ("billing.js", "text/javascript"),
+                "billing.js": ("billing.js", "text/javascript"), "ai.js": ("ai.js", "text/javascript"),
                 "admin.css": ("admin.css", "text/css"), "logo.png": ("logo.png", "image/png"),
                 # The app's brand fonts (SIL OFL, see fonts/OFL.txt), served from here: no third-party requests.
                 "nunito-extrabold.ttf": ("fonts/Nunito-ExtraBold.ttf", "font/ttf"),
