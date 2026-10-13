@@ -7,12 +7,12 @@ This is the backend for YourCounselor, a clinical consultation aid for registere
 - `skill/clinical-assist/SKILL.md` and `references/v21-master-prompt.md`: the clinical behaviour. The master prompt is authoritative.
 
 ## Hard rules
-1. **Never put a secret in the Android app or in git.** No Anthropic, WHO or DB keys, and no `.env` files. Secrets live in Secret Manager or GitHub secrets.
+1. **Never put a secret in the Android app or in git.** No Anthropic, WHO or DB keys, and no `.env` files. Secrets live in Secret Manager or GitHub secrets. One exception, approved by the owner: AI provider keys an admin adds in the web admin (AI Model) and clinicians' own keys are stored in the database only AES-256-GCM encrypted under `BYOK_ENCRYPTION_KEY` (itself in Secret Manager), and are never returned, logged or audited in clear (last 4 characters only).
 2. **Never weaken the cleaner or the inspector to make something pass.** If a real, safe reply is blocked wrongly, or real text is over-redacted:
    - first add a failing test that reproduces it: a new vector in `fixtures/deid_vectors.json`, or a case in `tests/test_inspector.py`;
    - then make the narrowest fix;
    - never delete an existing vector or test.
-3. **Model, skill and ICD release are pinned** (`CLAUDE_MODEL`, `skill/`, `ICD_RELEASE`). Changing any of them requires all four of these:
+3. **Model, skill and ICD release are pinned** (`CLAUDE_MODEL`, `skill/`, `ICD_RELEASE`). Admins may switch only between the models listed in `app/ai_models.py`; adding a model to that list, like changing any of the pinned items, requires all four of these:
    - `python -m evals.run_evals`
    - the clinician grading pack reviewed
    - a `skill/clinical-assist/CHANGELOG.md` entry
@@ -24,7 +24,7 @@ This is the backend for YourCounselor, a clinical consultation aid for registere
 8. Crisis numbers come only from `skill/clinical-assist/references/crisis-resources.md`.
 
 ## Files that need the `clinician-reviewed` label (CI enforces this)
-`skill/**`, `app/inspector.py`, `app/deid.py`, `app/prompt.py`, `fixtures/**`, `mobile/lib/core/deid/**` (the app's port of the cleaner)
+`skill/**`, `app/inspector.py`, `app/deid.py`, `app/prompt.py`, `app/ai_models.py` (approved AI models), `fixtures/**`, `mobile/lib/core/deid/**` (the app's port of the cleaner)
 
 ## Commands
 - Unit tests (stdlib only; always run them): `python -m unittest discover -s tests -t . -v`

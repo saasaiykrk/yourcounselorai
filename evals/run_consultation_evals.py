@@ -200,10 +200,16 @@ def main() -> None:
                       res.pop("report_text")]
         (out / f"{case['id']}.md").write_text("\n".join(lines) + "\n")
         summary["cases"].append(res)
-        print(f"{case['id']}: {res['stage']} · {len(res['questions'])} questions · "
+        report = f" · report {res['report_status']} (attempts {res['report_attempts']})" if "report_status" in res else ""
+        print(f"{case['id']}: {res['stage']} · {len(res['questions'])} questions{report} · "
               f"{'; '.join(res['problems']) or 'checks passed'}")
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
     errors = sum(1 for c in summary["cases"] if c.get("stage") == "error")
+    reports = [c["report_status"] for c in summary["cases"] if "report_status" in c]
+    tokens = {k: sum(int(u.get(k, 0)) for c in summary["cases"] for u in c.get("report_usage", []) if isinstance(u, dict))
+              for k in ("input_tokens", "cache_read_input_tokens", "output_tokens")}
+    print(f"Model {summary['model']}: reports delivered {reports.count('delivered')}/{len(reports)}, "
+          f"held back {reports.count('blocked')} · report tokens {tokens}")
     print(f"Wrote {out}" + (f"  ({errors} case(s) could not run: see summary.json)" if errors else ""))
     if errors == len(cases):
         raise SystemExit("No case could run (see the errors above).")

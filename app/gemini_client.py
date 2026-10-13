@@ -73,6 +73,12 @@ class GeminiClient:
             return r.json()
         raise GeminiError(503, "unavailable")
 
+    def check(self) -> None:
+        """Raises GeminiError unless the key can see this model. Reads the model's details: no tokens used."""
+        r = self._http.get(f"/models/{self.model}")
+        if r.status_code != 200:
+            raise GeminiError(r.status_code, "key or model not accepted")
+
     def run(self, system: str | list[str], messages: list[dict], tools: list[dict], tool_handler) -> ModelResult:
         contents = [_content(m) for m in messages]
         decls = [{"name": t["name"], "description": t.get("description", ""),
