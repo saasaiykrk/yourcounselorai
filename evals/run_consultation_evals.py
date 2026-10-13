@@ -184,7 +184,12 @@ def main() -> None:
     summary = {"model": model.model, "skill_version": skill.version, "level": args.level,
                "flow": "chat" if args.chat else "snapshot", "cases": []}
     for case in cases:
-        res = (run_case if args.chat else run_case_snapshot)(engine, case, args.level, not args.no_report)
+        try:
+            res = (run_case if args.chat else run_case_snapshot)(engine, case, args.level, not args.no_report)
+        except Exception as e:  # noqa: BLE001 - e.g. the provider's quota: record it, keep the other cases
+            summary["cases"].append({"id": case["id"], "stage": "error", "error": str(e)[:300]})
+            print(f"{case['id']}: ERROR {str(e)[:200]}")
+            continue
         lines = [f"# {case['id']}", "", f"**Case:** {case['case']}", "", f"**Stage:** {res['stage']}",
                  f"**Questions asked:** {', '.join(res['questions']) or '(none)'}",
                  f"**Automatic checks:** {'; '.join(res['problems']) or 'passed'}", "",
@@ -198,7 +203,10 @@ def main() -> None:
         print(f"{case['id']}: {res['stage']} · {len(res['questions'])} questions · "
               f"{'; '.join(res['problems']) or 'checks passed'}")
     (out / "summary.json").write_text(json.dumps(summary, indent=1, default=str))
-    print(f"Wrote {out}")
+    errors = sum(1 for c in summary["cases"] if c.get("stage") == "error")
+    print(f"Wrote {out}" + (f"  ({errors} case(s) could not run: see summary.json)" if errors else ""))
+    if errors == len(cases):
+        raise SystemExit("No case could run (see the errors above).")
 
 
 if __name__ == "__main__":
