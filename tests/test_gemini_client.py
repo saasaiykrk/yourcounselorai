@@ -39,7 +39,7 @@ class FakeGemini:
 @unittest.skipUnless(HAVE, "httpx not installed")
 class GeminiClientTests(unittest.TestCase):
     def client(self, fake):
-        return GeminiClient(KEY, "gemini-test", transport=httpx.MockTransport(fake.handler))
+        return GeminiClient(KEY, "gemini-test", transport=httpx.MockTransport(fake.handler), sleep=lambda s: None)
 
     def test_tool_loop_sends_the_model_turn_back_and_returns_only_the_final_text(self):
         signed = {"functionCall": {"name": "icd11_lookup", "args": {"query": "panic disorder"}},
@@ -121,8 +121,21 @@ class GeminiClientTests(unittest.TestCase):
         def flaky(request):
             calls["n"] += 1
             return httpx.Response(503, json={}) if calls["n"] == 1 else busy.handler(request)
-        c = GeminiClient(KEY, "gemini-test", transport=httpx.MockTransport(flaky))
+        waits = []
+        c = GeminiClient(KEY, "gemini-test", transport=httpx.MockTransport(flaky), sleep=waits.append)
         self.assertEqual(c.run("S", [{"role": "user", "content": "x"}], [], lambda *a: "").text, "ok")
+        self.assertEqual(waits, [5], "waits before trying again")
+
+    def test_quota_errors_are_retried_with_googles_wait_then_given_up(self):
+        calls, waits = {"n": 0}, []
+
+        def limited(request):
+            calls["n"] += 1
+            return httpx.Response(429, headers={"retry-after": "7"}, json={"error": {"message": "quota"}})
+        c = GeminiClient(KEY, "gemini-test", transport=httpx.MockTransport(limited), sleep=waits.append)
+        with self.assertRaises(GeminiError) as cm:
+            c.run("S", [{"role": "user", "content": "x"}], [], lambda *a: "")
+        self.assertEqual((cm.exception.status, calls["n"], waits), (429, 4, [7.0, 7.0, 7.0]))
 
     def test_schema_cleaning_keeps_everything_else(self):
         self.assertEqual(_schema({"type": "object", "additionalProperties": False, "$schema": "x",
