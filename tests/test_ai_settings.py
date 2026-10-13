@@ -132,6 +132,16 @@ class AiSettingsTests(unittest.TestCase):
         r = ModelRouter(self.cfg, Down(db._conn), self.vault, FakeClient)
         self.assertEqual(r.model, "claude-opus-5-5")
 
+    def test_missing_tables_never_stop_replies_or_the_health_check(self):
+        class NoTables(AiStore):          # migration 008 not run yet
+            def active_model(self):
+                raise psycopg.errors.UndefinedTable("relation \"ai_settings\" does not exist")
+
+            def keys(self):
+                raise psycopg.errors.UndefinedTable("relation \"ai_provider_keys\" does not exist")
+        r = ModelRouter(self.cfg, NoTables(db._conn), self.vault, FakeClient)
+        self.assertEqual((r.model, r.current().key), ("claude-opus-5-5", ANTHROPIC_SERVER))
+
     def test_an_unapproved_model_in_the_database_is_ignored(self):
         self.rows("insert into ai_settings (id, active_model) values (1, 'some-untested-model') returning id")
         self.assertEqual(self.router.model, "claude-opus-5-5")
