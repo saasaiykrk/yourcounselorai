@@ -17,6 +17,7 @@ refusals and the cut-off handling are covered by tests/test_gemini_client.py aga
 from __future__ import annotations
 
 import json
+import time
 
 import httpx
 
@@ -24,6 +25,7 @@ from .claude_client import MAX_TOOL_ROUNDS, REPLY_MAX_TOKENS
 from .pipeline import ModelResult
 
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+RETRY_WAITS = (5, 20, 60)        # seconds to wait after a busy (503) or rate-limit (429) answer
 # Reasons Gemini gives for producing nothing usable; treated like a Claude refusal (held back).
 _BLOCKED = {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "IMAGE_SAFETY", "OTHER"}
 # JSON Schema keywords the Gemini schema subset does not take; dropped before sending.
@@ -40,21 +42,27 @@ class GeminiError(RuntimeError):
 
 class GeminiClient:
     def __init__(self, api_key: str, model: str, max_tokens: int = REPLY_MAX_TOKENS,
-                 transport: httpx.BaseTransport | None = None, timeout: float = 300):
-        self.model, self.max_tokens = model, max_tokens
+                 transport: httpx.BaseTransport | None = None, timeout: float = 300, sleep=time.sleep):
+        self.model, self.max_tokens, self._sleep = model, max_tokens, sleep
         # The key goes in a header, never in the URL, so it can't end up in an access log.
         self._http = httpx.Client(base_url=BASE_URL, timeout=timeout, transport=transport,
                                   headers={"x-goog-api-key": api_key, "Content-Type": "application/json"})
 
     def _generate(self, body: dict) -> dict:
-        for attempt in range(3):
+        tries = len(RETRY_WAITS) + 1
+        for attempt in range(tries):
+            last = attempt == tries - 1
             try:
                 r = self._http.post(f"/models/{self.model}:generateContent", json=body)
             except httpx.TransportError:
-                if attempt == 2:
+                if last:
                     raise
+                self._sleep(RETRY_WAITS[attempt])
                 continue
-            if r.status_code in (429, 500, 503) and attempt < 2:
+            if r.status_code in (429, 500, 503) and not last:
+                # Google's own hint wins when it gives one (capped so a run can't stall for long).
+                hint = r.headers.get("retry-after", "")
+                self._sleep(min(float(hint), 120) if hint.replace(".", "", 1).isdigit() else RETRY_WAITS[attempt])
                 continue
             if r.status_code != 200:
                 try:
