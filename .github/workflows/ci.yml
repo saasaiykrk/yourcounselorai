@@ -2,6 +2,10 @@ name: ci
 on:
   workflow_dispatch:
     inputs:
+      android_only:
+        description: "Only build the Android app (APK). Skips the server tests, the iOS build, evals and the ICD check"
+        type: boolean
+        default: false
       run_evals:
         description: "Also run the clinical evals (real model, costs money; needs the eval secrets in GitHub)"
         type: boolean
@@ -26,6 +30,7 @@ on:
     branches: [main]
 jobs:
   unit:
+    if: github.event_name != 'workflow_dispatch' || !inputs.android_only
     runs-on: ubuntu-latest
     services:
       postgres:            # throwaway database for the credit/payment tests (no real data, no secrets)
@@ -83,6 +88,7 @@ jobs:
   mobile:
     # Manual only: the mobile app is built and released by the app owner, not by CI/CD.
     # Run it from Actions → ci → Run workflow for analysis, widget tests and a test APK.
+    # Tick "android_only" to run just this job (nothing else in the workflow runs).
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     defaults:
@@ -119,7 +125,7 @@ jobs:
   mobile-ios:
     # Manual only (macOS minutes cost more): compiles the iOS app, including
     # SceneDelegate.swift's app-switcher blur. No signing, so no secrets.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.android_only
     runs-on: macos-latest
     defaults:
       run:
@@ -136,7 +142,7 @@ jobs:
   evals:
     # Manual and opt-in (tick "run_evals"): runs the real model, which costs money. Needs repo
     # secrets. Uploads the grading pack for the clinician.
-    if: github.event_name == 'workflow_dispatch' && inputs.run_evals
+    if: github.event_name == 'workflow_dispatch' && inputs.run_evals && !inputs.android_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -204,7 +210,7 @@ jobs:
   verify-icd:
     # Manual (tick "verify_icd"): every ICD-11 code in skill/ looked up with WHO in the pinned release.
     # Free; codes and titles only, no case text. Results appear in the run's summary.
-    if: github.event_name == 'workflow_dispatch' && inputs.verify_icd
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_icd && !inputs.android_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
