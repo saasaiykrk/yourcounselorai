@@ -137,6 +137,21 @@ class GeminiClientTests(unittest.TestCase):
             c.run("S", [{"role": "user", "content": "x"}], [], lambda *a: "")
         self.assertEqual((cm.exception.status, calls["n"], waits), (429, 4, [7.0, 7.0, 7.0]))
 
+    def test_key_check_reads_the_model_without_using_tokens(self):
+        from app.ai_settings import AiSettingsError, check_key
+        seen = []
+
+        def ok(request):
+            seen.append((request.method, request.url.path))
+            return httpx.Response(200, json={"name": "models/gemini-3.8-flash"})
+        check_key("gemini", KEY, transport=httpx.MockTransport(ok))
+        self.assertEqual(seen, [("GET", "/v1beta/models/gemini-3.8-flash")])
+        for status, code in ((400, "key_rejected"), (403, "key_rejected"), (503, "provider_error")):
+            with self.assertRaises(AiSettingsError) as cm:
+                check_key("gemini", KEY, transport=httpx.MockTransport(lambda r, s=status: httpx.Response(s, json={})))
+            self.assertEqual(cm.exception.code, code)
+            self.assertNotIn(KEY, cm.exception.message)
+
     def test_schema_cleaning_keeps_everything_else(self):
         self.assertEqual(_schema({"type": "object", "additionalProperties": False, "$schema": "x",
                                   "properties": {"a": {"type": "string", "default": "z"}}}),

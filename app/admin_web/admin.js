@@ -76,6 +76,7 @@ async function signOut(message) {
   $("incident-detail").replaceChildren();
   $("incident-detail").hidden = true;
   clearBilling();
+  $("ai-body").replaceChildren();
   resetSignIn();
   $("sign-in-error").textContent = message || "";
   show("view-sign-in");
@@ -258,7 +259,7 @@ function initials(name) {
 }
 
 // --- views ----------------------------------------------------------------------
-const VIEWS = ["overview", "clinicians", "incidents", "pricing", "subs", "payments"];   // the last three: billing.js
+const VIEWS = ["overview", "clinicians", "incidents", "pricing", "subs", "payments", "ai"];   // pricing–payments: billing.js; ai: ai.js
 
 function selectView(name, filter) {
   showConsults(false);
@@ -275,6 +276,7 @@ function selectView(name, filter) {
   else if (name === "pricing") loadPricing();
   else if (name === "subs") loadSubs(filter);
   else if (name === "payments") loadPayments();
+  else if (name === "ai") loadAi();
   else loadOverview();
   loadCounts();
   window.scrollTo(0, 0);
@@ -783,6 +785,7 @@ async function start() {
   $("refresh-incidents").addEventListener("click", () => { loadIncidents(); loadCounts(); });
   $("consults-back").addEventListener("click", () => selectView("clinicians"));
   wireBilling();
+  wireAi();
   for (const b of document.querySelectorAll("[data-goto]")) {
     b.addEventListener("click", () => { const [view, filter] = b.dataset.goto.split(":"); selectView(view, filter); });
   }
