@@ -56,6 +56,10 @@ def main() -> None:
         except DeidRejected as e:
             summary["cases"].append({"id": case["id"], "status": "deid_rejected", "types": sorted(e.counts)})
             continue
+        except Exception as e:  # noqa: BLE001 - e.g. the provider's quota: record it, keep the other cases
+            summary["cases"].append({"id": case["id"], "status": "error", "error": str(e)[:300]})
+            print(f"{case['id']}: ERROR {str(e)[:200]}")
+            continue
         (out / f"{case['id']}.md").write_text(
             f"# Case {case['id']}\n\n**Prompt:** {case['prompt']}\n\n**Expected:** {case.get('expected_output','')}\n\n"
             f"**Status:** {r.status} · attempts {r.attempts} · {r.latency_ms} ms\n\n---\n\n{r.display_text}\n\n---\n\n"
@@ -72,6 +76,8 @@ def main() -> None:
     summary["delivered_rate"] = round(len(done) / max(1, len(summary["cases"])), 3)
     (out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(f"Wrote {out}  delivered {len(done)}/{len(summary['cases'])}")
+    if cases and all(c.get("status") == "error" for c in summary["cases"]):
+        raise SystemExit("No case could run (see the errors above).")
 
 
 if __name__ == "__main__":
