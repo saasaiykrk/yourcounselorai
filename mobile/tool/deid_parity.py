@@ -38,6 +38,7 @@ EXTRA = [
     "Account no 123456789012 was mentioned; also 98 76 54 32 10 in notes.",
     "Born on 5 March 1990. Onset 2024-01-15. Scores: HAM-A 22, DASS-21 D 18.",
     "Works at the Reserve Bank of India branch office. Employed by Tata Motors earlier.",
+    "28F, Married to Rohan for 2 years, Video calls with Sneha daily, Engaged to Arjun before. Came with Asha.",
     "Late Shri Ramesh Gupta was her father. Smt. Lata Gupta accompanies her.",
     "résumé mentions José García; mobile +91-9123456789.",
     "No identifiers here: 28F, low mood for 6 weeks, sleep 4 hours, appetite reduced.",

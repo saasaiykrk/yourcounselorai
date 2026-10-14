@@ -24,11 +24,19 @@ class TestDeidVectors(unittest.TestCase):
                 r = clean(v["text"])
                 self.assertEqual(r.text, v["text"], f"{v['id']}: over-redacted -> {r.text!r}")
                 self.assertTrue(r.is_clean)
+                if v.get("no_name_warnings"):
+                    self.assertEqual(r.warnings, [], f"{v['id']}: everyday words asked about as names")
 
     def test_possible_name_warning_is_not_a_redaction(self):
         r = clean("Client came with Priya, her cousin, to the session.")
         self.assertIn("Priya", r.warnings)
         self.assertTrue(r.is_clean)
+
+    def test_real_names_are_still_asked_about_next_to_everyday_words(self):
+        r = clean("28F, Married to Rohan for 2 years, Video calls with Sneha daily, Engaged to Arjun before.")
+        self.assertEqual(r.warnings, ["Rohan", "Sneha", "Arjun"])
+        # words that are also given names stay flagged
+        self.assertEqual(clean("Came with Asha, then Hope and Joy, and Kiran.").warnings, ["Asha", "Hope", "Joy", "Kiran"])
 
     def test_counts_only_types(self):
         r = clean("Call 9876543210 or mail a.b@c.com")
