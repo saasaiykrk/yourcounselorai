@@ -1,4 +1,4 @@
-package com.yourcounselor.your_counselor
+package com.yourcounselor.app
 
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity

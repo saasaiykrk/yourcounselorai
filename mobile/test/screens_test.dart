@@ -63,6 +63,9 @@ class _FakeConsult implements ConsultRepository {
   }
 
   @override
+  Future<ConsultReply?> result(String requestId) async => null;
+
+  @override
   Future<void> report({required String turnId, required String category, required String note}) async =>
       reports.add('$turnId:$category');
 }
@@ -88,7 +91,10 @@ Future<GoRouter> _pumpAt(
   final router = buildRouter(initialLocation: location);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [consultRepositoryProvider.overrideWithValue(consult ?? _FakeConsult())],
+      overrides: [
+        consultRepositoryProvider.overrideWithValue(consult ?? _FakeConsult()),
+        consultRecoveryProvider.overrideWithValue((within: Duration.zero, every: Duration.zero)),
+      ],
       child: YourCounselorApp(router: router),
     ),
   );

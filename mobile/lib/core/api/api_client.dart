@@ -39,6 +39,15 @@ class ApiClient {
   Future<ConsultReply> consult(ConsultRequest request) async =>
       ConsultReply.fromJson(await _send('POST', '/v1/consult', body: request.toJson()));
 
+  /// A reply that finished on the server while the phone was disconnected; null until it is ready.
+  Future<ConsultReply?> consultResult(String requestId) async {
+    try {
+      return ConsultReply.fromJson(await _send('GET', '/v1/consult/result/${Uri.encodeComponent(requestId)}'));
+    } on NotFound {
+      return null;
+    }
+  }
+
   Future<void> reportIncident({required String turnId, required String category, required String note}) =>
       _send('POST', '/v1/incidents', body: {'turn_id': turnId, 'category': category, 'note': note});
 

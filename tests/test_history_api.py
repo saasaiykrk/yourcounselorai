@@ -98,6 +98,19 @@ class HistoryApiTests(unittest.TestCase):
         self.assertEqual(self.ids()[0], conv)
         self.assertEqual(self.ids(q="grief"), [conv])
 
+    def test_a_reply_finished_while_disconnected_can_be_fetched_again(self):
+        # The app went to the background and lost the connection; the server finished anyway.
+        rid = "hn72rr1tzv-afr3o1"
+        self.assertEqual(self.client.get(f"/v1/consult/result/{rid}", headers=ME).status_code, 404, "not ready yet")
+        sent = self.client.post("/v1/consult", headers=ME, json={
+            "text": "34F, panic attacks for 3 months, avoids the metro.", "mode": "B", "deid_attested": True,
+            "request_id": rid}).json()
+        again = self.client.get(f"/v1/consult/result/{rid}", headers=ME)
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json(), sent, "exactly the reply that was inspected and saved")
+        self.assertEqual(self.client.get("/v1/consult/result/someone-elses-id", headers=ME).status_code, 404)
+        self.assertEqual(self.client.get("/v1/consult/result/bad!", headers=ME).status_code, 422)
+
     def test_admin_consult_turns_carry_the_knowledge_base_version(self):
         turns = self.client.get(f"/v1/admin/consults/{MINE_A}", headers=ME).json()["turns"]
         self.assertTrue(all(t["skill_version"] for t in turns))

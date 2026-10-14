@@ -9,6 +9,7 @@ Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   POST /v1/profile                    → role + registration number at signup (status=pending)
   PATCH /v1/profile                   → the clinician edits their details (role/registration change → re-verify)
   POST /v1/consult                    → one consult turn (inspected before return)
+  GET  /v1/consult/result/{request_id} → a reply that finished while the phone was disconnected
   POST /v1/incidents                  → "Report a problem" button on any reply
   GET  /v1/history?q=&mode=           → the clinician's own past consults (History tab)
   GET  /v1/history/{id}               → one past consult, read-only
@@ -51,7 +52,7 @@ import uuid
 from datetime import date
 from types import SimpleNamespace
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
@@ -375,6 +376,9 @@ def edit_profile(body: ProfileEditIn, user: dict = Depends(current_user)):
     return result
 
 
+_dev_results: dict[tuple[str, str], dict] = {}   # DEV_MODE: replies by (clinician, request_id)
+
+
 @app.post("/v1/consult")
 def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
     if not body.deid_attested:
@@ -421,8 +425,28 @@ def consult(body: ConsultIn, c: dict = Depends(verified_clinician)):
         if r.status == "blocked":
             db.auto_incident(turn_id, r.reports[-1])
 
-    return {"turn_id": str(turn_id), "conversation_id": str(conv_id), "status": r.status,
-            "text": r.display_text, "skill_version": r.skill_version, "report": r.reports[-1]}
+    out = {"turn_id": str(turn_id), "conversation_id": str(conv_id), "status": r.status,
+           "text": r.display_text, "skill_version": r.skill_version, "report": r.reports[-1]}
+    if CFG.dev_mode and body.request_id:
+        _dev_results[(c["id"], body.request_id)] = out
+    return out
+
+
+@app.get("/v1/consult/result/{request_id}")
+def consult_result(request_id: str = Path(pattern="^[A-Za-z0-9_-]{8,64}$"), c: dict = Depends(verified_clinician)):
+    """A reply that finished while the phone was disconnected (for example, the app went to the
+    background). 404 until it is ready. Only the clinician's own request; the same inspected text."""
+    if CFG.dev_mode:
+        out = _dev_results.get((c["id"], request_id))
+        if out:
+            return out
+        raise HTTPException(404, "not ready")
+    t = db.turn_by_request(c["id"], request_id)
+    if not t:
+        raise HTTPException(404, "not ready")
+    reports = t["inspector_reports"] or [{}]
+    return {"turn_id": str(t["id"]), "conversation_id": str(t["conversation_id"]), "status": t["status"],
+            "text": t["output_shown"], "skill_version": t["skill_version"], "report": reports[-1]}
 
 
 @app.post("/v1/incidents")

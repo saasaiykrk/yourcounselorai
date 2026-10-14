@@ -89,3 +89,11 @@ final calendarRepositoryProvider = Provider<CalendarRepository>(
 final calendarHomeProvider = FutureProvider.autoDispose<CalendarHome>(
   (ref) => ref.watch(calendarRepositoryProvider).home(),
 );
+
+// --- dropped connections ---------------------------------------------------------------------
+
+/// How long to keep looking for a reply after the connection drops mid-request, and how often.
+/// The server allows a reply up to 5 minutes, so 6 minutes covers it. Tests shorten this.
+final consultRecoveryProvider = Provider<({Duration within, Duration every})>(
+  (ref) => (within: const Duration(minutes: 6), every: const Duration(seconds: 5)),
+);
