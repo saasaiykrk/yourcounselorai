@@ -134,18 +134,48 @@ class ConsultationController extends Notifier<GuidedState> {
     return _run(() => _repo.updateSnapshot(c.id, fields, done: done, skipRemaining: skipRemaining));
   }
 
+  /// Re-reads the consultation until its report is there or the recovery window has passed.
+  Future<Consultation?> _recoverReport(String id, DateTime sentAt, int generation) async {
+    final window = ref.read(consultRecoveryProvider);
+    while (generation == _generation && DateTime.now().difference(sentAt) < window.within) {
+      try {
+        final c = await _repo.get(id);
+        if (c.reply != null) return c;
+      } on NetworkProblem {
+        // still offline (or still in the background): keep waiting
+      } on ApiException {
+        return null;
+      }
+      await Future<void>.delayed(window.every);
+    }
+    return null;
+  }
+
   /// Writes the report. Returns it, or null on failure (the error is in [state]).
   Future<ConsultReply?> generateReport({bool force = false}) async {
     final c = state.consultation;
     if (c == null || state.busy) return null;
     final generation = _generation;
     state = state.copyWith(busy: true, generating: true, clearError: true);
+    final sentAt = DateTime.now();
     try {
       final (next, reply) = await _repo.report(c.id, force: force, useOwnKey: ref.read(useOwnKeyProvider));
       ref.invalidate(billingStatusProvider); // a credit may have been used
       if (generation != _generation) return null;
       state = state.copyWith(consultation: next, busy: false, generating: false);
       return reply;
+    } on NetworkProblem catch (e) {
+      // The connection dropped (often: the app went to the background) while the server kept writing.
+      // The finished report is saved with the consultation, so fetch it rather than pay for another.
+      final found = await _recoverReport(c.id, sentAt, generation);
+      if (generation != _generation) return null;
+      if (found != null) {
+        ref.invalidate(billingStatusProvider);
+        state = state.copyWith(consultation: found, busy: false, generating: false);
+        return found.reply;
+      }
+      state = state.copyWith(busy: false, generating: false, error: e);
+      return null;
     } on ApiException catch (e) {
       if (generation != _generation) return null;
       state = state.copyWith(busy: false, generating: false, error: e);

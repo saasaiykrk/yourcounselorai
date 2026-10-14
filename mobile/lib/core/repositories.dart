@@ -228,6 +228,10 @@ abstract interface class ProfileRepository {
 abstract interface class ConsultRepository {
   Future<ConsultReply> send(ConsultRequest request);
 
+  /// The reply to [requestId] if the server finished it (e.g. while the app was in the background
+  /// and lost its connection); null if it isn't ready. Never starts or charges a new report.
+  Future<ConsultReply?> result(String requestId);
+
   Future<void> report({required String turnId, required String category, required String note});
 }
 
@@ -253,6 +257,9 @@ class ApiConsultRepository implements ConsultRepository {
 
   @override
   Future<ConsultReply> send(ConsultRequest request) => _api.consult(request);
+
+  @override
+  Future<ConsultReply?> result(String requestId) => _api.consultResult(requestId);
 
   @override
   Future<void> report({required String turnId, required String category, required String note}) =>
@@ -310,6 +317,9 @@ class PreviewConsultRepository implements ConsultRepository {
 
   final Duration delay;
   var _turn = 0;
+
+  @override
+  Future<ConsultReply?> result(String requestId) async => null;
 
   @override
   Future<ConsultReply> send(ConsultRequest request) async {

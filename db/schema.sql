@@ -115,3 +115,4 @@ alter table consultations   enable row level security;
 -- Pricing, payments, credits and BYOK: db/migrations/006_billing.sql (run after this file).
 -- Consultant calendar and public booking: db/migrations/007_booking.sql (run after 006).
 -- AI model choice and admin-added provider keys (encrypted): db/migrations/008_ai_settings.sql (run after 007).
+-- Request id on consult turns (fetch a reply again after a dropped connection): db/migrations/009_turn_request_id.sql.
