@@ -100,6 +100,17 @@ _COMMON_TITLECASE = {
     *"cbt erp dbt act emdr mse gad phq dass ham rses icd dsm who ayurvedic homeopathic unani yoga pranayama".split(),
     *"tele tele-manas manas child women helpline emergency section mode week session".split(),
     *"i ok no yes not he she they his her their".split(),
+    # Everyday words that case notes often capitalise (field values, list items). Words that are also
+    # given names (Asha, Kiran, Hope, Joy, Faith, Grace, Rose, Anand, Prem, Will, Mark, ...) are left
+    # out on purpose and are still asked about.
+    # marital status and relationships
+    *"married unmarried single divorced separated widowed widow widower engaged remarried engagement marriage wedding fiance fiancee spouse partner boyfriend girlfriend cousin cousins friend friends colleague colleagues boss inlaws stepmother stepfather niece nephew parents parent siblings sibling family relatives neighbour neighbor".split(),
+    # work and education
+    *"student students teacher engineer engineering doctor nurse lawyer manager employee homemaker housewife unemployed retired business businessman worker farmer driver job office work occupation education graduate postgraduate degree school college university class exam exams board".split(),
+    # phones, media and apps
+    *"video videos phone mobile online internet social media instagram facebook whatsapp youtube twitter snapchat gaming games game call calls chat chats reels netflix".split(),
+    # case-note words
+    *"anxiety depression panic stress insomnia sleep appetite mood suicidal suicide trauma abuse alcohol cannabis smoking tobacco medication medicine therapy counselling counseling assessment history diagnosis treatment complaint complaints onset duration symptoms risk safety goals plan female male years months weeks daily weekly also but and then after before since during currently recently previously denies reports presents however".split(),
 }
 
 

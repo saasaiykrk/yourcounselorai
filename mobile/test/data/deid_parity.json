@@ -127,9 +127,7 @@
    "types": [
     "HANDLE"
    ],
-   "warnings": [
-    "Instagram"
-   ]
+   "warnings": []
   },
   {
    "text": "See her blog https://example.com/myjourney",
@@ -232,6 +230,18 @@
   {
    "text": "Dr. advised ECG last month, report normal per client.",
    "cleaned": "Dr. advised ECG last month, report normal per client.",
+   "types": [],
+   "warnings": []
+  },
+  {
+   "text": "28F, Married for 2 years, conflict with In-laws. Husband works abroad, Video calls daily, feels lonely. Occupation: Teacher, Education: Graduate. Engaged before, Divorced parents, Single child.",
+   "cleaned": "28F, Married for 2 years, conflict with In-laws. Husband works abroad, Video calls daily, feels lonely. Occupation: Teacher, Education: Graduate. Engaged before, Divorced parents, Single child.",
+   "types": [],
+   "warnings": []
+  },
+  {
+   "text": "19M, Student, Engineering college, Unmarried. Online gaming 8 hrs a day, Instagram and Youtube at night, Phone use in class. Boyfriend issues reported by sister, Friends drifting, Exams next month.",
+   "cleaned": "19M, Student, Engineering college, Unmarried. Online gaming 8 hrs a day, Instagram and Youtube at night, Phone use in class. Boyfriend issues reported by sister, Friends drifting, Exams next month.",
    "types": [],
    "warnings": []
   },
@@ -351,6 +361,17 @@
    ]
   },
   {
+   "text": "28F, Married to Rohan for 2 years, Video calls with Sneha daily, Engaged to Arjun before. Came with Asha.",
+   "cleaned": "28F, Married to Rohan for 2 years, Video calls with Sneha daily, Engaged to Arjun before. Came with Asha.",
+   "types": [],
+   "warnings": [
+    "Rohan",
+    "Sneha",
+    "Arjun",
+    "Asha"
+   ]
+  },
+  {
    "text": "Late Shri Ramesh Gupta was her father. Smt. Lata Gupta accompanies her.",
    "cleaned": "[NAME] was her father. [NAME] accompanies her.",
    "types": [
@@ -380,8 +401,7 @@
    "warnings": [
     "Sunrise",
     "Traders",
-    "Fergusson",
-    "College"
+    "Fergusson"
    ]
   },
   {

@@ -30,6 +30,9 @@ void main() {
         final r = clean(v['text'] as String);
         expect(r.text, v['text'], reason: '${v['id']}: over-redacted');
         expect(r.isClean, isTrue);
+        if (v['no_name_warnings'] == true) {
+          expect(r.warnings, isEmpty, reason: '${v['id']}: everyday words asked about as names');
+        }
       });
     }
   });
