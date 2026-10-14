@@ -104,17 +104,37 @@ def log_turn(conv_id, cid, level, body, r) -> uuid.UUID:
             json.dumps(body.client_redaction_counts), r.raw_text, r.display_text, r.status, r.attempts,
             json.dumps(r.reports), r.model, r.skill_version, r.prompt_hash, json.dumps(r.tool_calls),
             r.verified_icd_codes, json.dumps(r.usage), r.latency_ms]
-    try:
-        return _insert_turn(cols + ", held_back", vals + [json.dumps(r.held_back) if r.held_back else None])
-    except psycopg.errors.UndefinedColumn:
-        # migration 005 not run yet: log the turn without the held-back attempts
-        return _insert_turn(cols, vals)
+    held = json.dumps(r.held_back) if r.held_back else None
+    request_id = getattr(body, "request_id", None)
+    attempts = [(cols + ", held_back, request_id", vals + [held, request_id]),   # migrations 005 + 009
+                (cols + ", held_back", vals + [held]),                          # 009 not run yet
+                (cols, vals)]                                                   # 005 not run yet
+    for i, (c, v) in enumerate(attempts):
+        try:
+            return _insert_turn(c, v)
+        except psycopg.errors.UndefinedColumn:
+            if i == len(attempts) - 1:
+                raise
+        except psycopg.errors.UniqueViolation:
+            # the same request was already logged (never expected: billing refuses a repeat first)
+            return turn_by_request(cid, request_id)["id"]
 
 
 def _insert_turn(cols: str, vals: list) -> uuid.UUID:
     with _conn() as c:
         marks = ",".join(["%s"] * len(vals))
         return c.execute(f"insert into turns ({cols}) values ({marks}) returning id", vals).fetchone()["id"]
+
+
+def turn_by_request(cid, request_id: str) -> dict | None:
+    """The clinician's own turn for this app request id, or None (also if migration 009 isn't run)."""
+    try:
+        with _conn() as c:
+            return c.execute("""select id, conversation_id, status, output_shown, skill_version, inspector_reports
+                                from turns where clinician_id=%s and request_id=%s""",
+                             (str(cid), request_id)).fetchone()
+    except psycopg.errors.UndefinedColumn:
+        return None
 
 
 def auto_incident(turn_id, report: dict) -> None:

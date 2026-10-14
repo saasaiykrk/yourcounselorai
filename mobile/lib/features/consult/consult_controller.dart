@@ -61,6 +61,8 @@ class ConsultController extends Notifier<ConsultState> {
     required Map<String, int> redactionCounts,
   }) async {
     final request = ++_request;
+    final requestId = _requestId(); // also the key the server charges under: never charged twice
+    final sentAt = DateTime.now();
     state = ConsultSending(mode);
     try {
       final reply = await ref
@@ -71,7 +73,7 @@ class ConsultController extends Notifier<ConsultState> {
               mode: mode.apiCode,
               redactionCounts: redactionCounts,
               conversationId: _conversationId,
-              requestId: _requestId(),
+              requestId: requestId,
               useOwnKey: ref.read(useOwnKeyProvider),
             ),
           );
@@ -79,6 +81,18 @@ class ConsultController extends Notifier<ConsultState> {
       if (request != _request) return; // cleared or superseded meanwhile
       _conversationId = reply.conversationId;
       state = ConsultReplied(reply);
+    } on NetworkProblem catch (e) {
+      // The connection dropped (often: the app went to the background). The server keeps going and
+      // saves the reply, so look for it instead of failing; a new send would be a new, paid report.
+      final reply = await _recover(requestId, sentAt, request);
+      if (request != _request) return;
+      if (reply != null) {
+        ref.invalidate(billingStatusProvider);
+        _conversationId = reply.conversationId;
+        state = ConsultReplied(reply);
+      } else {
+        state = ConsultFailed(e);
+      }
     } on ApiException catch (e) {
       if (request != _request) return;
       if (e is NotFound) _conversationId = null; // conversation gone: the next send starts fresh
@@ -87,6 +101,24 @@ class ConsultController extends Notifier<ConsultState> {
       if (request != _request) return;
       state = const ConsultFailed(ServerProblem(null));
     }
+  }
+
+  /// Polls for the reply to [requestId] until it is ready or the recovery window has passed.
+  Future<ConsultReply?> _recover(String requestId, DateTime sentAt, int request) async {
+    final window = ref.read(consultRecoveryProvider);
+    final repo = ref.read(consultRepositoryProvider);
+    while (request == _request && DateTime.now().difference(sentAt) < window.within) {
+      try {
+        final reply = await repo.result(requestId);
+        if (reply != null) return reply;
+      } on NetworkProblem {
+        // still offline (or still in the background): keep waiting
+      } on ApiException {
+        return null; // signed out, not verified, server error: show it as before
+      }
+      await Future<void>.delayed(window.every);
+    }
+    return null;
   }
 
   Future<void> report({required ReportCategory category, required String note}) async {
