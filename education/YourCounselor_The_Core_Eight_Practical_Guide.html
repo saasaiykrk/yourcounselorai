@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#3D0A6B">
+<meta name="description" content="The Core Eight: a practical perspective on learning and combining therapy approaches for psychologists and counsellors, by Yajuvendra Khajekar.">
+<title>The Core Eight | YourCounselor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Nunito+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--plum:#3D0A6B;--muted:#6E587E;--purple:#6A1BB5;--pink:#E8336D;--pink-text:#C2185B;--ink:#260644;--lav:#F6F1FA;--lav2:#FAF7FC;--line:#E7DFEF;--white:#fff;--shadow:0 12px 36px rgba(61,10,107,.08);--radius:18px}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:90px}
+body{margin:0;background:var(--lav);color:var(--plum);font-family:'Nunito Sans',Nunito,Arial,sans-serif;font-size:16px;line-height:1.72}
+a{color:var(--purple);text-underline-offset:3px}
+a:hover{color:var(--pink-text)}
+.skip-link{position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+.skip-link:focus{left:16px;top:12px;width:auto;height:auto;padding:10px 14px;background:#fff;z-index:10;border-radius:8px}
+.site-header{position:sticky;top:0;z-index:5;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.header-inner{max-width:1440px;margin:auto;padding:12px clamp(18px,4vw,54px);display:flex;align-items:center;justify-content:space-between;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--plum);text-decoration:none;font-family:Nunito,Arial,sans-serif;font-size:21px;font-weight:900;letter-spacing:-.03em;white-space:nowrap}
+.brand img{width:42px;height:42px;object-fit:contain}
+.header-tag{color:var(--muted);font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.accent{height:4px;background:linear-gradient(90deg,var(--pink),#F39AB7 26%,var(--lav) 68%)}
+.layout{max-width:1440px;margin:auto;padding:34px clamp(18px,4vw,54px) 72px;display:grid;grid-template-columns:minmax(220px,270px) minmax(0,840px);justify-content:center;gap:clamp(24px,4vw,54px);align-items:start}
+.toc{position:sticky;top:90px;max-height:calc(100vh - 110px);overflow:auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:20px 18px;box-shadow:0 6px 24px rgba(61,10,107,.05)}
+.toc summary{list-style:none;cursor:pointer;color:var(--purple);font-family:Nunito,Arial,sans-serif;font-size:13px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+.toc summary::-webkit-details-marker{display:none}
+.toc ol{padding-left:20px;margin:14px 0 0}
+.toc li{padding:4px 0 4px 2px;color:var(--muted);font-size:14px;line-height:1.4}
+.toc li::marker{color:var(--purple);font-weight:800}
+.toc a{color:var(--muted);text-decoration:none}
+.toc a:hover,.toc a:focus{color:var(--purple);text-decoration:underline}
+.toc-sub{list-style:none;padding-left:14px!important;margin:3px 0 4px!important;border-left:2px solid var(--line)}
+.toc-sub li{font-size:12.5px;padding:3px 0}
+main{min-width:0}
+.hero{position:relative;overflow:hidden;background:linear-gradient(130deg,#fff 10%,#FBF8FE 65%,#F3E9FB);border:1px solid var(--line);border-radius:24px;padding:clamp(26px,5vw,56px);box-shadow:var(--shadow)}
+.hero::after{content:"";position:absolute;width:220px;height:220px;border:1px solid rgba(106,27,181,.1);border-radius:50%;right:-86px;top:-95px;box-shadow:0 0 0 24px rgba(106,27,181,.025),0 0 0 48px rgba(106,27,181,.02)}
+.eyebrow{position:relative;z-index:1;display:inline-flex;align-items:center;gap:7px;background:#F1E6FA;color:var(--purple);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.hero h1{position:relative;z-index:1;font-family:Nunito,Arial,sans-serif;font-size:clamp(42px,7vw,68px);line-height:1.05;letter-spacing:-.045em;margin:18px 0 10px;color:var(--plum)}
+.deck{position:relative;z-index:1;max-width:720px;font-family:Nunito,Arial,sans-serif;color:var(--muted);font-size:clamp(20px,3vw,27px);line-height:1.35;font-weight:700;margin:0}
+.byline{position:relative;z-index:1;display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:24px;color:var(--muted);font-size:14px}
+.byline strong{color:var(--plum);font-family:Nunito,Arial,sans-serif;font-size:16px}
+.byline .dot{color:#BCA7CE}
+.author-note{margin-top:26px;position:relative;z-index:1;background:rgba(255,255,255,.82);border-left:4px solid var(--pink);border-radius:0 12px 12px 0;padding:14px 17px;color:var(--muted);font-size:14px}
+.article-section{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:clamp(22px,4vw,42px);margin-top:22px;box-shadow:0 6px 24px rgba(61,10,107,.035);min-width:0}
+.article-section h2{font-family:Nunito,Arial,sans-serif;font-weight:900;font-size:clamp(25px,3.6vw,36px);line-height:1.2;letter-spacing:-.025em;color:var(--plum);margin:0 0 22px;padding-bottom:15px;border-bottom:1px solid var(--line);scroll-margin-top:90px}
+.article-section h3{font-family:Nunito,Arial,sans-serif;font-weight:900;font-size:clamp(20px,2.6vw,25px);line-height:1.3;margin:32px 0 12px;color:var(--purple);scroll-margin-top:90px}
+.article-section h4{font-family:Nunito,Arial,sans-serif;font-size:18px;line-height:1.35;margin:24px 0 8px;color:var(--plum)}
+p{margin:0 0 16px}
+strong{color:var(--plum)}
+ul,ol{padding-left:24px;margin:0 0 19px}
+li{padding-left:3px;margin:0 0 7px}
+li::marker{color:var(--purple)}
+blockquote{margin:24px 0 4px;padding:19px 22px;border-left:4px solid var(--pink);border-radius:0 14px 14px 0;background:var(--lav2);font-family:Nunito,Arial,sans-serif;font-size:clamp(19px,2.5vw,24px);font-weight:900;line-height:1.4;color:var(--plum)}
+.table-scroll{width:100%;max-width:100%;overflow-x:auto;margin:20px 0 24px;border:1px solid var(--line);border-radius:12px;-webkit-overflow-scrolling:touch}
+table{width:100%;min-width:540px;border-collapse:collapse;background:#fff;font-size:14px;line-height:1.55}
+th,td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{background:#F3EAF9;color:var(--plum);font-family:Nunito,Arial,sans-serif;font-size:13px;font-weight:900}
+tbody tr:nth-child(even){background:#FCFAFE}
+tbody tr:last-child td{border-bottom:0}
+code{background:var(--lav2);border:1px solid var(--line);border-radius:4px;padding:1px 4px;font-size:.92em}
+.article-end{margin-top:22px;background:var(--plum);color:#fff;border-radius:var(--radius);padding:clamp(23px,4vw,36px)}
+.article-end h2{font-family:Nunito,Arial,sans-serif;font-size:24px;line-height:1.25;margin:0 0 13px;color:#fff}
+.article-end p{margin:0;color:#F4EDF9;font-size:14px}
+.site-footer{max-width:1440px;margin:0 auto;padding:0 clamp(18px,4vw,54px) 32px;color:var(--muted);font-size:12px}
+.footer-inner{border-top:1px solid #DCCFE8;padding-top:18px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+@media(max-width:900px){.layout{grid-template-columns:minmax(0,1fr);max-width:900px;padding-top:20px}.toc{position:relative;top:auto;max-height:none;padding:14px 17px}.toc:not([open]){padding-bottom:14px}.toc ol{columns:2;column-gap:28px}.toc li{break-inside:avoid}.toc-sub{columns:1}}
+@media(max-width:600px){body{font-size:15.5px;line-height:1.68}.header-inner{padding:9px 16px}.brand{font-size:18px}.brand img{width:36px;height:36px}.header-tag{font-size:10px}.layout{padding:16px 12px 42px;gap:14px}.toc ol{columns:1}.hero{border-radius:18px;padding:25px 21px}.hero h1{font-size:43px}.deck{font-size:20px}.article-section{border-radius:15px;padding:23px 19px;margin-top:14px}.article-section h2{font-size:27px;margin-bottom:18px}.article-section h3{font-size:21px;margin-top:27px}.article-section h4{font-size:17px}.table-scroll{margin:16px -2px 20px;width:calc(100% + 4px)}table{min-width:520px;font-size:13.5px}th,td{padding:10px 11px}.site-footer{padding-left:16px;padding-right:16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
+@media print{body{background:#fff;color:#111;font-size:11pt}.site-header,.toc,.site-footer{display:none!important}.layout{display:block;max-width:none;padding:0}.hero,.article-section,.article-end{box-shadow:none;border:0;border-radius:0;padding:0;margin:0 0 18pt;background:#fff;color:#111}.hero{padding-bottom:16pt;border-bottom:1pt solid #999}.hero h1,.deck,.article-section h2,.article-section h3,.article-section h4,.article-end h2,.article-end p{color:#111}.author-note{background:#fff;color:#333}.article-section h2{break-after:avoid}.article-section h3,.article-section h4{break-after:avoid}.table-scroll{overflow:visible;border:0}table{min-width:0;font-size:9pt}th,td{padding:5pt 6pt}thead{display:table-header-group}tr{break-inside:avoid}a{color:#111;text-decoration:none}}
+.home-fab{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));z-index:30;display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 17px;border:1px solid #D8C2E8;border-radius:999px;background:var(--purple);color:#fff;text-decoration:none;font-family:Nunito,Arial,sans-serif;font-size:14px;font-weight:900;box-shadow:0 5px 18px rgba(61,10,107,.24)}.home-fab[hidden]{display:none}.home-fab:hover,.home-fab:focus{background:var(--plum);color:#fff}@media print{.home-fab{display:none}}
+
+.toc summary{font-weight:700}
+.toc li::marker{font-weight:700}
+.eyebrow{font-weight:700}
+.article-section h2,.article-section h3{font-weight:700}
+blockquote{font-weight:600}
+th{font-weight:700}
+.home-fab{font-weight:700}
+.brand{font-weight:800}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#article">Skip to article</a>
+<header class="site-header"><div class="header-inner">
+<a class="brand" href="#top" aria-label="YourCounselor home"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAXpklEQVR42u17eXRd1XX3b59z7r1v1mTLNjaIwQE8AKUmMVD4ZBMGlyEkKVKahJQ0rI9AEpJCSAOF5PkVSsrXkskpSSkhDYGQSB8tfExuMMgKNBiwABsswDaOB3nQrDe/e8+w+8eTKU2C7diGfl3Ley3pLa11de7Zv7PPHn57P+CQHJJDckgOySF5T4XB1IUu2YMe1QNWXWCZRVYATABTFiy4gyW3s+pp71GcZcFg+h+vdBY9KgsW+7tGT7ZHcQfLg7kv9W4rngWLeegmAlkABgC6msYaLCrzPIj58bSc4wU4yvNcs58QQeATx5KqFMTVYCwpNyUagnWpKfIV/2a8QUTmLUC7WFInOQB8IPujd1NxAMiBHAB8u/XNaV4Yna8gLxZECwPypidkHJ6UADmQchAeoCTBlxLxwEMy4SPIEDhV5cbm2BvxJrXCb8UD8a94K98CooMldZP9/8YCGEzd6Bad9RPH1xJ9CwKJq6Ja8WIP6SkMIGKNGoVc5oqVjiAFSDkB5QhSCUgBSE0sK4AqCIr5SpaH6fjmKer4YMx+YeIG/Vy8SX3v1vLSn1KOLHexRCccgfi/1QIYLGjyxO+Y1j9/czj0V8Kqj6WRFhY1ELGVJCEhhIAkRQRJBAUBJQV8KeEpAU8JKElQnoCnAOUJFpJYCjjpkWxtbqSpbUl4083zaMGN6c95KwAgm2WRy9Xf/54DkEWPymGx4dkc3Fl89cb+aMd1gv04I4J0wkoooUiRhIQkgmQJn30EpOpmKBgsDaAcSDgIIgSeRNzzkQwCJH0fga/geQJE7Bjg1mlNsmm2QtBK39o08dr183PzI86yoN8DhIMCQA961GIsNv/eNn5yP++888XyllMqNo8YAiuhpGQJCQnBEooUAgSOmLjqSsjzOBWpgBoqFCFiJrCAgE8BAumLGMUoKWLIeAk0xdJojWcwLZlGQzwOJcgKT9Axc6cK73D7tGutXpL+s/TQ7wPCgQJAXWDRCbIPH77jsqJXvuPxwouJqimbpEhICUGCJYglFBTHOHCaIzHhxmmYh5F347CIIAB4UPApBp8CeOTDIx9SEDwSVsInn3wRUIAY+UjIAC2xNGY2NGJ6UwYJpfSRs1u92Gz7Cs+S56Q/QYP7CsIBOEGmLkB0guz9h795M2J00/+beBpFU7MNIqkMDBwEQBYBAms4kpvsgNxu3kSFC1vg3IsBxKvENGjJTLDzSxVhU5LUtITIHCPhLfBFbH5KNCV9aeGEsY6kcCRJO4PxagVhaDCWr2BGc4MXvuH0sW76CSqKHtratXUx1iFkZiLas2PcXwAoi5WyE4vND6a+8s3pySnX3Df+kBkKR2WzapQRNAQcBIRTUGLEDsuten1pzA4+KKz+V7Ljaw3eGBnGFmPQJAnEBOJRO/rWvqbgiNgsdeasjDj83LjMXJqUjcfHpQFLZ5kgBUk44SG0BjtHiqgVnReVnP4D77CFSTflVsrRNdzPEoA96Fdgt8P7+6YXbj1h6uwbVoer9eNjq1STaiRBCgQBYrKSPbkz2sTbozf/OTQj/xDH6EaBPAOzgzr6MTctZSidTqOIIuIcJ5sIaHBwEKUyUMOE3YEXatPQPvUY/w87MmLqtY1e6/SkStiMTMq0SCIt40iqGBIUQ0rGeWpDittOSZhMmzi2+WuJLXuLDLS/yt/W8tyVbekZ39de0dw7/JgycAgQgCAgQJZYyW3hhg2/rq29Lo4VK5L4gKqhUVVR0qMIbTtSrhe9+h1OSC5YcGGwta8o4kh5GiW5E73VE73Oo1rEnFub1LSLmvwG1ygzlJZJSqk4khRDWsXhW98cO/MwFcw0l895IHV3Tzurxb3/mUEe0BXoQJfMYbG5Pr3ytEQs9j0vMHZV8TU5bgpoVBkYGChI41ipbeFrK9bWHvvzBWgYG8S5sSJ2hYMYrQJ97gosEHeiV69e8I/e3Nn2o96sZLtois8URzTsQkPql1ix+l9o2ZcqS2YvCZZvfNUADfJYXBjfop8bWIuuT7S7G24yTn/VBuxABGeYDFlodkgKg8FdZdhtYV233oPkBBlMSwG+unlVpsFXP4nFPDlqJtyr5Q0UCAUHC4KwQKC2hRsfW1v77qVz0a43Q8tR/CK/+6QZWUHI6fWn/PXJmcbC3UHQ+AdC+EAsAFQANCWvdJed/Up48epPB2ef8mJXR5fs7O6M1mOtbsYHYkfj2ESv/kb2TPrqqK25/8PsmL1mY4mFYzgrnFhf22z90H8SAFZi6R4jwT5XVvMwT34B893/Cj7+7Snx5nM9ac2vazvkK+XXEZdxOLDzKS6Ho4FVL1V/9JFpOFNvRsVV8Wx5d8HCyAogxx+adf3sZEI9nUoGRxUpMqzYQTFDWAerrWjKzCCJP7n+jz/VdVJ2ycRSgHK9vbaK7dZHys3AyamX7Y9XzsQHRjS78yJ20rClmjNiIqrRqB77yteK7Y9lwSKHxXsEQOyr6Xei017tPXZyQsX+d4Xz1jgj11c2gQQBgJNQVDCjg+sraz41Gwtrg5AGWFV9+zrdHf1EALPSfxcn1ZwPKxFbp6y2irWVqGlFZe25DQORqLkpQVhcSkSMefNoEkQziLXVjRguH4YPZlaam+8adVsvHI12/nygtvWF9ZXXH3y9tO6iZcUPf7MDHXJ3IXbAV2AuOuonGNAtSvrSuchWraERMwZFEgxmx1YMme1fLuAXG5O4MAE8UvmvzjMrOrtz9pHYZ9qsteeP6zJ7oefJ0EDVNEw5AhRBWAYlPCWKESPUSwazXSnq7CwxmCaLHQf01XagzbWhPfZc9J2nAKwApvnAYHlyv343uqODUg3WzYhcp7r7/Z7yl1S54pIIZMFUULJlKKmshCeLduSxjbW7fzYLHfEBdFd/+wr1EwBYSccqy34URQ4SQlYlVEVCeALOWsiqAQWSnJTkIj0lKJjpADYiu5SQe6v2d8CWaAuSbhpO9ByaKAEYDycHM7HQ9iIX7evV3gcLWCkAuEzQeHkgE8KgahxDFGwZGhoB+SJyNTPhRv8agD0NiLrr5kpdYDEVoOEOMLo7AQAa2oTWQGgQlICoaghPgJmhIgNVMSBPQAqCqepqWAgLAIDcUs4CYhGWCrQDi1rB1E16EIgmwzkDwEYsP6jlMAHg0/GV9JzUaa81BI0zIdhlVEqM2EH0lnpsk2qWoSstf6502x8vwBVeH+7Ub9/Qb5TKfEviI9MXxlv6U/FYRsQ9isU8iiV8eHEfKqYgfQkIsinli0K58u+HP/5XZ3I2K7pz86gTnRYHWdRezJ9yIG6UR57ikT9Tc8SKPeGcgHUMBgMsYFjfAwBHY9z1gQkgzoJFlOy75OT0ke+b1qpW01r6tyw6/Jsq3Tsf8i/70VSdvKbAYcSOPXZM2liomoRQwimlWLGhYqn0twDw+H0LvU6cH34nvmZWW/Phl7bNiB3hT7G/mrc8fW/dNwDYDzJkr1FgZd384UnvNIkAjmEtM6x1IBBLElK7ysg4hp4EgG7M5SyWUhuysT7/7kchxM8nuHaLisWXv3hG6fs5dEdLZl8d/F878Dc7wsKvUlr6uhpRqVR15XzVliaqbPNaiFGjNuwYum1u362Pds3t8s/feH74t+m1FwSJhhetFN8YrumrAqR+svrMidsJxF0d2G+idS//WKfeBHlzrCA4AMyE0Bkokk6JGBjo21S+dyiLrGgHRA4516zCT0vpLxmkgejV8HXTu/U1UzLBlc+eUbxr+cZl4ZrEjNo/6YGPbAvzd9jI5P0IQlad1PkaTYwU128eGrn8jA3fvj7blo119ndGN2f6Phv4sYdrKpy6Kdqm1wxv0yv6N9mNu/Kfuye5sbWzm+z+0uZqz+ovtYQcEehICwMBJssWETR84bNPCgzzyiRUb4GpoU8r8YTxmMjCKtaEJza9pM+YNf/ypxZO2LOea/wspl2Kiwfvue4a7+IfnJRqmEPM8ciJwR8UNq/uQ+/I1bg6yG3J1W5Mv7A07mWyFSq50Gp25DzLzuWrFd5RtFFMCPuu+YB63G2PgbjVsgEzSJBA5CJkRAIpmcKIHnxz9/OtmMcAYFBZU7Djf8Yi1BpNMKwRIfSe2v6ifv+0eVc8eOKQ+fDa1s9f3HBZ47fyT27E+MC6emiDmIEFsctwWWwZltX+IrnyDk/GrxrFsI1sJAxZijjiyEVWcsILbfHOH5c/OtqBLjlJux9UAAgANyPuO2t94wwUCTg4OCYIKGr0Mvh1aVPhrUwPnRaY6+80/XdLJZfAtJxjyBpDWmkbIeSa98vBmlnQfMLn7jtuG3/yjcO/0DHrmnhi4EV/EHF+H96HZiyrPYIF8upUz8+SXsPHxrHLRE4rzRqRi1zVValmQq9kC//YE911Ywc6ZDc63btiAfXwlSZmZgMDYgVZ9/2oGYvpsekwk/XE7tMHgDzGNczTnbNU+/eccZ/UHFmjImEoIq21enZ0tTm5+YTP//D4Le7y19u+2NXBckV3n1iGU/SluCd5crLlX5Tyzx3mAaNhlIZG5Gq26mqybAo6MsXrnjG5705mfAfUHFF71B0ghXUW8tyqcw5WODAYRAKlKOTDMoehJdY4dbMGhrBu0gn1a2CWzCNp8+a7n5lHV22zSF/vyEBDOyO10Far58b6zPzG+Vd/8+jXdGc3fRmA/TCWtSCResjz4n80SjuNhlaWNUJXM1VbUxUzsSUy+c88b29/ahrOSfaju3KgnSGxlyJIDKO/5pwbYgc4Z9jBQRKhZiN4Jolj00cdTyAsal/0NuAGakDZNOCM5Dr9/a/X3MRnq7YUFc2YyNsxW3DjGNXD6oWx520J4bW3Hr3mhx/J3PennGroVYH3R2O03ZRQVGUUuOAmbN4U1LjetWIQr5/1vL29ZxrOSQ7iiQNWfq8ATJ6qsWy2OMcwzrBjB8sWgBPjpTKOix/zfgbT0pWL7H+1noEwj23VBpyRel3f+U8VHr5Iu3CwZIoyb8ZMGSUUOC/X5F9y22qDn8l46ftjfjCvQCOugoqqcMmVbIEKelyOmx13vBDdd9GG8KcDbWgPBvFE+WAov8/lsBPmVccW2mkY5+CcgyeEGAknOMUt82+Y++Ac0H/2A99WsOg8nqlkcGrTxvCeX07YrefVbHltaGuqZCZsxRZRtHmxubrBjvMuW8GEq7qKqLmKq9qSKJqxsOSGrloTffNLLZjpAe1uC3prBzMV3iMAi+qhiUpu4oUQZY5cKLWr1x5CCIDYlqqeOik44dMEYrSv/M31LABdwKpSA06KbdZd6yfCly8IXfGJsi7Lsim4EFVo1GSNK7LmKiLiKtdcVUzo4V15O3jB2vAfftCC0+Oj8KpArznYtcAeGaFe9AKY7ZOrlVvE0ZdI8posaedTjBRJeKSoFIZoChLHPnzqsrtWPnFkbRFAvejl33CmLsSgacYHYkPYFQ2bf/tZRs45nlnOFQRHkMRgODh2sCjq0YkRs+mCX+v7n2nGkswYesrAloNeCO3LFeBpOFVtwWODjvVyCYWaq7iKK4FBICICrNs1Yac+snPHTTmQW9S+VLxDRDFjeL4CxCxwIg+h/6tVVxzVbIXhiC1rAM56IkaS6CcD5l9faMGH0mNYXpxMkvbIV+6eKOF2Vpzd9yGMvT6YxogBIEs09NOIK46ZZd6NomxLYAd4Uorh6qjdMlH5Yt/Z0SmLe8l0vfMUhwH6a82IyUK4asCxe9Wxg4N1IAIDFFAMzWrG8wDTfJxc3bOzY+oC1xsr3WSplwz1kqEcuX0FYa8PbcRy3YLT478y/9xnUXva44A0R3bE7kLEGgRBUoC2jpbUuu2D9/Jl3NjZTXYPGzBjGIwARAQRvaUfO4CBuIyjQTZrgPjtydVvl+pZARB3guwTh+VbXj6+9tH1Z1X+csfHo6vWnVecRzly+1Ig7QtKLg5ngJ1R1Y1/C2AoKERcw3a7CTVbgU+esAjt1uHqcQ+8PPgAr2aPcsRdHV3vYAlHGgCOSE6yxfXrTUTwhEIy8PYY4rrAMoecy6JHdU8Z+Bri0TqXwANEwW3E3h1N02Mvv3JW4S8JxHuzhH0iRQewKmrC2amn7c2PnStufzTGDReUMW7LXJRv2vU4FnPRolpkISqYzbviZz362fEuZu4gIrOnzgyzYUym1iAGgSFJwJMx9849yR7ZCTK3x1+amU4m71WJ+KIxFDBSmrBeRbLcITidinkxDm57cPrmRyhH/W8f3NivPACAi2Fcz8ACbxxbb9KuXFTwSYC45kp4zbyEIbMTDTKpCtW82TBQ+/CDJ449xpdy6+JeMvXpsOxvvUuQABPDwcKyAcOBBLFPyv0uap5AnMNic0Ny1WKX8J7lQCzaxtv0sJ7gsbAsh6oFtaMy4fXv2mnf2D6O7aZyVL1Ie2fqb187Q7wTfVED2lMv6O+82u59/csZnnknszUMVppDvKpfQoHzmO+fqDiMzI6d8pyfR0Or+j448bkFTzYu391XBBa5HE6pNxPA0jprJYEtFCw51hxS0erJTHQqdaBLzkUH50D2Cqz2GjKlG2KKvm69SA67ohUgj9nBMcOxAzMzWNDOMF8l6b8MAOuwlA9Gc1QAbf4szEgMYFXhHP8byxKYemWJJrQW1nOwiDhCg2zCCd5JOFocZeOUlokkIdNAd06f4m5d0NO8BQBmY0nwSXzV/sS757a4bLxWSud8EaM4pUhCMTtvLkrFjb3IvXV1rsw8fl5A6pa0lz7FygoDYCISjiezh8lPxxwpnfDHqmO3/kh/9MYOdMnuPZCpvy+NpIAZ/iy0xQawKjxb/d0PE6LpYyUxbixZ5eBQH4xgTJMzMEcd79rEETRNHUZShfkgJu/x4+6HH1yXWjO5XnyGf8mP4yL1IUHCJ+dtzZvxvxiyXQ8CwGXoicl06VwFfD7wvHM9IWEQWhAkiHYrDAeGdQaGjRYc8yqV4vId0YaLWjGPu9Hh9kSY7g+P5gHHxRoQk3msMUvU7XcFMvOxkshbA0MMJxiMaBKIJpnBTDHLHkFt8ghxFITTTjrvWWWCpyywuiBGNv9CPNSmnY0fHRyz+QSx0KwN151UlZVTHexZirzZkgQMVXly2kMw1xlph3p5bpx1hjV7HJNVXXj4tcqaT/RjagVYyntji/cHAJoEIWjAVJXHM/qc4NZbAm74khYaEYXGwipGPQob1tCwADHHkbBN1KymyFZkkIFwBCM0JPkjhrSOqNZggATDAUSwiGAQ1gkPgiQQdivPYFg2ME4bSVIJlqjo0rJHKl+8FmgHsMgBObcvyuBAQMigyStgVWmxyF6S8JpvFyI2vUoF1mwck5MW7q1Ubne+z4ATQrASinz40oMPJVR9tAJgAjliYiIIgARo90YZzAzDhg0bJwgyRRmw09vL0dh1j9au/9ksnBofwOER0L1PtcOBDB47YNSF0DgMpyZf4R+tDWTTQ2luafQRnORTXIAsiMgSQG4yKxNEJCGEZCUkCyEAMDt2zsCyhWVLlq1wsMKxJQNdtyKOULNVF7qaBZzMqAYRJ89Eunb3G6XnL3/G/P3TM3BhYgeeCoH+93ROUAGzvAxmxQvYoIFRfUZw/aIkT7lGSe9cKQJEqCJE5CwsO2ZysMQM2n2y9Z/J30Sgyb8YjpmZmeB8IWVKpikjGyEdtOXo4cHa1u88Ucs9A8CfhQ76XU3Z92pSVABQzZgdi6HN24EnqwDUQnntwgY1/VOK/PN8GWuFkNAcQXMIC80WztUrAAaTA3MdgLrdQwQioKRMIS3T8Oomt8lY/fCO2ub7n6hmXwZALfiQN4rtNaBP7+9dPlhC9Ss1WzajOUhhqtyKR2sAMMf/+KzDeO7pvoovVqT+EBBHKuGlBSkIEiAigAhSCAgSkPU0GSCMKZJvCsaqSlh86lellau2oHsXAG8q2oMGxPVGLI8OhB57N8blqW4Rs1ULWv0kmtRWrI6AwRCASmBu4/u806c30PQjYio53YNqIRJxANKXXsRka9ZFwxVb2z5idmx7Obp/F1Ao1pc+0Z+L4whA1I9ufTB4wXf7ayiT62dpAXbKKmZQP1a634faWoArvKMxg4YA14ucPVhk6HsFwN6mzqgf3fS7RnKW1sMh45AckkNySA7Juyf/AY/UlGXmls3qAAAAAElFTkSuQmCC" alt=""><span>YourCounselor</span></a>
+<span class="header-tag">Practice insights</span>
+</div><div class="accent"></div></header>
+<div class="layout" id="top">
+<aside aria-label="Article contents">
+<details class="toc" open><summary>On this page</summary><ol><li><a href="#the-problem-with-collecting-therapies">The problem with collecting therapies</a>
+</li>
+<li><a href="#what-actually-makes-therapy-work">What actually makes therapy work</a>
+</li>
+<li><a href="#how-the-eight-were-chosen">How the eight were chosen</a>
+</li>
+<li><a href="#the-eight-therapies">The eight therapies</a>
+<ul class="toc-sub">
+<li><a href="#1-cognitive-behavioural-therapy-cbt">1. Cognitive Behavioural Therapy (CBT)</a></li>
+<li><a href="#2-exposure-therapy">2. Exposure therapy</a></li>
+<li><a href="#3-motivational-interviewing-mi">3. Motivational Interviewing (MI)</a></li>
+<li><a href="#4-dialectical-behaviour-therapy-dbt-skills">4. Dialectical Behaviour Therapy (DBT) skills</a></li>
+<li><a href="#5-cognitive-processing-therapy-cpt">5. Cognitive Processing Therapy (CPT)</a></li>
+<li><a href="#6-interpersonal-psychotherapy-ipt">6. Interpersonal Psychotherapy (IPT)</a></li>
+<li><a href="#7-acceptance-and-commitment-therapy-act">7. Acceptance and Commitment Therapy (ACT)</a></li>
+<li><a href="#8-behavioural-parent-training-and-couple-therapy">8. Behavioural parent training and couple therapy</a></li>
+</ul>
+</li>
+<li><a href="#combining-the-eight">Combining the eight</a>
+</li>
+<li><a href="#the-foundation-under-all-eight">The foundation under all eight</a>
+</li>
+<li><a href="#knowing-your-limits">Knowing your limits</a>
+</li>
+<li><a href="#a-three-year-learning-path">A three-year learning path</a>
+</li>
+<li><a href="#closing-depth-over-breadth">Closing: depth over breadth</a>
+</li>
+<li><a href="#the-core-eight-at-a-glance">The Core Eight at a glance</a>
+</li>
+<li><a href="#further-reading">Further reading</a>
+</li></ol></details>
+</aside>
+<main id="article">
+<header class="hero">
+<span class="eyebrow">Professional perspective</span>
+<h1>The Core Eight</h1>
+<p class="deck">The therapies every psychologist and counsellor should master</p>
+<div class="byline"><span>Written by</span><strong>Yajuvendra Khajekar</strong><span class="dot">•</span><span>14 October 2026</span><span class="dot">•</span><span>For psychologists and counsellors</span></div>
+<div class="author-note"><strong>About this framework.</strong> The “Core Eight” is the author’s proposed learning framework. It is a perspective for professional discussion, not an official or exhaustive ranking of therapies.</div>
+</header>
+<section class="article-section" id="the-problem-with-collecting-therapies"><h2>The problem with collecting therapies</h2>
+<p>There are now more than 400 named forms of psychotherapy. Every year a few more arrive, each with its own workshop, certificate and set of acronyms. Many young psychologists and counsellors respond the way any conscientious professional would: they try to learn as many as they can. Their profiles list ten or fifteen modalities. Their bookshelves are full.</p>
+<p>Then a client walks in and the collection does not help.</p>
+<p>Consider a counsellor I will call Meera, two years into practice, with certificates in NLP, art therapy, hypnotherapy, inner child work and a three-day CBT workshop. Her client, Rohan, is 28 and has panic attacks on the metro. Meera tries relaxation, then visualisation, then inner child work. Six months later Rohan still avoids the metro, now takes autorickshaws everywhere, and has started avoiding malls too. What he needed was one thing done properly: twelve sessions of CBT with structured exposure. A therapist who had mastered that single method would very likely have had him back on the metro within three months.</p>
+<p>This is the central point of this article. <strong>Breadth does not make you effective. Depth in the right few methods does.</strong> Most problems that bring people to therapy are kept going by a small number of processes, and a small number of well-tested therapies target those processes directly. If you master eight of them, you will be able to help the large majority of the people who walk through your door. You will also know clearly when someone needs something you cannot offer, and where to send them.</p>
+<p>The eight are:</p>
+<ol>
+<li>Cognitive Behavioural Therapy (CBT)</li>
+<li>Exposure therapy</li>
+<li>Motivational Interviewing (MI)</li>
+<li>Dialectical Behaviour Therapy (DBT) skills</li>
+<li>Cognitive Processing Therapy (CPT)</li>
+<li>Interpersonal Psychotherapy (IPT)</li>
+<li>Acceptance and Commitment Therapy (ACT)</li>
+<li>Behavioural parent training and one evidence-based couple therapy</li>
+</ol>
+<p>The rest of this article explains why these eight, what each one actually does, what mastering it looks like, how they combine, and how to learn them over three years.</p>
+</section>
+<section class="article-section" id="what-actually-makes-therapy-work"><h2>What actually makes therapy work</h2>
+<p>Before choosing methods, it helps to be clear about what produces change in the first place. Two bodies of evidence matter here.</p>
+<h3 id="the-relationship-carries-a-large-share-of-the-change">The relationship carries a large share of the change</h3>
+<p>Across decades of research, a few factors predict good outcomes regardless of the model used: a strong working alliance, the client's hope and expectation that therapy will help, a credible explanation of the problem, and a structured plan both people believe in. The individual therapist also matters a great deal. Some therapists get consistently better results than others using the same method.</p>
+<p>This does not mean the method is irrelevant. It means a method works best when it is delivered inside a warm, organised, collaborative relationship. A brilliant exposure plan handed to a client who does not trust you will not be carried out.</p>
+<h3 id="most-problems-are-kept-going-by-a-handful-of-processes">Most problems are kept going by a handful of processes</h3>
+<p>The second body of evidence is about maintenance. Diagnoses look very different on the surface, but underneath them the same few processes appear again and again. These are what keep a problem going long after whatever started it.</p>
+<div class="table-scroll" role="region" aria-label="Table: Most problems are kept going by a handful of processes" tabindex="0"><table><thead><tr>
+<th scope="col">Process</th>
+<th scope="col">What it looks like in the room</th>
+<th scope="col">Where you see it</th>
+</tr></thead><tbody>
+<tr><td>Avoidance</td><td>"I just don't go there any more." Escape, rituals, reassurance-seeking, safety behaviours</td><td>Panic, phobias, OCD, PTSD, social anxiety, health anxiety</td></tr>
+<tr><td>Unhelpful thinking</td><td>"I'm useless." "Something terrible will happen." Rumination and worry</td><td>Depression, anxiety, low self-esteem, perfectionism</td></tr>
+<tr><td>Ambivalence</td><td>"I know I should stop, but..."</td><td>Addictions, adherence, any client who is not sure about change</td></tr>
+<tr><td>Emotional overwhelm</td><td>Emotions that rise fast, go high and act before thinking</td><td>Self-harm, borderline pattern, anger, impulsivity</td></tr>
+<tr><td>Stuck beliefs after trauma</td><td>"It was my fault." "No one can be trusted."</td><td>PTSD, sexual assault, childhood abuse</td></tr>
+<tr><td>Relationship strain</td><td>Conflict, loss, isolation, a role that has changed</td><td>Depression, grief, perinatal problems, life transitions</td></tr>
+<tr><td>Struggling against what cannot be changed</td><td>Fighting pain, illness or loss so hard that life shrinks</td><td>Chronic pain, chronic illness, caregiving, burnout</td></tr>
+<tr><td>Patterns between people</td><td>Coercive cycles between parent and child, or between partners</td><td>Child behaviour problems, couple distress</td></tr>
+</tbody></table></div>
+<p>Each of the eight therapies in this article targets one or more of these processes directly. That is why so few methods can cover so much ground.</p>
+</section>
+<section class="article-section" id="how-the-eight-were-chosen"><h2>How the eight were chosen</h2>
+<p>Every therapy considered had to pass four tests.</p>
+<ol>
+<li><strong>Strength of evidence.</strong> Multiple randomised trials and a place in major guidelines such as NICE, the WHO mhGAP programme and the APA's list of research-supported treatments.</li>
+<li><strong>Breadth.</strong> It must work across several problems, not just one narrow diagnosis.</li>
+<li><strong>Learnability.</strong> A trained psychologist or counsellor must be able to reach competence through a manual, a workshop and supervised cases, without years of personal analysis.</li>
+<li><strong>Fit with Indian practice.</strong> It must work, or have been adapted to work, with joint families, varied languages, stigma, short session budgets and clients who expect some advice and structure.</li>
+</ol>
+<p>Some excellent therapies did not make the core list because they fail the breadth or learnability test. Schema Therapy, EMDR and CBT for psychosis are examples. They are powerful, but they are best learned as a specialisation after the core is in place.</p>
+<h3 id="what-the-eight-can-and-cannot-do">What the eight can and cannot do</h3>
+<p>When I mapped these eight against a matrix of 73 common adult presenting problems, one of them was the first-line psychological treatment for about 60. That is roughly four in every five problems an outpatient psychologist sees. Most of the rest need a psychiatrist, a specialist service or non-clinical help such as legal aid, alongside or instead of therapy. Section 7 covers those.</p>
+<p>So the honest claim is this: the eight will not solve everything, and no set of therapies can. But mastered properly, used in combination and backed by good referral habits, they will let you help the large majority of your clients well.</p>
+</section>
+<section class="article-section" id="the-eight-therapies"><h2>The eight therapies</h2>
+<p>Each therapy below follows the same pattern: what it is, what it targets, where it works, what mastery looks like, the mistakes to avoid, and notes for practice in India. A short case shows it at work.</p>
+<h3 id="1-cognitive-behavioural-therapy-cbt">1. Cognitive Behavioural Therapy (CBT)</h3>
+<p><strong>What it is.</strong> CBT starts from a simple, testable idea: how we interpret events, and what we do in response, shapes how we feel. Change the interpretations and the behaviours, and the feelings follow. It is structured, time-limited (usually 8 to 20 sessions), collaborative and focused on the present. The client learns skills to use long after therapy ends.</p>
+<p><strong>What it targets.</strong> Unhelpful thinking, unhelpful behaviour (especially withdrawal and inactivity), and the cycles that link them.</p>
+<p><strong>Where it works.</strong> Depression, every anxiety disorder, insomnia (as CBT-I), health anxiety, chronic pain, eating disorders (as CBT-E), anger, low self-esteem, perfectionism and many life stressors. Most other evidence-based therapies are adaptations of CBT, so learning it well makes everything else easier.</p>
+<p><strong>Three tools inside CBT that you must master separately:</strong></p>
+<ul>
+<li><strong>Behavioural activation.</strong> Scheduling activities that bring pleasure, achievement or meaning, step by step, especially in depression. In moderate to severe depression it is often more useful than working on thoughts, because a depressed mind cannot argue its way out of bed.</li>
+<li><strong>Problem-solving.</strong> A structured routine: define the problem, list options, weigh them, choose, act, review. Invaluable for clients overwhelmed by practical difficulties such as debt, job loss or a sick parent.</li>
+<li><strong>Behavioural experiments.</strong> Testing a belief in real life instead of debating it. "If I speak up in the meeting, everyone will think I'm stupid" becomes a prediction the client checks.</li>
+</ul>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You build a <strong>case formulation</strong> with every client: a shared map of how their problem started and, more importantly, what keeps it going. Every technique you use follows from this map.</li>
+<li>You use <strong>guided discovery</strong>, asking questions that help the client reach conclusions themselves instead of telling them their thoughts are wrong.</li>
+<li>Every session has an <strong>agenda</strong>, a <strong>review of the last homework</strong>, focused work, and <strong>new homework</strong> agreed together.</li>
+<li>You measure progress (PHQ-9, GAD-7 or a problem-specific scale) and adjust when the numbers stall.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Handing out thought records without a formulation. Worksheets are not therapy.</li>
+<li>Arguing with thoughts. If the client feels corrected, they stop telling you their real thoughts.</li>
+<li>Skipping homework review. Clients quickly learn that homework does not matter.</li>
+<li>Staying in "talking about" mode when the problem needs behaviour change.</li>
+</ul>
+<p><strong>Practice in India.</strong> Clients often expect guidance from an expert and may find questioning unfamiliar at first. Explain the model plainly, use local examples and proverbs, and frame homework as "practice" rather than "assignments". Involve family where the client wants it, especially for behavioural activation, where a supportive spouse or sibling can make a big difference. CBT has been successfully adapted and tested in India in Hindi, Marathi, Kannada and other languages, including in versions delivered by trained lay counsellors.</p>
+<p><strong>Example.</strong> Sunil, 45, a bank officer, has been low for eight months since being passed over for promotion. He has stopped walking in the evening, stopped visiting his brother and spends weekends in front of the television. His PHQ-9 is 17. The formulation shows a cycle: "I'm a failure" leads to withdrawal, withdrawal leads to fewer good experiences, which confirms "I'm a failure". The first four sessions are pure behavioural activation, starting with a 15-minute walk three times a week and one call to his brother. From session five, he starts noticing and testing his "failure" thoughts against evidence from his 20-year career. By session 12 his PHQ-9 is 6.</p>
+<h3 id="2-exposure-therapy">2. Exposure therapy</h3>
+<p><strong>What it is.</strong> Exposure means helping a client approach what they fear, in a planned and graded way, without escaping or neutralising the fear. Technically it sits inside CBT, but it deserves its own place because it is the single most powerful technique for anxiety-based problems and the one therapists most often avoid. The main forms are in vivo exposure (real situations), interoceptive exposure (feared body sensations), imaginal exposure (memories or feared images) and Exposure and Response Prevention (ERP) for OCD.</p>
+<p><strong>What it targets.</strong> Avoidance and safety behaviours. Every time a person avoids, escapes, checks, washes or seeks reassurance, the fear is protected from being tested. Exposure lets the brain learn that the feared outcome does not happen, or is bearable when it does.</p>
+<p><strong>Where it works.</strong> Panic disorder and agoraphobia, specific phobias, social anxiety, OCD, PTSD (as Prolonged Exposure), body dysmorphic disorder, health anxiety and nightmares (through imagery rehearsal).</p>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You build a <strong>hierarchy</strong> of feared situations with the client, rated from least to most distressing.</li>
+<li>You design each exposure as a <strong>test of a specific prediction</strong>: "If I touch the door handle and don't wash, I will get seriously ill." After the exercise you ask: what happened, and what did you learn? Current research shows that learning comes from violating the expectation, not only from anxiety fading.</li>
+<li>You <strong>identify and remove safety behaviours</strong>. Carrying a water bottle, sitting near the exit, asking a family member "Are you sure it's clean?" all undermine exposure.</li>
+<li>You <strong>tolerate the client's distress</strong>. This is the hardest part. Exposure is uncomfortable by design, and a therapist who rescues the client too early teaches them the fear was justified.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Moving up the hierarchy too slowly, or staying on relaxation for weeks before starting.</li>
+<li>Allowing reassurance to continue, from you or from family.</li>
+<li>Doing exposure only in the session and never assigning daily practice.</li>
+<li>Stopping an exercise at peak distress, which can strengthen the fear.</li>
+</ul>
+<p><strong>Practice in India.</strong> Family accommodation is very common: parents wash for the client, spouses check locks, relatives answer the same reassurance question 50 times a day. Bring family into at least one session and agree how they will step back. Distinguish culturally normal religious practice from compulsions. Prayer is not the problem; repeating a prayer 40 times because it "didn't feel right" is. Discuss exposures involving religious or purity themes respectfully, and if needed with the family's spiritual adviser.</p>
+<p><strong>Example.</strong> Fatima, 31, washes her hands 60 to 80 times a day and asks her husband several times every evening whether she touched anything dirty. Her Y-BOCS is 29. The hierarchy starts with touching the outside of her handbag and not washing for 30 minutes, and rises to cooking a meal after touching the floor. Her husband attends session three and agrees to answer reassurance questions only with "I know you can handle this uncertainty." After 16 sessions of ERP with daily practice, her Y-BOCS is 11.</p>
+<h3 id="3-motivational-interviewing-mi">3. Motivational Interviewing (MI)</h3>
+<p><strong>What it is.</strong> MI is a collaborative way of talking that strengthens a person's own motivation to change. Developed by William Miller and Stephen Rollnick for problem drinking, it is now used across health care. It is less a set of techniques and more a style: partnership instead of authority, acceptance instead of judgement, compassion, and drawing out the person's own reasons for change instead of supplying them.</p>
+<p><strong>What it targets.</strong> Ambivalence. Almost every client is of two minds about change. Ambivalence is normal, but if the therapist pushes for change, the client naturally argues the other side, and ends up talking themselves out of it.</p>
+<p><strong>Where it works.</strong> Substance use, alcohol, tobacco, gambling and gaming. Also medication adherence, health behaviours, eating disorders, and any client who says "I don't know if I really need to be here." Used as a brief opening phase of two or three sessions, MI improves engagement and outcomes in CBT and other therapies.</p>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You are fluent in <strong>OARS</strong>: open questions, affirmations, reflections and summaries. Skilled MI practitioners make at least two reflections for every question.</li>
+<li>You <strong>notice and draw out change talk</strong>, the client's own statements about desire, ability, reasons and need to change, and you reflect it back.</li>
+<li>You <strong>resist the righting reflex</strong>, the urge to fix, warn and advise. When you feel it, you ask permission first: "Would it be all right if I shared some information about that?"</li>
+<li>You move through the four processes in order: <strong>engaging, focusing, evoking, planning</strong>. You do not jump to a plan before the person is ready.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Using MI as a clever way to make clients do what you want. Clients sense it.</li>
+<li>Asking question after question without reflecting.</li>
+<li>Arguing with "sustain talk" (reasons not to change) instead of reflecting it and moving on.</li>
+</ul>
+<p><strong>Practice in India.</strong> Families, doctors and teachers here often deal with addiction through lectures, threats or shame. Clients arrive expecting more of the same. A therapist who listens without lecturing is often a new experience, and it builds trust quickly. MI also works well with family members: help a worried wife move from pleading to curious, non-confronting conversations with her husband. Lay-counsellor programmes in India, such as Counselling for Alcohol Problems, have shown that MI-based care works here.</p>
+<p><strong>Example.</strong> Prakash, 38, comes only because his wife threatened to leave over his drinking. "I'm not an alcoholic. Everyone in my office drinks." The therapist does not argue. "It sounds like drinking is a normal part of life at work, and coming here feels unfair." Prakash relaxes. Later: "What worries you, if anything, about how things are going?" He mentions his daughter asked why he shouts at night. The therapist reflects: "Your daughter matters a lot to you, and you don't like her seeing you that way." That is the first change talk. Three sessions later Prakash sets his own goal: no drinking on weeknights.</p>
+<h3 id="4-dialectical-behaviour-therapy-dbt-skills">4. Dialectical Behaviour Therapy (DBT) skills</h3>
+<p><strong>What it is.</strong> DBT was developed by Marsha Linehan for people with chronic suicidal behaviour and what is now called the borderline pattern. Its central idea is a balance, or dialectic, between <strong>acceptance</strong> ("your feelings make sense given your history") and <strong>change</strong> ("and these behaviours are hurting you, so let's learn new ones"). Full DBT has four parts: individual therapy, a weekly skills group, phone coaching between sessions, and a consultation team for therapists. This article recommends that every clinician master the <strong>skills</strong> component. It is teachable, flexible and useful far beyond borderline presentations.</p>
+<p><strong>What it targets.</strong> Emotional overwhelm: emotions that rise fast, peak high, take long to settle, and drive impulsive action.</p>
+<p><strong>The four skill modules:</strong></p>
+<div class="table-scroll" role="region" aria-label="Table: 4. Dialectical Behaviour Therapy (DBT) skills" tabindex="0"><table><thead><tr>
+<th scope="col">Module</th>
+<th scope="col">What the client learns</th>
+<th scope="col">Example skill</th>
+</tr></thead><tbody>
+<tr><td>Mindfulness</td><td>To observe thoughts and feelings without being swept away</td><td>Observe, describe, participate, non-judgementally</td></tr>
+<tr><td>Distress tolerance</td><td>To survive a crisis without making it worse</td><td>STOP (stop, take a step back, observe, proceed mindfully); paced breathing; distraction with ACCEPTS</td></tr>
+<tr><td>Emotion regulation</td><td>To understand emotions and reduce vulnerability to them</td><td>Check the facts; opposite action; PLEASE (sleep, food, exercise, illness care)</td></tr>
+<tr><td>Interpersonal effectiveness</td><td>To ask for what you need and say no while keeping relationships and self-respect</td><td>DEAR MAN for making requests</td></tr>
+</tbody></table></div>
+<p><strong>Where it works.</strong> Self-harm, the borderline pattern, anger, impulsivity, emotional crises, binge eating and substance use driven by emotion. Skills-only groups are increasingly used for adolescents, families and mixed clinical groups.</p>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You <strong>validate first</strong>. You can find and name the part of a client's reaction that makes sense, even when the behaviour is harmful.</li>
+<li>You run a <strong>chain analysis</strong> after every problem behaviour: the trigger, the vulnerabilities that day, the thoughts, feelings and urges, the behaviour, and the consequences. Then you find the links where a skill could have changed the outcome.</li>
+<li>You <strong>teach skills experientially</strong>, with practice in the room and real homework, not as lectures.</li>
+<li>You use a <strong>diary card</strong> to track urges, behaviours and skills use every week.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Teaching skills without validation. The client hears "you're doing it wrong" and drops out.</li>
+<li>Treating skills-only work as a replacement for full DBT in people with frequent, high-risk self-harm. They need the full programme or a specialist referral.</li>
+<li>Getting pulled into a crisis every session, so skills are never taught.</li>
+</ul>
+<p><strong>Practice in India.</strong> Strong emotion in young people, especially women, is often met at home with dismissal or criticism: "you are too sensitive", "adjust". DBT's biosocial explanation, a sensitive temperament meeting an environment that did not validate it, gives families a non-blaming way to understand their child. Run a parallel family skills session where possible. Validation by elders, even once, can be powerful.</p>
+<p><strong>Example.</strong> Ananya, 22, a college student, self-harms after arguments with her mother, about twice a week. A chain analysis shows a pattern: poor sleep, skipped meals, a critical comment, a flood of shame, then self-harm within minutes. She learns the STOP skill and paced breathing to ride out the first minutes of the urge, distraction skills for the minutes after, the PLEASE skills for sleep and meals, and DEAR MAN for one honest conversation with her mother. Her mother attends two family sessions. After four months, self-harm has stopped for six weeks and Ananya is using her diary card daily.</p>
+<h3 id="5-cognitive-processing-therapy-cpt">5. Cognitive Processing Therapy (CPT)</h3>
+<p><strong>What it is.</strong> CPT, developed by Patricia Resick, is a 12-session, manualised therapy for post-traumatic stress. Instead of focusing mainly on reliving the trauma, it focuses on the <strong>meanings</strong> the person has taken from it. Many people recover naturally after trauma. Those who don't are often stuck on beliefs such as "It was my fault", "I should have stopped it", or "The world is completely unsafe".</p>
+<p><strong>What it targets.</strong> Stuck points: beliefs about the trauma that keep the person stuck. CPT distinguishes two kinds. <strong>Assimilated</strong> beliefs distort the event to protect old beliefs ("If I had dressed differently, it wouldn't have happened"). <strong>Over-accommodated</strong> beliefs over-generalise from it ("No man can ever be trusted").</p>
+<p><strong>Where it works.</strong> PTSD after any trauma: assault, sexual violence, accidents, disasters, combat and childhood abuse. For complex trauma, CPT works well after a stabilisation phase, using DBT skills or STAIR.</p>
+<p><strong>How the 12 sessions run:</strong></p>
+<ol>
+<li>Sessions 1 to 2: education about PTSD, and an <strong>impact statement</strong> in which the client writes why they think the trauma happened and how it changed their beliefs.</li>
+<li>Sessions 3 to 5: identifying stuck points and the link between events, thoughts and feelings, using ABC worksheets. Optionally, a written account of the trauma.</li>
+<li>Sessions 6 to 7: challenging stuck points with Socratic questions and challenging-beliefs worksheets.</li>
+<li>Sessions 8 to 12: five themes, one by one: <strong>safety, trust, power and control, esteem, intimacy</strong>. The client rewrites the impact statement at the end.</li>
+</ol>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You go after <strong>self-blame first</strong>, because assimilated stuck points block recovery the most.</li>
+<li>You use <strong>Socratic dialogue</strong> patiently, never telling the client their belief is wrong, but asking questions until they see the event more accurately.</li>
+<li>You <strong>do not avoid the index trauma</strong>. Therapists often unconsciously steer away from the worst event to protect the client, and the client stays stuck.</li>
+<li>You <strong>track symptoms every session</strong> (for example with the International Trauma Questionnaire) and expect steady change.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Accepting "it was my fault" because the client feels strongly. Strong feelings are not evidence.</li>
+<li>Turning sessions into supportive listening without worksheets.</li>
+<li>Starting CPT while the person is still in danger, for example still living with an abusive partner. Safety comes first.</li>
+</ul>
+<p><strong>Practice in India.</strong> Shame and family honour can make self-blame especially strong after sexual violence, and families may pressure the person to stay silent. Be clear about mandatory reporting under the POCSO Act when a minor is involved, and about medico-legal support. CPT can be delivered without a written trauma account, which suits clients with limited literacy or strong privacy concerns.</p>
+<p><strong>Example.</strong> Kavita, 26, was assaulted by a colleague a year ago. She has nightmares, avoids her old office area and tells herself, "I should never have stayed late." Her impact statement is full of self-blame. Through Socratic questions ("Who decided to commit the assault?" "Did staying late cause it, or did he?"), she reaches a new belief: "I stayed late to finish work. He chose to hurt me." By session 12, her trauma symptoms have fallen below the clinical threshold and she has gone back to the gym she had stopped visiting.</p>
+<h3 id="6-interpersonal-psychotherapy-ipt">6. Interpersonal Psychotherapy (IPT)</h3>
+<p><strong>What it is.</strong> IPT, developed by Gerald Klerman and Myrna Weissman, is a time-limited therapy (usually 12 to 16 sessions) built on a plain observation: mood problems and relationship problems feed each other. IPT does not dig into the distant past or challenge thoughts. It links the client's current symptoms to one main interpersonal problem and works on that problem directly.</p>
+<p><strong>What it targets.</strong> Relationship strain, in one of four problem areas:</p>
+<div class="table-scroll" role="region" aria-label="Table: 6. Interpersonal Psychotherapy (IPT)" tabindex="0"><table><thead><tr>
+<th scope="col">Problem area</th>
+<th scope="col">What it means</th>
+<th scope="col">Typical focus</th>
+</tr></thead><tbody>
+<tr><td>Grief</td><td>A death that has not been mourned</td><td>Mourning, and rebuilding relationships and activities</td></tr>
+<tr><td>Role disputes</td><td>A conflict with someone important</td><td>Clarifying expectations, improving communication, negotiating</td></tr>
+<tr><td>Role transitions</td><td>A major life change: marriage, a baby, retirement, migration, diagnosis</td><td>Mourning the old role, building skills and support for the new one</td></tr>
+<tr><td>Interpersonal deficits</td><td>Isolation, few close relationships</td><td>Building and deepening connections</td></tr>
+</tbody></table></div>
+<p><strong>Where it works.</strong> Depression (including in adolescents and older adults), perinatal depression, grief, life transitions and mood problems triggered by relationships. It is the best alternative when CBT doesn't fit a client, for example someone who finds worksheets alienating but is willing to talk about the people in their life.</p>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You do an <strong>interpersonal inventory</strong> in the first sessions: a careful review of every important relationship, what works, what doesn't and what has changed.</li>
+<li>You give the client the <strong>sick role</strong>: depression is named as a treatable illness, which reduces self-blame and gives temporary permission to do less.</li>
+<li>You <strong>pick one problem area</strong> (two at most) and keep the work focused on it.</li>
+<li>You use <strong>communication analysis</strong> (replaying a recent argument line by line) and <strong>role-play</strong> to practise new ways of talking.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Drifting into unstructured supportive talk.</li>
+<li>Trying to work on every relationship at once.</li>
+<li>Forgetting the time limit, which is part of what makes IPT work.</li>
+</ul>
+<p><strong>Practice in India.</strong> IPT fits Indian life remarkably well because so much distress here is relational: marriage, in-laws, joint families, migration for work, a son leaving home, retirement from a respected role. Role disputes with in-laws and role transitions after marriage or childbirth are especially common in women. The WHO's Group IPT has been delivered successfully by trained non-specialists in low-resource settings, which makes it useful for community programmes.</p>
+<p><strong>Example.</strong> Shalini, 29, became depressed four months after giving birth. She lives with her husband's family. Her mother-in-law has taken over the baby's care and criticises her feeding. Her husband avoids the topic. IPT identifies two linked areas: a <strong>role transition</strong> (new mother, loss of her job and independence) and a <strong>role dispute</strong> (with her mother-in-law, and indirectly her husband). Sessions focus on what she has lost and gained, role-plays of a calm conversation with her mother-in-law, and one joint session with her husband to agree on how he will support her. After 14 sessions her EPDS score falls from 18 to 8.</p>
+<h3 id="7-acceptance-and-commitment-therapy-act">7. Acceptance and Commitment Therapy (ACT)</h3>
+<p><strong>What it is.</strong> ACT, developed by Steven Hayes and colleagues, aims to build <strong>psychological flexibility</strong>: the ability to stay in contact with the present moment, including painful thoughts and feelings, and still act on what matters. Where CBT often asks "Is this thought true?", ACT asks "Is holding on to this thought helping you live the life you want?"</p>
+<p><strong>What it targets.</strong> Struggling against what cannot be changed. Many clients spend enormous energy trying to get rid of pain, anxiety or grief, and their lives shrink in the process.</p>
+<p><strong>The six core processes:</strong></p>
+<div class="table-scroll" role="region" aria-label="Table: 7. Acceptance and Commitment Therapy (ACT)" tabindex="0"><table><thead><tr>
+<th scope="col">Process</th>
+<th scope="col">In plain words</th>
+</tr></thead><tbody>
+<tr><td>Acceptance</td><td>Making room for difficult feelings instead of fighting them</td></tr>
+<tr><td>Cognitive defusion</td><td>Seeing thoughts as thoughts, not commands or facts ("I'm having the thought that I'm useless")</td></tr>
+<tr><td>Present-moment awareness</td><td>Paying attention to what is happening now</td></tr>
+<tr><td>Self-as-context</td><td>Noticing that you are more than your thoughts and feelings</td></tr>
+<tr><td>Values</td><td>Knowing what really matters to you</td></tr>
+<tr><td>Committed action</td><td>Taking steps toward those values, even with discomfort</td></tr>
+</tbody></table></div>
+<p><strong>Where it works.</strong> Chronic pain, chronic illness, burnout, caregiver stress, anxiety, depression, psychosis (as an add-on), and spiritual or existential distress. It is particularly useful when the problem cannot be removed: a lifelong illness, a disability, a loss that will not be undone.</p>
+<p><strong>What mastery looks like.</strong></p>
+<ul>
+<li>You teach through <strong>experience, not explanation</strong>: metaphors, exercises and in-session practice.</li>
+<li>You do <strong>values work</strong> carefully, helping clients name their own values, not ones they think they should have.</li>
+<li>You link every session to <strong>committed action</strong> in daily life. Acceptance without action is not ACT.</li>
+<li>You model flexibility yourself, staying calm and curious with the client's distress.</li>
+</ul>
+<p><strong>Common mistakes.</strong></p>
+<ul>
+<li>Presenting acceptance as giving up or putting up with injustice. Acceptance is about inner experience, not about tolerating abuse or unfair situations.</li>
+<li>Using metaphors as lectures.</li>
+<li>Neglecting behaviour change.</li>
+</ul>
+<p><strong>Practice in India.</strong> Many ACT ideas will feel familiar to Indian clients. Acting on one's duty without clinging to the result echoes the Bhagavad Gita's idea of action without attachment to its fruits, and mindful awareness has deep roots in Indian traditions. Drawing these connections, where the client finds them meaningful, can make ACT feel less foreign. Be careful not to impose religious framing on clients who don't want it.</p>
+<p><strong>Example.</strong> Mr. Iyer, 58, has had chronic back pain for six years after spinal surgery. He has seen many doctors, stopped walking, stopped temple visits and given up his evening tuition classes, which he loved. Every conversation is about his pain. ACT helps him notice the thought "I can't do anything until the pain goes" and hold it more lightly. He names his values: teaching, his grandchildren, his faith. He restarts one tuition class a week, sitting down, and walks to the temple twice a week with a stick. His pain rating barely changes. His life changes a great deal.</p>
+<h3 id="8-behavioural-parent-training-and-couple-therapy">8. Behavioural parent training and couple therapy</h3>
+<p>The last of the eight is really a pair. Many adult problems live inside relationships, and two relationships come up again and again in practice: parent and child, and partner and partner. You need one strong method for each.</p>
+<h4 id="behavioural-parent-training">Behavioural parent training</h4>
+<p><strong>What it is.</strong> A group of programmes built on social learning principles that teach parents to change their child's behaviour by changing their own responses. The best known are Parent-Child Interaction Therapy (PCIT), Triple P and Incredible Years. They share the same core ingredients.</p>
+<p><strong>What it targets.</strong> The coercive cycle, first described by Gerald Patterson. A child misbehaves, the parent shouts or gives in, the child learns that escalating works, and both sides escalate further. Over time, most of the attention the child receives is negative.</p>
+<p><strong>Core ingredients:</strong></p>
+<ol>
+<li><strong>Positive attention first:</strong> daily "special time" of 10 to 15 minutes in which the child leads play and the parent describes, praises and does not direct.</li>
+<li><strong>Specific praise:</strong> "Thank you for putting your shoes away", not "Good boy".</li>
+<li><strong>Clear, calm instructions:</strong> one at a time, phrased as what to do, not what to stop.</li>
+<li><strong>Planned ignoring</strong> of minor attention-seeking behaviour.</li>
+<li><strong>Consistent, mild consequences</strong> for serious misbehaviour, such as a brief time-out or loss of a privilege, without shouting or hitting.</li>
+<li><strong>Predictable routines</strong> for mornings, homework and bedtime.</li>
+</ol>
+<p><strong>Where it works.</strong> Child behaviour problems, ADHD-related behaviour, aggression, and parenting stress. It also helps adult clients whose own depression or anger is tangled up with a difficult child.</p>
+<p><strong>Common mistakes.</strong> Jumping to consequences before building positive attention, and inconsistency between the two parents or between parents and grandparents.</p>
+<p><strong>Practice in India.</strong> Grandparents and other relatives are often closely involved in child care, so involve whoever is actually parenting. Physical punishment is still common. Do not lecture, but explain plainly that it predicts worse behaviour over time and show what works instead.</p>
+<h4 id="couple-therapy-integrative-behavioural-couple-therapy-or-emotionally-focused-therapy">Couple therapy: Integrative Behavioural Couple Therapy or Emotionally Focused Therapy</h4>
+<p>Choose one of these two and learn it well. Both have strong evidence.</p>
+<ul>
+<li><strong>Integrative Behavioural Couple Therapy (IBCT)</strong>, from Andrew Christensen and Neil Jacobson, combines <strong>acceptance</strong> and <strong>change</strong>. It helps partners see their recurring conflict as a shared pattern rooted in real differences ("unified detachment"), builds empathy for each other's vulnerable feelings ("empathic joining"), and then teaches communication and problem-solving skills.</li>
+<li><strong>Emotionally Focused Therapy (EFT)</strong>, from Sue Johnson, sees couple distress as a negative cycle driven by attachment fears, typically one partner pursuing and the other withdrawing. The therapist helps each partner reach the softer emotions under the anger or distance and turn towards each other.</li>
+</ul>
+<p><strong>What mastery looks like in either.</strong> You stay balanced and never side with one partner. You keep attention on the <strong>pattern</strong>, not on who is right. You slow down heated exchanges and draw out the vulnerable feelings underneath.</p>
+<p><strong>A firm rule.</strong> Always screen each partner <strong>separately</strong> for violence before any joint session. Couple therapy is not appropriate when one partner is afraid of the other. That situation needs safety planning, not joint sessions.</p>
+<p><strong>Practice in India.</strong> Couples often arrive late, after years of distress, and frequently one partner (often the husband) is reluctant. Extended family may be part of the conflict. It is often useful to see the willing partner alone first, use MI to engage the reluctant one, and include family influence in the formulation.</p>
+<p><strong>Example.</strong> Ravi and Neha, married eight years, argue almost nightly about money and his parents. She criticises, he goes silent and leaves the room, she criticises more. Using EFT, the therapist helps Neha say what lies under her anger ("I feel alone, like I don't matter to you") and helps Ravi say what lies under his silence ("I shut down because I feel I can never get it right"). Once each sees the other's fear, the fights lose their heat. Later sessions use IBCT-style problem-solving to agree on a monthly budget and how much to share with his parents.</p>
+</section>
+<section class="article-section" id="combining-the-eight"><h2>Combining the eight</h2>
+<p>Real clients rarely bring one clean problem. A depressed man is also drinking. A woman who self-harms also has a trauma history. This is where the eight become far more powerful together than apart, provided you combine them with a plan instead of mixing techniques at random.</p>
+<h3 id="start-with-one-question-what-is-mainly-in-the-way">Start with one question: what is mainly in the way?</h3>
+<div class="table-scroll" role="region" aria-label="Table: Start with one question: what is mainly in the way?" tabindex="0"><table><thead><tr>
+<th scope="col">If the main obstacle is...</th>
+<th scope="col">Start with...</th>
+</tr></thead><tbody>
+<tr><td>Any risk to self or others</td><td>A safety plan, before anything else</td></tr>
+<tr><td>The client is not sure they want to change</td><td>Motivational Interviewing</td></tr>
+<tr><td>Emotions so intense that crises keep derailing sessions</td><td>DBT skills</td></tr>
+<tr><td>Avoiding feared situations, rituals or reassurance-seeking</td><td>Exposure</td></tr>
+<tr><td>Trauma memories and stuck beliefs such as self-blame</td><td>Cognitive Processing Therapy</td></tr>
+<tr><td>Unhelpful thinking and inactivity: low mood, worry, low self-worth</td><td>CBT with behavioural activation</td></tr>
+<tr><td>A relationship conflict or life change that set things off</td><td>Interpersonal Psychotherapy</td></tr>
+<tr><td>Pain, illness or loss that cannot be changed</td><td>ACT</td></tr>
+<tr><td>A child's behaviour or the couple relationship itself</td><td>Parent training or couple therapy</td></tr>
+</tbody></table></div>
+<h3 id="five-rules-for-combining">Five rules for combining</h3>
+<ol>
+<li><strong>Let the formulation decide.</strong> Every technique must follow from your map of what keeps the problem going.</li>
+<li><strong>Sequence, don't scramble.</strong> A reliable order is: safety, then engagement (MI), then stabilisation (DBT skills), then the main therapy, then relapse prevention.</li>
+<li><strong>One main model at a time.</strong> Use a second method as a short module inside the first, not as a parallel therapy. Five techniques in one session confuses the client and dilutes each one.</li>
+<li><strong>Tell the client what you're doing and why.</strong> "For the next few weeks we'll focus on handling the urges. Once those are steadier, we'll work on the memories."</li>
+<li><strong>Measure throughout.</strong> If scores stall for four to six sessions, revisit the formulation before adding another technique.</li>
+</ol>
+<h3 id="five-cases">Five cases</h3>
+<p><strong>Depression with heavy drinking.</strong> Arjun, 34, has moderate depression and drinks most nights to sleep. Starting CBT straight away fails because he misses homework and two sessions after weekend binges. The therapist switches to three sessions of <strong>MI</strong>. Arjun sets his own goal of no weekday drinking. Then twelve sessions of <strong>CBT with behavioural activation</strong> follow, with a short <strong>CBT-I</strong> module for sleep. Mood and drinking improve together, because each was keeping the other going.</p>
+<p><strong>Self-harm with childhood abuse.</strong> Pooja, 24, self-harms during flashbacks of abuse by an uncle. Trauma processing too early would overwhelm her. Four months of <strong>DBT skills</strong> come first, until self-harm stops and she can tolerate distress. Then <strong>CPT</strong> works on her belief that "I must have encouraged it." This sequence mirrors established treatment models that add trauma-focused work to DBT once the client is stable.</p>
+<p><strong>Chronic pain with low mood.</strong> Rafiq, 51, a driver, has had knee pain for three years and has stopped working. <strong>ACT</strong> helps him stop waiting for the pain to disappear before living. <strong>Behavioural activation</strong> from CBT schedules a graded return to activity, and a joint session with his wife reduces her well-meant over-protection.</p>
+<p><strong>A child's aggression and a father's anger.</strong> Eight-year-old Kabir hits his sister and refuses homework. His father shouts and sometimes slaps him, then feels guilty. <strong>Parent training</strong> with both parents and the grandmother builds special time, praise and calm consequences. Because the father's temper keeps breaking the plan, he has six individual sessions of <strong>CBT for anger</strong>. The household calms, and so does Kabir.</p>
+<p><strong>Grief locked in by avoidance.</strong> Mrs. Deshpande, 62, lost her son in a road accident two years ago. She will not enter his room or travel on that road and cries daily. <strong>IPT</strong> for grief helps her mourn and rebuild her relationships with her daughter and her temple group. Gentle <strong>exposure</strong> to her son's room and photographs, planned together, ends the avoidance that has kept her grief raw.</p>
+</section>
+<section class="article-section" id="the-foundation-under-all-eight"><h2>The foundation under all eight</h2>
+<p>None of the eight works well on its own. Each sits on six habits that should be present with every client.</p>
+<ol>
+<li><strong>A strong working alliance.</strong> Agree on goals and tasks, and check regularly how the client feels about the work. A short alliance check at the end of a session ("What was helpful today? What didn't fit?") catches problems early.</li>
+<li><strong>Case formulation.</strong> A shared, written map of the problem: what made the person vulnerable, what triggered it, what keeps it going, and what protects them. Without it, technique choice is guesswork.</li>
+<li><strong>Risk assessment and safety planning.</strong> Ask about suicidal thoughts at intake and whenever mood drops. Asking does not put the idea in someone's head. A written safety plan, made with the client, is one of the most effective brief interventions we have.</li>
+<li><strong>Measurement-based care.</strong> Use short, validated scales (PHQ-9, GAD-7, or a problem-specific measure) every session or every few sessions, and look at the trend together. Clinicians are poor at spotting clients who are quietly getting worse. Numbers are not.</li>
+<li><strong>Cultural adaptation.</strong> Ask how the client and their family understand the problem, what language they think in, who makes decisions, and what role faith plays. Adapt examples, metaphors and family involvement accordingly. Adapting the delivery is not the same as diluting the active ingredient.</li>
+<li><strong>Supervision.</strong> Every method in this article is learned in supervised practice, not in a workshop. Regular supervision, ideally with recorded sessions, is the single best investment in your effectiveness.</li>
+</ol>
+</section>
+<section class="article-section" id="knowing-your-limits"><h2>Knowing your limits</h2>
+<p>Mastery includes knowing what the eight cannot do. Referring well is a clinical skill, not a failure.</p>
+<div class="table-scroll" role="region" aria-label="Table: Knowing your limits" tabindex="0"><table><thead><tr>
+<th scope="col">Situation</th>
+<th scope="col">Why the eight are not enough</th>
+<th scope="col">Where to refer</th>
+</tr></thead><tbody>
+<tr><td>Mania, psychosis, severe depression with psychotic features</td><td>Medication is the first-line treatment; therapy is an important add-on</td><td>Psychiatrist, with therapy continuing alongside</td></tr>
+<tr><td>High, imminent suicide risk</td><td>Needs same-day assessment and possibly admission</td><td>Emergency services, psychiatrist, Tele-MANAS (14416)</td></tr>
+<tr><td>Postpartum psychosis</td><td>A psychiatric emergency</td><td>Same-day psychiatric assessment</td></tr>
+<tr><td>Underweight anorexia, medical instability</td><td>Physical risk is life-threatening</td><td>Physician and a specialist eating disorder service</td></tr>
+<tr><td>Complex dissociation, identity disorders</td><td>Needs specialised phase-based trauma work</td><td>A trauma and dissociation specialist</td></tr>
+<tr><td>Forensic risk, paraphilic disorders</td><td>Needs specialist risk assessment and legal duties</td><td>Forensic or specialist service</td></tr>
+<tr><td>ADHD, autism or cognitive decline needing diagnosis</td><td>Needs formal assessment, sometimes medication</td><td>Psychiatrist, neuropsychologist, neurologist</td></tr>
+<tr><td>Domestic violence, legal or financial crisis</td><td>The main need is safety, rights or practical help</td><td>Legal aid, Women Helpline 181, protection officers, financial counselling</td></tr>
+</tbody></table></div>
+<p>A useful habit: if a client has not improved after 8 to 10 sessions of a well-delivered method, review the formulation, check for an undiagnosed condition (including medical causes), and ask yourself honestly whether a colleague with different skills would serve them better.</p>
+</section>
+<section class="article-section" id="a-three-year-learning-path"><h2>A three-year learning path</h2>
+<p>Trying to learn all eight at once leads to the problem this article began with. Learn them in layers, each building on the last.</p>
+<div class="table-scroll" role="region" aria-label="Table: A three-year learning path" tabindex="0"><table><thead><tr>
+<th scope="col">Year</th>
+<th scope="col">Learn</th>
+<th scope="col">Why this order</th>
+</tr></thead><tbody>
+<tr><td>Year 1</td><td>CBT (with behavioural activation, problem-solving and exposure), Motivational Interviewing, safety planning and measurement-based care</td><td>This alone lets you treat most depression and anxiety and engage ambivalent clients safely</td></tr>
+<tr><td>Year 2</td><td>DBT skills and Cognitive Processing Therapy</td><td>These cover the high-risk and trauma caseload that Year 1 cannot fully handle</td></tr>
+<tr><td>Year 3</td><td>IPT, ACT, and parent training or one couple therapy</td><td>These add depth for relational problems, chronic conditions and families</td></tr>
+<tr><td>Year 4 onwards</td><td>One specialisation, chosen from your caseload</td><td>Options include Schema Therapy (personality), CBT for psychosis, EMDR, CBT-E (eating disorders) or child and adolescent work</td></tr>
+</tbody></table></div>
+<h3 id="how-to-learn-each-method-properly">How to learn each method properly</h3>
+<ol>
+<li><strong>Read the manual cover to cover.</strong> Not a summary, the actual treatment manual.</li>
+<li><strong>Attend skills-based training</strong> with role-play, not lecture-only workshops.</li>
+<li><strong>Treat supervised cases.</strong> A reasonable benchmark is 8 to 10 cases per method under supervision before working independently.</li>
+<li><strong>Record and rate your sessions</strong> with a fidelity scale where one exists, such as the Cognitive Therapy Scale (Revised) for CBT or the MITI for Motivational Interviewing.</li>
+<li><strong>Track your outcomes.</strong> Over time, your own data on client improvement will show you which methods you deliver well and which need more work.</li>
+</ol>
+<h3 id="if-you-also-see-children-and-adolescents">If you also see children and adolescents</h3>
+<p>Add three methods to the core:</p>
+<ul>
+<li><strong>Trauma-Focused CBT (TF-CBT)</strong> for children after trauma, with a parallel parent component.</li>
+<li><strong>Parent-Child Interaction Therapy (PCIT)</strong> or another behavioural parent training programme, at a deeper level than the adult core requires.</li>
+<li><strong>CBT for child anxiety</strong>, such as Coping Cat, or <strong>SPACE</strong> (Supportive Parenting for Anxious Childhood Emotions) when the child will not engage but the parents will.</li>
+</ul>
+</section>
+<section class="article-section" id="closing-depth-over-breadth"><h2>Closing: depth over breadth</h2>
+<p>Go back to Meera, the counsellor with fifteen certificates, and Rohan, who still could not ride the metro. Meera was not short of knowledge or care. She was short of depth in the one method Rohan needed.</p>
+<p>The clients who come to us do not need a therapist who has heard of everything. They need one who can do a few things very well, combine them thoughtfully, measure whether they are working, and refer without hesitation when something else is needed. Eight methods, practised for years under supervision, will make you that kind of therapist.</p>
+<p>The field will keep producing new therapies, and some of them will be valuable. Look at each one through the same lens: does it do something the core eight cannot? Most of the time, the answer will be no, and you can go back to getting better at what already works.</p>
+<blockquote><strong>Learn a few therapies deeply, combine them wisely, and refer without ego.</strong></blockquote>
+</section>
+<section class="article-section" id="the-core-eight-at-a-glance"><h2>The Core Eight at a glance</h2>
+<div class="table-scroll" role="region" aria-label="Table: The Core Eight at a glance" tabindex="0"><table><thead><tr>
+<th scope="col">Therapy</th>
+<th scope="col">Core target</th>
+<th scope="col">Main uses</th>
+<th scope="col">Typical length</th>
+</tr></thead><tbody>
+<tr><td>CBT (with behavioural activation and problem-solving)</td><td>Unhelpful thinking and inactivity</td><td>Depression, anxiety, insomnia, health anxiety, pain, anger, self-esteem</td><td>8 to 20 sessions</td></tr>
+<tr><td>Exposure (ERP, Prolonged Exposure)</td><td>Avoidance and safety behaviours</td><td>OCD, phobias, panic, social anxiety, PTSD, body dysmorphia</td><td>1 to 20 sessions</td></tr>
+<tr><td>Motivational Interviewing</td><td>Ambivalence</td><td>Addictions, adherence, reluctant clients; as an opening phase for any therapy</td><td>1 to 4 sessions, or woven through</td></tr>
+<tr><td>DBT skills</td><td>Emotional overwhelm</td><td>Self-harm, borderline pattern, anger, impulsivity, crises</td><td>14 weeks to 12 months</td></tr>
+<tr><td>Cognitive Processing Therapy</td><td>Stuck beliefs after trauma</td><td>PTSD, sexual assault, childhood abuse (after stabilisation)</td><td>12 sessions</td></tr>
+<tr><td>Interpersonal Psychotherapy</td><td>Relationship strain</td><td>Depression, grief, perinatal depression, life transitions</td><td>12 to 16 sessions</td></tr>
+<tr><td>ACT</td><td>Struggling against what cannot be changed</td><td>Chronic pain and illness, burnout, caregiving, mixed anxiety and depression</td><td>6 to 16 sessions</td></tr>
+<tr><td>Parent training and couple therapy (IBCT or EFT)</td><td>Coercive or negative relationship cycles</td><td>Child behaviour, parenting stress, couple distress</td><td>8 to 26 sessions</td></tr>
+</tbody></table></div>
+</section>
+<section class="article-section" id="further-reading"><h2>Further reading</h2>
+<ul>
+<li>Judith S. Beck, <em>Cognitive Behavior Therapy: Basics and Beyond</em></li>
+<li>Jonathan Abramowitz, Brett Deacon and Stephen Whiteside, <em>Exposure Therapy for Anxiety: Principles and Practice</em></li>
+<li>William R. Miller and Stephen Rollnick, <em>Motivational Interviewing: Helping People Change and Grow</em></li>
+<li>Marsha M. Linehan, <em>DBT Skills Training Manual</em></li>
+<li>Patricia A. Resick, Candice M. Monson and Kathleen M. Chard, <em>Cognitive Processing Therapy for PTSD: A Comprehensive Manual</em></li>
+<li>Myrna M. Weissman, John C. Markowitz and Gerald L. Klerman, <em>The Guide to Interpersonal Psychotherapy</em></li>
+<li>Steven C. Hayes, Kirk D. Strosahl and Kelly G. Wilson, <em>Acceptance and Commitment Therapy: The Process and Practice of Mindful Change</em></li>
+<li>Alan E. Kazdin, <em>Parent Management Training</em></li>
+<li>Andrew Christensen, Brian D. Doss and Neil S. Jacobson, <em>Integrative Behavioral Couple Therapy</em></li>
+<li>Sue Johnson, <em>The Practice of Emotionally Focused Couple Therapy</em></li>
+<li>World Health Organization, <em>Group Interpersonal Therapy (IPT) for Depression</em> and <em>Problem Management Plus (PM+)</em></li>
+</ul>
+<p><em>The clinical examples in this article are composites and do not describe real people. This article is a professional guide for trained psychologists and counsellors. It does not replace formal training, supervision or individual clinical judgement. Practitioners should work within their registration and competence. In an emergency in India, call Tele-MANAS on 14416 or local emergency services.</em></p>
+</section>
+<section class="article-end" aria-labelledby="disclaimer-title">
+<h2 id="disclaimer-title">Disclaimer</h2>
+<p>The views expressed in this article are for general informational and educational purposes only and are those of the author. The “Core Eight” is a proposed learning framework, not an official, exhaustive, or universally accepted ranking of therapies. This article is not individualized clinical advice and does not replace formal training, supervision, consultation, current guidance, local protocols, or professional judgement. Evidence, scope, treatment length, and suitability vary by person and setting. Practitioners should work within their competence and seek specialist support or referral when indicated. The clinical examples are composites and do not describe real people. In an emergency in India, call Tele-MANAS on 14416 or local emergency services.</p>
+</section>
+</main>
+</div>
+<footer class="site-footer"><div class="footer-inner"><span>© 2026 Fabeminds Counselling Private Limited. All rights reserved.</span><span>YourCounselor is a brand of Fabeminds Counselling Private Limited.</span></div></footer>
+<a class="home-fab" href="#top" id="home-fab" aria-label="Return to the top of the page" hidden>Home ↑</a>
+<script>
+(function(){
+ const home=document.getElementById('home-fab');
+ function updateHome(){home.hidden=window.scrollY<400;}
+ window.addEventListener('scroll',updateHome,{passive:true});updateHome();
+ home.addEventListener('click',function(e){e.preventDefault();var h=document.documentElement,p=h.style.scrollBehavior;h.style.scrollBehavior='auto';window.scrollTo(0,0);if(document.scrollingElement)document.scrollingElement.scrollTop=0;document.querySelectorAll('nav,aside,.contents,.toc').forEach(function(n){n.scrollTop=0;});h.style.scrollBehavior=p;updateHome();});
+})();
+</script>
+</body>
+</html>
