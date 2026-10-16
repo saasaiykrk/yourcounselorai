@@ -15,6 +15,7 @@ import 'features/consult/consult_screen.dart';
 import 'features/consult/drafting_screen.dart';
 import 'features/consult/reply_screen.dart';
 import 'features/consultation/consultation_screen.dart';
+import 'features/education/education_screen.dart';
 import 'features/gallery/gallery_screen.dart';
 import 'features/history/history_screen.dart';
 import 'features/home/home_shell.dart';
@@ -45,6 +46,9 @@ GoRouter buildRouter({String initialLocation = '/'}) {
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/calendar', builder: (_, _) => const CalendarScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [GoRoute(path: '/education', builder: (_, _) => const EducationScreen())],
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/account', builder: (_, _) => const AccountScreen())],

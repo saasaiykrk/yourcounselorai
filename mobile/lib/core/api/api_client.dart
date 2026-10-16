@@ -4,6 +4,7 @@ import 'api_exceptions.dart';
 import 'api_models.dart';
 import 'billing_models.dart';
 import 'calendar_models.dart';
+import '../education/education_repository.dart';
 
 /// Returns the bearer token for the signed-in clinician, or null.
 typedef TokenProvider = Future<String?> Function();
@@ -256,6 +257,14 @@ class ApiClient {
     '/v1/admin/incidents/${Uri.encodeComponent(id)}',
     body: {'status': status, 'reviewer_note': reviewerNote},
   );
+
+  // --- Education (free for every signed-in user) ---
+
+  /// The teaching pages, each with a fresh signed link.
+  Future<List<EducationPage>> education() async => [
+    for (final p in ((await _send('GET', '/v1/education'))['pages'] as List? ?? const []))
+      EducationPage.fromJson(p as Map<String, dynamic>),
+  ];
 
   // --- calendar and online booking (the consultant's own) ---
 
