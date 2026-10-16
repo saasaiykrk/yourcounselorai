@@ -295,6 +295,21 @@ A rollback pins traffic to that revision. The next deploy from GitHub moves traf
 revision by itself. To do it by hand:
 `gcloud run services update-traffic yourcounselor-api --region asia-south1 --to-latest`
 
+## Education (free teaching pages)
+
+The pages in `app/education_web/` (the owner's handover, unchanged) appear in the app's **Education** tab for
+every signed-in user, one card per page titled with the page's own title. Nothing to set up: they ship with the
+server.
+
+- A card opens the page in the phone's browser through a signed link that works for 12 hours (the browser
+  can't send the app's sign-in). Without a valid link the page says "This link has expired".
+- The server adds a **Print / Save as PDF** button and a print layout (A4, every section expanded, menus
+  hidden) as it sends each page. The reader modules block printing on purpose; for these pages only that one
+  print rule is switched off. Copy protection and the viewer's name and email in the watermark stay on.
+- **To add or replace a page:** put the `.html` file in `app/education_web/` and merge. Its `<title>` becomes
+  the card title. The reader modules read their live settings (viewer, published module list) from the app,
+  as described in that folder's README.
+
 ## Changing settings or secrets
 
 Deploys keep the service's existing environment variables and Secret Manager mounts. To change them, run
