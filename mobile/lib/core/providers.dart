@@ -9,6 +9,7 @@ import 'api/api_models.dart';
 import 'auth/auth_service.dart';
 import 'billing/billing_repository.dart';
 import 'calendar/calendar_repository.dart';
+import 'education/education_repository.dart';
 import 'billing/payment_gateway.dart';
 import 'api/billing_models.dart';
 import 'api/calendar_models.dart';
@@ -96,4 +97,15 @@ final calendarHomeProvider = FutureProvider.autoDispose<CalendarHome>(
 /// The server allows a reply up to 5 minutes, so 6 minutes covers it. Tests shorten this.
 final consultRecoveryProvider = Provider<({Duration within, Duration every})>(
   (ref) => (within: const Duration(minutes: 6), every: const Duration(seconds: 5)),
+);
+
+// --- Education ----------------------------------------------------------------------------------
+
+final educationRepositoryProvider = Provider<EducationRepository>(
+  (ref) => AppConfig.previewMode ? PreviewEducationRepository() : ApiEducationRepository(ref.watch(apiClientProvider)),
+);
+
+/// The pages with fresh signed links. Re-read whenever the Education tab is opened.
+final educationPagesProvider = FutureProvider.autoDispose<List<EducationPage>>(
+  (ref) => ref.watch(educationRepositoryProvider).pages(),
 );

@@ -57,7 +57,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import ai_admin_api, billing_api, booking_api, byok, db, deid
+from . import ai_admin_api, billing_api, booking_api, byok, db, deid, education
 from .ai_settings import AiStore, ModelRouter
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
@@ -714,6 +714,22 @@ def _booking_store():
 
 BOOKING = booking_api.BookingService(CFG, None if CFG.dev_mode else _booking_store(), lambda: not CFG.dev_mode)
 booking_api.install(app, BOOKING, verified_clinician)
+
+
+# --- Education (free teaching pages for every signed-in user; app/education.py) ---
+def _education_viewer(user_id: str) -> dict | None:
+    """Name and email for the page watermark (never logged)."""
+    if CFG.dev_mode:
+        return {"name": "Dev clinician", "email": "dev@yourcounselor.test"}
+    with db._conn() as c:
+        return c.execute("select c.full_name as name, u.email from clinicians c left join auth.users u on u.id = c.id "
+                         "where c.id = %s", (str(user_id),)).fetchone()
+
+
+# Links are signed with a key derived from a server secret, so every Cloud Run instance accepts them.
+_EDU_SECRET = (CFG.byok_encryption_key or CFG.database_url or CFG.anthropic_api_key or "dev-only").encode()
+EDUCATION = education.EducationService(education.Signer(_EDU_SECRET), _education_viewer)
+education.install(app, EDUCATION, current_user, BOOKING.base_url)
 
 
 # --- admin panel (app Admin area and /admin web page) -------------------------
