@@ -34,8 +34,11 @@ import re
 import time
 from dataclasses import dataclass
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+try:  # the catalog, renderer and signer are stdlib-only; the routes need FastAPI
+    from fastapi import Depends, FastAPI, HTTPException, Request
+    from fastapi.responses import FileResponse, HTMLResponse
+except ImportError:  # stdlib-only test run
+    pass
 
 WEB = pathlib.Path(__file__).parent / "education_web"
 LINK_HOURS = 12
