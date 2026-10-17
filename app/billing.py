@@ -10,13 +10,17 @@ Pricing plans and report entitlements: the rules, with no web or database code.
   * When it is on, a report needs one credit (a per-report purchase of that report type, or a
     subscription credit), or the clinician's own Anthropic key (BYOK) when that plan is enabled.
     BYOK uses credits only if the admin says so; it never falls back to the platform key.
+  * A single print ("print") unlocks Print / Save as PDF for one education page for a few hours
+    (24 by default). It is bought from that page, not from the plans list, and gives no credits.
 """
 from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
 
-PLANS = ("per_report", "sub_30", "sub_50", "byok")
+PLANS = ("per_report", "sub_30", "sub_50", "byok", "print")
+LISTED_PLANS = ("per_report", "sub_30", "sub_50", "byok")    # on the app's plans screen
+MAX_PRINT_HOURS = 24 * 7
 REPORT_TYPES = ("guided", "direct")
 CURRENCIES = ("INR",)
 MAX_PRICE = 10_000_000        # ₹1,00,000 in paise: a typo guard, not a business limit
@@ -54,6 +58,11 @@ DEFAULT_CONFIG: dict = {
                  "instructions": "Create a key at console.anthropic.com → API keys, then paste it here. "
                                  "Your key is checked, stored encrypted and never shown again.",
                  "fee": 0, "fee_days": 30, "consumes_credits": False, "guided": True, "direct": True},
+        "print": {"enabled": True, "visible": True, "order": 5,
+                  "name": "Print one page",
+                  "description": "Print or save this page as a PDF as often as you need for 24 hours.",
+                  "features": ["One page", "Print and save as PDF", "24 hours"],
+                  "price": 4900, "hours": 24},
     },
 }
 
@@ -133,6 +142,9 @@ def validate(cfg: dict) -> dict:
             else:
                 for t in REPORT_TYPES:
                     _money(problems, f"per_report.prices.{t}", prices[t])
+        elif name == "print":
+            _money(problems, "print.price", merged["price"])
+            _positive(problems, "print.hours", merged["hours"], MAX_PRINT_HOURS)
         elif name in ("sub_30", "sub_50"):
             _money(problems, f"{name}.price", merged["price"])
             _positive(problems, f"{name}.reports", merged["reports"], MAX_REPORTS)
@@ -175,7 +187,7 @@ def newly_disabled(old: dict, new: dict) -> list[str]:
 def public_plans(cfg: dict) -> dict:
     """Enabled, visible plans in display order. Prices in minor units plus currency."""
     plans = []
-    for name in sorted(PLANS, key=lambda n: cfg["plans"][n]["order"]):
+    for name in sorted(LISTED_PLANS, key=lambda n: cfg["plans"][n]["order"]):
         p = cfg["plans"][name]
         if not (p["enabled"] and p["visible"]):
             continue
@@ -202,6 +214,7 @@ class Price:
     currency: str
     credits: int                 # credits granted on payment
     days: int | None             # validity; None = no expiry
+    item: str | None = None      # single print: the education page (slug)
 
 
 class NotPurchasable(Exception):
@@ -210,7 +223,7 @@ class NotPurchasable(Exception):
         self.detail = detail
 
 
-def price_for(cfg: dict, plan: str, report_type: str | None) -> Price:
+def price_for(cfg: dict, plan: str, report_type: str | None, item: str | None = None) -> Price:
     """What a new order costs and grants, from the current configuration only."""
     if not cfg["enabled"]:
         raise NotPurchasable("pricing is switched off")
@@ -219,6 +232,12 @@ def price_for(cfg: dict, plan: str, report_type: str | None) -> Price:
     p = cfg["plans"][plan]
     if not p["enabled"]:
         raise NotPurchasable("this plan is not available")
+    if plan == "print":
+        if report_type is not None or not item:
+            raise NotPurchasable("choose the page to print")
+        return Price(plan, None, p["price"], cfg["currency"], 0, None, item)
+    if item is not None:
+        raise NotPurchasable("a page is only for a single print")
     if plan == "per_report":
         if report_type not in REPORT_TYPES:
             raise NotPurchasable("choose guided or direct")

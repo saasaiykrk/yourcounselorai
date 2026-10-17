@@ -728,7 +728,22 @@ def _education_viewer(user_id: str) -> dict | None:
 
 # Links are signed with a key derived from a server secret, so every Cloud Run instance accepts them.
 _EDU_SECRET = (CFG.byok_encryption_key or CFG.database_url or CFG.anthropic_api_key or "dev-only").encode()
-EDUCATION = education.EducationService(education.Signer(_EDU_SECRET), _education_viewer)
+def _print_access(user_id: str) -> education.PrintAccess:
+    """Who may print education pages. While pricing is off: everyone (nothing is charged). Otherwise a
+    running subscription unlocks every page, and a single print unlocks its page until it ends."""
+    _, cfg = BILLING.config()
+    if not cfg["enabled"]:
+        return education.PrintAccess(everything=True)
+    if BILLING.store.has_subscription(user_id):
+        return education.PrintAccess(everything=True)
+    p = cfg["plans"]["print"]
+    offer = ({"price": p["price"], "currency": cfg["currency"], "hours": p["hours"], "name": p["name"]}
+             if p["enabled"] and BILLING.razorpay is not None else None)
+    return education.PrintAccess(pages=BILLING.store.print_passes(user_id), offer=offer)
+
+
+EDUCATION = education.EducationService(education.Signer(_EDU_SECRET), _education_viewer, access=_print_access)
+BILLING.print_items = {p.slug: p.title for p in EDUCATION.catalog}   # what a single print may name
 education.install(app, EDUCATION, current_user, BOOKING.base_url)
 
 

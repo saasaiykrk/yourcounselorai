@@ -297,15 +297,31 @@ revision by itself. To do it by hand:
 
 ## Education (free teaching pages)
 
-The pages in `app/education_web/` (the owner's handover, unchanged) appear in the app's **Education** tab for
-every signed-in user, one card per page titled with the page's own title. Nothing to set up: they ship with the
-server.
+1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/010_print_pass.sql`
+   once (safe to run again). Orders now record their page, so **every purchase fails until this has run**.
 
-- A card opens the page in the phone's browser through a signed link that works for 12 hours (the browser
-  can't send the app's sign-in). Without a valid link the page says "This link has expired".
-- The server adds a **Print / Save as PDF** button and a print layout (A4, every section expanded, menus
-  hidden) as it sends each page. The reader modules block printing on purpose; for these pages only that one
-  print rule is switched off. Copy protection and the viewer's name and email in the watermark stay on.
+The pages in `app/education_web/` (the owner's handover, unchanged) appear in the app's **Education** tab for
+every signed-in user, one card per page titled with the page's own title. They ship with the server.
+
+- A card opens the page inside the app, full screen under the app's own bar, through a signed link that works
+  for 12 hours (the page view can't send the app's sign-in). Without a valid link the page says "This link has
+  expired". Links to other education pages stay in the app; phone numbers, email and outside websites open on
+  the phone. The PDF handout opens in the app's PDF viewer.
+- Reading is free. Every page shows a **Print / Save as PDF** button. Who can use it:
+  - **Charging off** (/admin → Pricing Plans): everyone. Nothing is charged, so printing is free too.
+  - **A running subscription**: every page. That is a 30- or 50-report plan, the own-key plan, or credits given
+    by an admin, not cancelled and not ended (used-up credits still count). A single report purchase does not
+    count.
+  - **A single print**: one page, printed or saved as often as needed for 24 hours, ₹49 by default. Set the
+    price, the hours or switch it off in /admin → Pricing Plans → **Single print (education page)**. It is
+    paid through Razorpay like the plans and appears in Payments as "Single print".
+- Locked, the button opens a sheet in the app: **Buy for ₹49** (this page) or **See subscriptions**. After the
+  payment is confirmed the page reloads unlocked and the card shows "Print until …". In a browser outside the
+  app, the button explains instead. Printing from the browser's own menu shows the same note, and the modules'
+  handout downloads stay locked. If the check fails, printing stays off.
+- Unlocked, the server adds the print layout (A4, every section expanded, menus hidden) as it sends each page.
+  The reader modules block printing on purpose; for these pages only that one print rule is switched off. Copy
+  protection and the viewer's name and email in the watermark stay on.
 - **To add or replace a page:** put the `.html` file in `app/education_web/` and merge. Its `<title>` becomes
   the card title. The reader modules read their live settings (viewer, published module list) from the app,
   as described in that folder's README.

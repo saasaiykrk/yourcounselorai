@@ -106,6 +106,6 @@ final educationRepositoryProvider = Provider<EducationRepository>(
 );
 
 /// The pages with fresh signed links. Re-read whenever the Education tab is opened.
-final educationPagesProvider = FutureProvider.autoDispose<List<EducationPage>>(
+final educationPagesProvider = FutureProvider.autoDispose<EducationCatalog>(
   (ref) => ref.watch(educationRepositoryProvider).pages(),
 );

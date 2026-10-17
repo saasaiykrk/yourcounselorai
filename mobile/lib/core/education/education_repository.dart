@@ -8,6 +8,8 @@ class EducationPage {
     required this.kind,
     required this.url,
     this.summary = '',
+    this.canPrint = false,
+    this.printUntil,
   });
 
   factory EducationPage.fromJson(Map<String, dynamic> j) => EducationPage(
@@ -16,6 +18,8 @@ class EducationPage {
     summary: j['summary'] as String? ?? '',
     kind: j['kind'] as String? ?? 'reference',
     url: j['url'] as String? ?? '',
+    canPrint: j['can_print'] == true,
+    printUntil: DateTime.tryParse(j['print_until'] as String? ?? '')?.toLocal(),
   );
 
   final String slug;
@@ -30,6 +34,12 @@ class EducationPage {
   /// A signed link to the page, valid for a few hours; fetched fresh each time the list loads.
   final String url;
 
+  /// This clinician may print / save this page as a PDF (the server decides; the page enforces it).
+  final bool canPrint;
+
+  /// When a single print bought for this page ends (null: none, or a subscription covers it).
+  final DateTime? printUntil;
+
   String get kindLabel => switch (kind) {
     'module' => 'Module',
     'handout' => 'Handout · PDF',
@@ -37,8 +47,46 @@ class EducationPage {
   };
 }
 
+/// A single print for sale: one page, printed or saved as often as needed for [hours].
+class PrintOffer {
+  const PrintOffer({required this.price, this.currency = 'INR', this.hours = 24, this.name = 'Print one page'});
+
+  static PrintOffer? fromJson(Object? j) => j is Map<String, dynamic>
+      ? PrintOffer(
+          price: (j['price'] as num?)?.toInt() ?? 0,
+          currency: j['currency'] as String? ?? 'INR',
+          hours: (j['hours'] as num?)?.toInt() ?? 24,
+          name: j['name'] as String? ?? 'Print one page',
+        )
+      : null;
+
+  final int price; // paise
+  final String currency;
+  final int hours;
+  final String name;
+}
+
+/// The cards, and what this clinician may print.
+class EducationCatalog {
+  const EducationCatalog({required this.pages, this.canPrint = false, this.printOffer});
+
+  factory EducationCatalog.fromJson(Map<String, dynamic> j) => EducationCatalog(
+    pages: [for (final p in (j['pages'] as List? ?? const [])) EducationPage.fromJson(p as Map<String, dynamic>)],
+    canPrint: j['can_print'] == true,
+    printOffer: PrintOffer.fromJson(j['print_offer']),
+  );
+
+  final List<EducationPage> pages;
+
+  /// Every page prints: pricing is off, or a running subscription. The server decides; this explains it.
+  final bool canPrint;
+
+  /// A single print for sale (null: printing comes only with a subscription right now).
+  final PrintOffer? printOffer;
+}
+
 abstract interface class EducationRepository {
-  Future<List<EducationPage>> pages();
+  Future<EducationCatalog> pages();
 }
 
 class ApiEducationRepository implements EducationRepository {
@@ -47,7 +95,7 @@ class ApiEducationRepository implements EducationRepository {
   final ApiClient _api;
 
   @override
-  Future<List<EducationPage>> pages() => _api.education();
+  Future<EducationCatalog> pages() => _api.education();
 }
 
 /// Offline preview: the real titles, no links (nothing to open without the server).
@@ -98,8 +146,11 @@ class PreviewEducationRepository implements EducationRepository {
   ];
 
   @override
-  Future<List<EducationPage>> pages() async => [
-    for (final (slug, title, kind, summary) in _pages)
-      EducationPage(slug: slug, title: title, kind: kind, summary: summary, url: ''),
-  ];
+  Future<EducationCatalog> pages() async => EducationCatalog(
+    pages: [
+      for (final (slug, title, kind, summary) in _pages)
+        EducationPage(slug: slug, title: title, kind: kind, summary: summary, url: '', canPrint: true),
+    ],
+    canPrint: true,
+  );
 }
