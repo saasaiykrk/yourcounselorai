@@ -221,9 +221,9 @@ and an email**.
    ```
    Even without this job, emails for each booking are sent straight away; only reminders and the 90-day
    clean-up need it.
-5. **Privacy text:** the booking page tells clients what is stored and for how long. Ask the data-protection
-   lawyer to review it, and to add client booking details (first name, email, appointment time; 90 days) to
-   the privacy policy before inviting the public.
+5. **Privacy text:** the booking page tells clients what is stored and for how long. The app's privacy pages
+   and `mobile/store/play/privacy-policy.md` cover client booking details (first name, email, appointment time;
+   encrypted; 90 days). Ask the data-protection lawyer to review them before inviting the public.
 
 How it is protected:
 - One time can never be booked twice: each change takes a per-consultant lock, re-checks the time inside it,
@@ -277,8 +277,10 @@ until then the server uses its own model and keys, as before.
 Rules that still apply:
 - Only models in `app/ai_models.py` can be chosen. Adding one needs the evals, the clinician grading pack,
   a CHANGELOG entry and the `clinician-reviewed` label (CI enforces the label for that file).
-- Before switching to Gemini, the privacy policy must name Google as a processor of case text
-  (identifiers are removed before anything is sent to any model).
+- The privacy texts must name every AI provider that can be chosen. They name Anthropic and Google (in the app:
+  Account → How we protect client data and Data Processing Agreement; for the store:
+  `mobile/store/play/privacy-policy.md`). Adding a provider means updating them, and the consent version in
+  `mobile/lib/core/config.dart`, first.
 - The key that is in use by the active model can't be removed unless the server has its own key for it.
 
 
