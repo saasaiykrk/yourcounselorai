@@ -2,9 +2,9 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/education/education_repository.dart';
 import '../../core/theme/app_theme.dart';
@@ -33,8 +33,9 @@ LinkTarget linkTarget(Uri page, Uri target) {
 String cleanTitle(String t) => t.replaceAll(RegExp(r'^\s*YourCounselor\s*\|\s*|\s*\|\s*YourCounselor\s*$'), '').trim();
 
 /// One education page inside the app, under the app's own bar. With a plan, the page's
-/// "Print / Save as PDF" button asks the app, which opens the phone's print / save-as-PDF dialog
-/// (the server leaves the button out otherwise).
+/// "Print / Save as PDF" button hands the app the page as it looks now (every section open, no
+/// scripts), which the app prints through the phone's print / save-as-PDF dialog. The server leaves
+/// the button out otherwise, and the in-app view ignores the page's own print call.
 class EducationReaderScreen extends StatelessWidget {
   const EducationReaderScreen({super.key, required this.page, required this.canPrint});
 
@@ -58,101 +59,119 @@ class _WebPageView extends StatefulWidget {
 }
 
 class _WebPageViewState extends State<_WebPageView> {
-  InAppWebViewController? _web;
+  late final Uri _home = Uri.parse(widget.page.url);
   late String _title = widget.page.title;
+  late final WebViewController _web;
   double _progress = 0;
   bool _canGoBack = false;
   bool _failed = false;
+  bool _printing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _web = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onNavigationRequest: (request) {
+            if (!request.isMainFrame) return NavigationDecision.navigate;
+            final url = Uri.tryParse(request.url);
+            if (url == null) return NavigationDecision.prevent;
+            switch (linkTarget(_home, url)) {
+              case LinkTarget.stay:
+                return NavigationDecision.navigate;
+              case LinkTarget.phone:
+                launchUrl(url, mode: LaunchMode.externalApplication).ignore();
+                return NavigationDecision.prevent;
+              case LinkTarget.block:
+                return NavigationDecision.prevent;
+            }
+          },
+          onProgress: (p) {
+            if (mounted) setState(() => _progress = p / 100);
+          },
+          onPageStarted: (_) {
+            if (mounted) setState(() => _failed = false);
+          },
+          onPageFinished: (_) async {
+            final t = cleanTitle(await _web.getTitle() ?? '');
+            if (mounted && t.isNotEmpty && !t.startsWith('http')) setState(() => _title = t);
+            await _syncBack();
+          },
+          onUrlChange: (_) => _syncBack(),
+          onWebResourceError: (e) {
+            if ((e.isForMainFrame ?? true) && mounted) setState(() => _failed = true);
+          },
+        ),
+      )
+      // The page's Print / Save as PDF button (only there with a plan) sends the page as it looks now.
+      ..addJavaScriptChannel('YCApp', onMessageReceived: (m) => _print(m.message))
+      ..loadRequest(_home);
+  }
+
+  @override
+  void dispose() {
+    // Nothing from the pages is kept on the phone.
+    _web.clearCache().ignore();
+    _web.clearLocalStorage().ignore();
+    super.dispose();
+  }
 
   Future<void> _syncBack() async {
-    final back = await _web?.canGoBack() ?? false;
+    final back = await _web.canGoBack();
     if (mounted && back != _canGoBack) setState(() => _canGoBack = back);
   }
 
-  Future<void> _print() async {
-    if (!widget.canPrint) return;
-    await _web?.printCurrentPage(settings: PrintJobSettings(jobName: _title));
+  Future<void> _print(String html) async {
+    if (!widget.canPrint || _printing || !html.startsWith('<!doctype html>')) return;
+    setState(() => _printing = true);
+    try {
+      await Printing.layoutPdf(
+        name: _title,
+        // The phone's own web engine lays the page out, so it prints exactly as it reads. Deprecated only
+        // in favour of building PDFs from widgets, which can't reproduce these pages; still implemented.
+        // ignore: deprecated_member_use
+        onLayout: (format) => Printing.convertHtml(format: format, html: html, baseUrl: widget.page.url),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text("Couldn't open printing. Please try again.")));
+      }
+    } finally {
+      if (mounted) setState(() => _printing = false);
+    }
   }
 
   void _retry() {
     setState(() => _failed = false);
-    _web?.loadUrl(urlRequest: URLRequest(url: WebUri(widget.page.url)));
+    _web.loadRequest(_home);
   }
 
   @override
   Widget build(BuildContext context) {
-    final home = Uri.parse(widget.page.url);
+    final busy = _progress < 1 || _printing;
     return PopScope(
       canPop: !_canGoBack,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await _web?.goBack();
+        await _web.goBack();
         await _syncBack();
       },
       child: Scaffold(
         appBar: AppBar(
           title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
-          bottom: _progress < 1
+          bottom: busy
               ? PreferredSize(
                   preferredSize: const Size.fromHeight(3),
-                  child: LinearProgressIndicator(value: _progress == 0 ? null : _progress, minHeight: 3),
+                  child: LinearProgressIndicator(value: _printing || _progress == 0 ? null : _progress, minHeight: 3),
                 )
               : null,
         ),
         body: Stack(
           children: [
-            InAppWebView(
-              initialUrlRequest: URLRequest(url: WebUri(widget.page.url)),
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                useShouldOverrideUrlLoading: true,
-                incognito: true, // nothing from the pages is kept on the phone
-                cacheEnabled: false,
-                supportMultipleWindows: false,
-                javaScriptCanOpenWindowsAutomatically: false,
-                allowFileAccess: false,
-                allowContentAccess: false,
-                builtInZoomControls: true,
-                displayZoomControls: false,
-              ),
-              onWebViewCreated: (c) {
-                _web = c;
-                c.addJavaScriptHandler(
-                  handlerName: 'ycPrint',
-                  callback: (_) {
-                    _print();
-                    return null;
-                  },
-                );
-              },
-              shouldOverrideUrlLoading: (c, action) async {
-                final url = action.request.url;
-                if (url == null || !action.isForMainFrame) return NavigationActionPolicy.ALLOW;
-                switch (linkTarget(home, url)) {
-                  case LinkTarget.stay:
-                    return NavigationActionPolicy.ALLOW;
-                  case LinkTarget.phone:
-                    launchUrl(url, mode: LaunchMode.externalApplication).ignore();
-                    return NavigationActionPolicy.CANCEL;
-                  case LinkTarget.block:
-                    return NavigationActionPolicy.CANCEL;
-                }
-              },
-              onProgressChanged: (c, p) {
-                if (mounted) setState(() => _progress = p / 100);
-              },
-              onTitleChanged: (c, t) {
-                final title = cleanTitle(t ?? '');
-                if (mounted && title.isNotEmpty && !title.startsWith('http')) setState(() => _title = title);
-              },
-              onUpdateVisitedHistory: (c, url, isReload) => _syncBack(),
-              onLoadStop: (c, url) => _syncBack(),
-              onReceivedError: (c, request, error) {
-                if (request.isForMainFrame ?? true) {
-                  if (mounted) setState(() => _failed = true);
-                }
-              },
-            ),
+            WebViewWidget(controller: _web),
             if (_failed)
               Positioned.fill(
                 child: ColoredBox(
