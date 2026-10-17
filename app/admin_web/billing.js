@@ -5,7 +5,7 @@
 "use strict";
 
 const PLAN = { per_report: "Per report", sub_30: "Monthly · 30 reports", sub_50: "Monthly · 50 reports",
-               byok: "Own API key", manual: "Given by admin" };
+               byok: "Own API key", manual: "Given by admin", print: "Single print (education page)" };
 const STATE = { active: ["Active", "ok"], scheduled: ["Starts later", "grey"], exhausted: ["Used up", "check"],
                 expired: ["Expired", "grey"], cancelled: ["Cancelled", "crisis"], none: ["No plan", "grey"] };
 const PAY = { paid: ["Paid", "ok"], pending: ["Pending", "check"], created: ["Not completed", "grey"],
@@ -160,7 +160,7 @@ function renderPricing(history) {
   form.enabled = () => on.box.checked;
   form.rollover = () => roll.box.checked;
 
-  const cards = ["per_report", "sub_30", "sub_50", "byok"].map((id) => planCard(id, cfg.plans[id], form));
+  const cards = ["per_report", "sub_30", "sub_50", "byok", "print"].map((id) => planCard(id, cfg.plans[id], form));
 
   const errors = el("div", { class: "error", role: "alert" });
   const save = el("button", { type: "button", class: "btn primary", text: "Save changes" });
@@ -198,6 +198,11 @@ function planCard(id, p, form) {
     const g = moneyInput(p.prices.guided), d = moneyInput(p.prices.direct);
     body.push(el("div", { class: "form-grid" }, field("Guided report (₹)", g), field("Direct report (₹)", d)));
     extra = () => ({ prices: { guided: toPaise(g.value), direct: toPaise(d.value) } });
+  } else if (id === "print") {
+    const price = moneyInput(p.price), hours = numberInput(p.hours, 1, 168);
+    body.push(el("div", { class: "form-grid" }, field("Price (₹)", price), field("Unlocked for (hours)", hours)),
+      el("p", { class: "muted small", text: "Bought from an education page in the app: that one page can be printed or saved as a PDF as often as needed for these hours. A subscription (30 or 50 reports, own key, or a grant by an admin) already includes printing every page. While charging is off, printing is free for everyone." }));
+    extra = () => ({ price: toPaise(price.value), hours: Number(hours.value) });
   } else if (id === "sub_30" || id === "sub_50") {
     const price = moneyInput(p.price), reports = numberInput(p.reports, 1, 10000), days = numberInput(p.duration_days, 1, 366);
     body.push(el("div", { class: "form-grid three" }, field("Price (₹)", price), field("Reports", reports), field("Valid for (days)", days)));
@@ -214,26 +219,28 @@ function planCard(id, p, form) {
     extra = () => ({ fee: toPaise(fee.value), fee_days: Number(days.value), consumes_credits: credits.box.checked,
                      guided: guided.box.checked, direct: direct.box.checked, instructions: instr.value });
   }
-  body.push(field("Order in the app", order));
+  const listed = id !== "print";       // the single print is offered on the page, not in the plans list
+  if (listed) body.push(field("Order in the app", order));
   form[id] = () => ({ enabled: enabled.box.checked, visible: visible.box.checked, order: Number(order.value),
                       name: name.value.trim(), description: desc.value.trim(),
                       features: feats.value.split("\n").map((f) => f.trim()).filter(Boolean), ...extra() });
   return el("section", { class: "panel plan-card" },
     el("div", { class: "panel-head" }, el("h2", { text: PLAN[id] }),
       active ? el("span", { class: "pill ok", text: active + " active" }) : el("span", { class: "pill grey", text: "No active users" })),
-    el("div", { class: "toggles" }, enabled.node, visible.node), ...body);
+    el("div", { class: "toggles" }, enabled.node, ...(listed ? [visible.node] : [])), ...body);
 }
 
 async function savePricing(form, errors, confirmDisable) {
   errors.replaceChildren();
   const config = { ...pricing.config, enabled: form.enabled(), rollover: form.rollover(), plans: {} };
-  for (const id of ["per_report", "sub_30", "sub_50", "byok"]) config.plans[id] = form[id]();
+  for (const id of ["per_report", "sub_30", "sub_50", "byok", "print"]) config.plans[id] = form[id]();
   const bad = [];
   const money = (v, where) => { if (Number.isNaN(v)) bad.push(where + ": enter an amount in rupees, like 199 or 199.50"); };
   money(config.plans.per_report.prices.guided, "Per report · guided");
   money(config.plans.per_report.prices.direct, "Per report · direct");
   money(config.plans.sub_30.price, PLAN.sub_30); money(config.plans.sub_50.price, PLAN.sub_50);
   money(config.plans.byok.fee, "Own API key · fee");
+  money(config.plans.print.price, PLAN.print);
   if (bad.length) { errors.replaceChildren(el("ul", {}, ...bad.map((b) => el("li", { text: b })))); return; }
   try {
     const r = await api("PUT", "/v1/admin/pricing", { config, confirm_disable: confirmDisable });

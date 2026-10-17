@@ -71,8 +71,8 @@ class FakeBilling implements BillingRepository {
   String? createdPlan;
 
   @override
-  Future<OrderStart> createOrder({required String plan, String? reportType}) async {
-    createdPlan = '$plan:${reportType ?? ''}';
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async {
+    createdPlan = '$plan:${reportType ?? ''}${item == null ? '' : ':$item'}';
     return start;
   }
 

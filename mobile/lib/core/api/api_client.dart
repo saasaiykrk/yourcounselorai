@@ -159,8 +159,10 @@ class ApiClient {
   Future<BillingStatus> billingStatus() async => BillingStatus.fromJson(await _send('GET', '/v1/billing/me'));
 
   /// Starts a purchase. The server prices it; the app never sends an amount.
-  Future<OrderStart> createOrder({required String plan, String? reportType}) async =>
-      OrderStart.fromJson(await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType}));
+  /// [item]: a single print's education page (slug).
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async => OrderStart.fromJson(
+    await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType, 'item': ?item}),
+  );
 
   /// Checkout finished: the server checks the signature AND asks Razorpay before granting anything.
   Future<BillingOrder> verifyPayment(

@@ -2,12 +2,14 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../core/education/education_repository.dart';
 import '../../core/theme/app_theme.dart';
+import 'print_unlock.dart';
 
 /// Where a tap inside a page goes.
 enum LinkTarget {
@@ -29,36 +31,45 @@ LinkTarget linkTarget(Uri page, Uri target) {
   return LinkTarget.block;
 }
 
+/// The education page a `/learn/<slug>` address shows, or null.
+String? pageSlug(Uri? url) {
+  final seg = url?.pathSegments ?? const <String>[];
+  return seg.length == 2 && seg[0] == 'learn' && seg[1] != 'file' ? seg[1] : null;
+}
+
 /// "YourCounselor | Therapy Comparison Chart" → "Therapy Comparison Chart".
 String cleanTitle(String t) => t.replaceAll(RegExp(r'^\s*YourCounselor\s*\|\s*|\s*\|\s*YourCounselor\s*$'), '').trim();
 
-/// One education page inside the app, under the app's own bar. With a plan, the page's
-/// "Print / Save as PDF" button hands the app the page as it looks now (every section open, no
-/// scripts), which the app prints through the phone's print / save-as-PDF dialog. The server leaves
-/// the button out otherwise, and the in-app view ignores the page's own print call.
+/// One education page inside the app, under the app's own bar. Its "Print / Save as PDF" button
+/// shows for everyone. Unlocked (pricing off, a subscription, or a single print of that page), it
+/// hands the app the page as it looks now (every section open, no scripts), which the app prints
+/// through the phone's print / save-as-PDF dialog. Locked, it asks the app, which offers a single
+/// print or the subscriptions; after a confirmed payment the page is loaded again and the server
+/// unlocks it. The in-app view ignores the page's own print call.
 class EducationReaderScreen extends StatelessWidget {
-  const EducationReaderScreen({super.key, required this.page, required this.canPrint});
+  const EducationReaderScreen({super.key, required this.page, this.offer});
 
   final EducationPage page;
-  final bool canPrint;
+
+  /// A single print for sale, if any.
+  final PrintOffer? offer;
 
   @override
-  Widget build(BuildContext context) => page.kind == 'handout'
-      ? _PdfHandoutView(page: page, canPrint: canPrint)
-      : _WebPageView(page: page, canPrint: canPrint);
+  Widget build(BuildContext context) =>
+      page.kind == 'handout' ? _PdfHandoutView(page: page, offer: offer) : _WebPageView(page: page, offer: offer);
 }
 
-class _WebPageView extends StatefulWidget {
-  const _WebPageView({required this.page, required this.canPrint});
+class _WebPageView extends ConsumerStatefulWidget {
+  const _WebPageView({required this.page, this.offer});
 
   final EducationPage page;
-  final bool canPrint;
+  final PrintOffer? offer;
 
   @override
-  State<_WebPageView> createState() => _WebPageViewState();
+  ConsumerState<_WebPageView> createState() => _WebPageViewState();
 }
 
-class _WebPageViewState extends State<_WebPageView> {
+class _WebPageViewState extends ConsumerState<_WebPageView> {
   late final Uri _home = Uri.parse(widget.page.url);
   late String _title = widget.page.title;
   late final WebViewController _web;
@@ -106,7 +117,7 @@ class _WebPageViewState extends State<_WebPageView> {
         ),
       )
       // The page's Print / Save as PDF button (only there with a plan) sends the page as it looks now.
-      ..addJavaScriptChannel('YCApp', onMessageReceived: (m) => _print(m.message))
+      ..addJavaScriptChannel('YCApp', onMessageReceived: (m) => _onPageMessage(m.message))
       ..loadRequest(_home);
   }
 
@@ -123,8 +134,30 @@ class _WebPageViewState extends State<_WebPageView> {
     if (mounted && back != _canGoBack) setState(() => _canGoBack = back);
   }
 
+  /// From the page's own button: "yc:buy" when locked, or the page to print. Only our pages can send
+  /// it (navigation stays on /learn/ pages), and the server sends the print code only when unlocked.
+  void _onPageMessage(String message) {
+    if (message == 'yc:buy') {
+      _buy();
+    } else if (message.startsWith('<!doctype html>')) {
+      _print(message);
+    }
+  }
+
+  Future<void> _buy() async {
+    final current = await _web.currentUrl();
+    final slug = pageSlug(Uri.tryParse(current ?? '')) ?? widget.page.slug;
+    if (!mounted) return;
+    final page = slug == widget.page.slug
+        ? widget.page
+        : EducationPage(slug: slug, title: _title, kind: 'module', url: current ?? widget.page.url);
+    if (await unlockPrinting(context, ref, page, widget.offer)) {
+      await _web.reload(); // the server now unlocks this page
+    }
+  }
+
   Future<void> _print(String html) async {
-    if (!widget.canPrint || _printing || !html.startsWith('<!doctype html>')) return;
+    if (_printing) return;
     setState(() => _printing = true);
     try {
       await Printing.layoutPdf(
@@ -186,18 +219,19 @@ class _WebPageViewState extends State<_WebPageView> {
   }
 }
 
-class _PdfHandoutView extends StatefulWidget {
-  const _PdfHandoutView({required this.page, required this.canPrint});
+class _PdfHandoutView extends ConsumerStatefulWidget {
+  const _PdfHandoutView({required this.page, this.offer});
 
   final EducationPage page;
-  final bool canPrint;
+  final PrintOffer? offer;
 
   @override
-  State<_PdfHandoutView> createState() => _PdfHandoutViewState();
+  ConsumerState<_PdfHandoutView> createState() => _PdfHandoutViewState();
 }
 
-class _PdfHandoutViewState extends State<_PdfHandoutView> {
+class _PdfHandoutViewState extends ConsumerState<_PdfHandoutView> {
   late Future<Uint8List> _bytes = _load();
+  late bool _canPrint = widget.page.canPrint;
 
   Future<Uint8List> _load() async {
     final dio = Dio(
@@ -205,6 +239,10 @@ class _PdfHandoutViewState extends State<_PdfHandoutView> {
     );
     final r = await dio.get<List<int>>(widget.page.url, options: Options(responseType: ResponseType.bytes));
     return Uint8List.fromList(r.data ?? const []);
+  }
+
+  Future<void> _buy() async {
+    if (await unlockPrinting(context, ref, widget.page, widget.offer) && mounted) setState(() => _canPrint = true);
   }
 
   @override
@@ -217,12 +255,13 @@ class _PdfHandoutViewState extends State<_PdfHandoutView> {
           if (snap.hasError) return _Problem(onRetry: () => setState(() => _bytes = _load()));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final bytes = snap.data!;
-          // Print and share (save) only with a plan; otherwise read-only, with no action bar.
+          // Here the app is the only gate: print and share (save) only when unlocked.
           return PdfPreview(
+            key: ValueKey(_canPrint),
             build: (_) async => bytes,
-            useActions: widget.canPrint,
-            allowPrinting: widget.canPrint,
-            allowSharing: widget.canPrint,
+            useActions: _canPrint,
+            allowPrinting: _canPrint,
+            allowSharing: _canPrint,
             canChangePageFormat: false,
             canChangeOrientation: false,
             canDebug: false,
@@ -230,6 +269,19 @@ class _PdfHandoutViewState extends State<_PdfHandoutView> {
           );
         },
       ),
+      bottomNavigationBar: _canPrint
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: _buy,
+                  icon: const Icon(Icons.print_outlined),
+                  label: const Text('Print / Save as PDF'),
+                ),
+              ),
+            ),
     );
   }
 }
