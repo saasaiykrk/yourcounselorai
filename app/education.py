@@ -9,8 +9,8 @@ gets the button.
 
 The pages are served exactly as supplied. At serving time an add-on is placed before </head> and
 </body>; nothing in the original markup, text or styles is edited:
-  * with a plan: a "Print / Save as PDF" button on every page (inside the app it asks the app, which
-    opens the phone's print / save-as-PDF dialog), and
+  * with a plan: a "Print / Save as PDF" button on every page (inside the app it hands the app the page
+    as it looks now, which the app prints through the phone's print / save-as-PDF dialog), and
   * print layout: every section expanded, menus and buttons hidden, A4 margins, no breaks inside
     boxes, rows or figures. The reader modules ship a print block ("Printing is disabled") and a
     beforeprint handler that hides the page; the add-on removes that one print rule from the
@@ -146,7 +146,8 @@ ADDON_CSS = """
   summary::after,details.section>summary::after{content:none!important;display:none!important}
   h1,h2,h3,h4,summary{break-after:avoid;page-break-after:avoid}
   .box,figure,.dg-slot,svg,tr,img,.card,blockquote{break-inside:avoid;page-break-inside:avoid}
-  table{break-inside:auto}thead{display:table-header-group}
+  table{break-inside:auto;min-width:0!important;width:100%!important;table-layout:auto!important}
+  thead{display:table-header-group}th,td{overflow-wrap:break-word;min-width:0!important}
   p,li{orphans:3;widows:3}
   .table-wrap,.table-scroll{overflow:visible!important}
   a[href^="http"]::after{content:""}
@@ -194,7 +195,22 @@ ADDON_JS = """
     });
   }
   // 3. The button (left out of the page without a plan).
-  /*PRINT*/function button() {
+  /*PRINT*/
+  // Inside the YourCounselor app the page's print call does nothing. The app gets the page as it looks now
+  // (every section open, the print block removed, no scripts) and prints that.
+  function snapshot() {
+    var clone = document.documentElement.cloneNode(true);
+    var live = document.querySelectorAll("style"), copy = clone.querySelectorAll("style");
+    for (var i = 0; i < live.length && i < copy.length; i++) {
+      try {
+        var rules = live[i].sheet && live[i].sheet.cssRules;
+        if (rules) copy[i].textContent = Array.prototype.map.call(rules, function (r) { return r.cssText; }).join("\\n");
+      } catch (e) {}
+    }
+    clone.querySelectorAll("script,noscript,.yc-edu-print").forEach(function (n) { n.remove(); });
+    return "<!doctype html>\\n" + clone.outerHTML;
+  }
+  function button() {
     if (document.querySelector(".yc-edu-print")) return;
     var b = document.createElement("button");
     b.type = "button"; b.className = "yc-edu-print";
@@ -203,9 +219,8 @@ ADDON_JS = """
       '<span class="long">Print / Save as PDF</span><span class="short">Print / PDF</span>';
     b.addEventListener("click", function () {
       allowPrint(); document.body.style.visibility = ""; expandAll();
-      // Inside the YourCounselor app the page's print call does nothing; the app opens the print dialog.
-      var app = window.flutter_inappwebview;
-      if (app && app.callHandler) app.callHandler("ycPrint"); else window.print();
+      var app = window.YCApp;
+      if (app && app.postMessage) app.postMessage(snapshot()); else window.print();
     });
     document.body.appendChild(b);
   }/*END PRINT*/
