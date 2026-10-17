@@ -43,19 +43,16 @@ class CatalogTests(unittest.TestCase):
 
 
 class RenderTests(unittest.TestCase):
-    def rendered(self, file, config=None):
+    def rendered(self, file, config=None, can_print=True):
         p = BY_FILE[file]
         src = (education.WEB / p.file).read_text(encoding="utf-8")
         cfg = config if config is not None else ({"viewer": {"name": "A", "email": "a@b.c"}, "links": {}} if p.reader else None)
-        return src, render(p, src, {"x.html": "/learn/x?t=1"}, cfg)
+        return src, render(p, src, {"x.html": "/learn/x?t=1"}, cfg, can_print)
 
     def test_the_original_page_is_kept_whole_and_only_added_to(self):
-        for p in CATALOG:
-            if p.kind == "handout":
-                continue
-            src, out = self.rendered(p.file)
-            added = [out.count(m) - src.count(m) for m in ("yc-edu-addon", "Print / Save as PDF")]
-            self.assertTrue(all(n >= 1 for n in added), p.file)
+        for p, can_print in [(p, c) for p in CATALOG if p.kind != "handout" for c in (True, False)]:
+            src, out = self.rendered(p.file, can_print=can_print)
+            self.assertGreaterEqual(out.count("yc-edu-addon") - src.count("yc-edu-addon"), 1, p.file)
             # removing what was added gives back the supplied page exactly
             back = re.sub(r"\n<style id=\"yc-edu-addon\">.*?</style>\n", "", out, flags=re.S)
             back = re.sub(r"\n<script id=\"yc-edu-addon-js\">.*?</script>\n", "", back, flags=re.S)
@@ -63,6 +60,20 @@ class RenderTests(unittest.TestCase):
             back = back.replace("Object.assign(window.YC_CONFIG, window.__YC_APP__, { onNavigate: function (slug) {"
                                 " var u = (window.__YC_APP__.links || {})[slug]; if (u) location.href = u; } });\n", "")
             self.assertEqual(back, src, p.file)
+
+    def test_print_button_only_with_a_plan(self):
+        for p in CATALOG:
+            if p.kind == "handout":
+                continue
+            src, paid = self.rendered(p.file, can_print=True)
+            _, free = self.rendered(p.file, can_print=False)
+            self.assertGreater(paid.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+            self.assertIn("var CAN_PRINT = true;", paid)
+            self.assertNotIn("Printing and saving as PDF come with any YourCounselor plan", paid)
+            # no plan: no button, printing stays blocked (the browser's own Print shows a note instead)
+            self.assertEqual(free.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+            self.assertIn("var CAN_PRINT = false;", free)
+            self.assertIn("Printing and saving as PDF come with any YourCounselor plan", free)
 
     def test_live_values_never_replace_brand_crisis_or_legal_text(self):
         src, out = self.rendered("YourCounselor_Cognitive_Behavioural_Therapy_CBT.html",
@@ -75,6 +86,18 @@ class RenderTests(unittest.TestCase):
         _, out = self.rendered("YourCounselor_Therapy_Comparison_Chart.html")
         self.assertNotIn("__YC_APP__", out)
         self.assertIn("Print / Save as PDF", out)
+
+
+class ServiceTests(unittest.TestCase):
+    def test_print_needs_a_plan_and_fails_closed(self):
+        svc = lambda f: education.EducationService(Signer(b"k"), lambda u: None, CATALOG, has_plan=f)
+        self.assertTrue(svc(lambda u: u == "paid").can_print("paid"))
+        self.assertFalse(svc(lambda u: u == "paid").can_print("free"))
+        self.assertFalse(education.EducationService(Signer(b"k"), lambda u: None, CATALOG).can_print("x"))
+
+        def broken(u):
+            raise RuntimeError("database down")
+        self.assertFalse(svc(broken).can_print("paid"), "an error never unlocks printing")
 
 
 class SignerTests(unittest.TestCase):
@@ -95,6 +118,10 @@ class SignerTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
+        self.plans = {"dev-clinician"}
+        orig = main.EDUCATION.has_plan
+        main.EDUCATION.has_plan = lambda u: u in self.plans
+        self.addCleanup(setattr, main.EDUCATION, "has_plan", orig)
 
     def get(self, url):
         u = urlparse(url)
@@ -104,16 +131,28 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get("/v1/education").status_code, 422, "no sign-in, no list")
         r = self.client.get("/v1/education", headers={"Authorization": "Bearer dev-L1"})
         pages = r.json()["pages"]
+        self.assertTrue(r.json()["can_print"])
         self.assertEqual(len(pages), 14)
         cbt = next(p for p in pages if p["slug"] == "cbt")
         page = self.get(cbt["url"])
         self.assertEqual(page.status_code, 200)
         self.assertIn("Print / Save as PDF", page.text)
+        self.assertIn('"subscriptionActive": true', page.text)
         self.assertIn('"name": "Dev clinician"', page.text, "the viewer's name for the watermark")
         self.assertIn("frame-ancestors 'none'", page.headers["content-security-policy"])
         self.assertEqual(page.headers["cache-control"], "private, no-store")
         pdf = self.get(next(p for p in pages if p["kind"] == "handout")["url"])
         self.assertEqual((pdf.status_code, pdf.headers["content-type"]), (200, "application/pdf"))
+
+    def test_without_a_plan_no_print_button_and_no_handout_downloads(self):
+        self.plans.clear()
+        r = self.client.get("/v1/education", headers={"Authorization": "Bearer dev-L1"})
+        self.assertFalse(r.json()["can_print"])
+        cbt = next(p for p in r.json()["pages"] if p["slug"] == "cbt")
+        page = self.get(cbt["url"])
+        self.assertEqual(page.status_code, 200, "the page itself stays free")
+        self.assertIn("var CAN_PRINT = false;", page.text)
+        self.assertIn('"subscriptionActive": false', page.text, "the module's own handout print is locked too")
 
     def test_pages_need_a_valid_link(self):
         for path in ("/learn/cbt", "/learn/cbt?t=nope", "/learn/file/YourCounselor_Case_History_and_MSE_Practice_Handout.pdf"):

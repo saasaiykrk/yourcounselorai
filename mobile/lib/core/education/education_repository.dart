@@ -37,8 +37,23 @@ class EducationPage {
   };
 }
 
+/// The cards, and whether this clinician may print them (any plan in effect).
+class EducationCatalog {
+  const EducationCatalog({required this.pages, this.canPrint = false});
+
+  factory EducationCatalog.fromJson(Map<String, dynamic> j) => EducationCatalog(
+    pages: [for (final p in (j['pages'] as List? ?? const [])) EducationPage.fromJson(p as Map<String, dynamic>)],
+    canPrint: j['can_print'] == true,
+  );
+
+  final List<EducationPage> pages;
+
+  /// The pages show "Print / Save as PDF" only with a plan; the server decides, this only explains it.
+  final bool canPrint;
+}
+
 abstract interface class EducationRepository {
-  Future<List<EducationPage>> pages();
+  Future<EducationCatalog> pages();
 }
 
 class ApiEducationRepository implements EducationRepository {
@@ -47,7 +62,7 @@ class ApiEducationRepository implements EducationRepository {
   final ApiClient _api;
 
   @override
-  Future<List<EducationPage>> pages() => _api.education();
+  Future<EducationCatalog> pages() => _api.education();
 }
 
 /// Offline preview: the real titles, no links (nothing to open without the server).
@@ -98,8 +113,11 @@ class PreviewEducationRepository implements EducationRepository {
   ];
 
   @override
-  Future<List<EducationPage>> pages() async => [
-    for (final (slug, title, kind, summary) in _pages)
-      EducationPage(slug: slug, title: title, kind: kind, summary: summary, url: ''),
-  ];
+  Future<EducationCatalog> pages() async => EducationCatalog(
+    pages: [
+      for (final (slug, title, kind, summary) in _pages)
+        EducationPage(slug: slug, title: title, kind: kind, summary: summary, url: ''),
+    ],
+    canPrint: true,
+  );
 }
