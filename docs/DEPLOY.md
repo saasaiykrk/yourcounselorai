@@ -303,9 +303,14 @@ server.
 
 - A card opens the page in the phone's browser through a signed link that works for 12 hours (the browser
   can't send the app's sign-in). Without a valid link the page says "This link has expired".
-- The server adds a **Print / Save as PDF** button and a print layout (A4, every section expanded, menus
-  hidden) as it sends each page. The reader modules block printing on purpose; for these pages only that one
-  print rule is switched off. Copy protection and the viewer's name and email in the watermark stay on.
+- Reading is free. **Print / Save as PDF comes with a plan:** only a clinician with a plan in effect (bought
+  or granted by an admin in Subscriptions & Users; not cancelled, not expired; a single-report purchase counts
+  even after it is used) gets the button. Without one, the button is left out, printing from the browser shows
+  "Printing and saving as PDF come with any YourCounselor plan", the modules' handout downloads are locked, and
+  the app's Education tab says so with a **See plans** link. If the plan check fails, printing stays off.
+- With a plan, the server adds the button and a print layout (A4, every section expanded, menus hidden) as it
+  sends each page. The reader modules block printing on purpose; for these pages only that one print rule is
+  switched off. Copy protection and the viewer's name and email in the watermark stay on.
 - **To add or replace a page:** put the `.html` file in `app/education_web/` and merge. Its `<title>` becomes
   the card title. The reader modules read their live settings (viewer, published module list) from the app,
   as described in that folder's README.

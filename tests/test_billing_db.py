@@ -146,6 +146,23 @@ class BillingDbTests(unittest.TestCase):
         self.assertTrue(billing_db.byok_access(self.cid))
         self.assertEqual(b["starts_at"], a["expires_at"], "a renewal starts when the paid period ends")
 
+    def test_has_plan_follows_purchases_expiry_and_refunds(self):
+        self.assertFalse(billing_db.has_plan(self.cid), "nothing bought yet")
+        unpaid = self.order("sub_30")
+        self.assertFalse(billing_db.has_plan(self.cid), "an unpaid order is not a plan")
+        billing_db.fulfil(self.order("per_report", "guided")["id"], pay(), self.cfg)
+        self.assertTrue(billing_db.has_plan(self.cid), "a single report counts")
+        _sql("update entitlements set credits_used = 1 where clinician_id=%s", self.cid)
+        self.assertTrue(billing_db.has_plan(self.cid), "still bought after it is used")
+        billing_db.record_refund(_sql("select order_id from entitlements where clinician_id=%s", self.cid)[0][0],
+                                 "rfnd_p", 100, self.admin, True, "refund")
+        self.assertFalse(billing_db.has_plan(self.cid), "a refund that revokes it ends it")
+        e = billing_db.fulfil(unpaid["id"], pay(), self.cfg)
+        self.assertTrue(billing_db.has_plan(self.cid))
+        _sql("update entitlements set expires_at = now() - interval '1 minute' where id=%s", str(e["id"]))
+        self.assertFalse(billing_db.has_plan(self.cid), "an expired subscription")
+        self.assertFalse(billing_db.has_plan("not-a-uuid"), "a bad id is simply no plan")
+
     def test_admin_adjust_extend_deactivate_are_audited(self):
         e = billing_db.fulfil(self.order("sub_30")["id"], pay(), self.cfg)
         billing_db.admin_adjust(self.cid, 5, self.admin, "goodwill")

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exceptions.dart';
@@ -36,6 +37,7 @@ String _errorText(Object e) => switch (e) {
 };
 
 /// Free teaching pages for every signed-in user: one card per page, titled with the page's own title.
+/// Printing / saving as PDF comes with any plan (the server leaves the button out otherwise).
 class EducationScreen extends ConsumerStatefulWidget {
   const EducationScreen({super.key});
 
@@ -95,7 +97,8 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
               ),
             ],
           ),
-          data: (all) {
+          data: (catalog) {
+            final all = catalog.pages;
             final kinds = {for (final p in all) p.kind};
             final filters = [
               _Filter.all,
@@ -111,11 +114,23 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                const Text(
-                  'Free for every YourCounselor user. Pages open in your browser; each has a '
-                  'Print / Save as PDF button.',
-                  style: AppText.smallMuted,
-                ),
+                if (catalog.canPrint)
+                  const Text(
+                    'Free for every YourCounselor user. Pages open in your browser; each has a '
+                    'Print / Save as PDF button.',
+                    style: AppText.smallMuted,
+                  )
+                else
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      const Text(
+                        'Free to read for every YourCounselor user. Printing and saving as PDF come with any plan.',
+                        style: AppText.smallMuted,
+                      ),
+                      TextButton(onPressed: () => context.push('/pricing'), child: const Text('See plans')),
+                    ],
+                  ),
                 const SizedBox(height: 12),
                 if (filters.length > 2)
                   Wrap(

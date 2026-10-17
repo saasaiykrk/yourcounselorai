@@ -291,6 +291,18 @@ def byok_access(cid) -> bool:
                               and starts_at <= now() and expires_at > now() limit 1""", (str(cid),)).fetchone() is not None
 
 
+def has_plan(cid) -> bool:
+    """A plan bought (or granted by an admin) and still in effect: not cancelled, started, not expired.
+    Used credits still count; a refund that revokes the plan ends it."""
+    try:
+        uuid.UUID(str(cid))
+    except ValueError:
+        return False
+    with _conn() as c:
+        return c.execute("""select 1 from entitlements where clinician_id=%s and status='active' and starts_at <= now()
+                              and (expires_at is null or expires_at > now()) limit 1""", (str(cid),)).fetchone() is not None
+
+
 def _state(e: dict, now: datetime) -> str:
     if e["status"] == "cancelled":
         return "cancelled"

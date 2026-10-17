@@ -728,7 +728,8 @@ def _education_viewer(user_id: str) -> dict | None:
 
 # Links are signed with a key derived from a server secret, so every Cloud Run instance accepts them.
 _EDU_SECRET = (CFG.byok_encryption_key or CFG.database_url or CFG.anthropic_api_key or "dev-only").encode()
-EDUCATION = education.EducationService(education.Signer(_EDU_SECRET), _education_viewer)
+EDUCATION = education.EducationService(education.Signer(_EDU_SECRET), _education_viewer,
+                                       has_plan=None if CFG.dev_mode else _billing_store().has_plan)
 education.install(app, EDUCATION, current_user, BOOKING.base_url)
 
 

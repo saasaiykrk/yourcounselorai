@@ -1,5 +1,7 @@
 """
-Education module: the owner's teaching pages (app/education_web/), free for every signed-in user.
+Education module: the owner's teaching pages (app/education_web/), free to read for every signed-in user.
+Printing and saving as PDF come with a plan: only a clinician with a plan in effect (billing_db.has_plan)
+gets the button.
 
   GET /v1/education            → the cards: title, short description, kind, and a signed link per page
   GET /learn/{slug}?t=…        → the page itself, as supplied, plus a small add-on (see below)
@@ -7,12 +9,15 @@ Education module: the owner's teaching pages (app/education_web/), free for ever
 
 The pages are served exactly as supplied. At serving time an add-on is placed before </head> and
 </body>; nothing in the original markup, text or styles is edited:
-  * a "Print / Save as PDF" button on every page;
+  * with a plan: a "Print / Save as PDF" button on every page, and
   * print layout: every section expanded, menus and buttons hidden, A4 margins, no breaks inside
     boxes, rows or figures. The reader modules ship a print block ("Printing is disabled") and a
     beforeprint handler that hides the page; the add-on removes that one print rule from the
     stylesheet and undoes the handler, so the page prints. Copy protection and the viewer
     watermark stay on;
+  * without a plan: no button, and printing stays blocked on every page (the browser's own Print
+    shows a note instead); the modules get subscriptionActive false, which locks their handout
+    downloads, since those would otherwise open a print window;
   * reader modules get the live config the README asks for (viewer name and email for the
     watermark, the published module list, navigation between modules), merged into the
     supplied sample config, so brand, crisis and legal text stay exactly as supplied;
@@ -146,12 +151,20 @@ ADDON_CSS = """
   a[href^="http"]::after{content:""}
 }
 </style>"""
+# Without a plan: printing stays blocked on every page (the modules block it already; this covers the rest).
+NO_PRINT_CSS = """@media print{
+  body *{display:none!important}
+  body::after{content:"Printing and saving as PDF come with any YourCounselor plan.";display:block!important;
+    padding:40px;font:18px/1.5 "Nunito Sans",system-ui,sans-serif;color:#3F0079}
+}
+"""
 
 ADDON_JS = """
 <script id="yc-edu-addon-js">
 (function () {
   "use strict";
   var LINKS = __LINKS__;
+  var CAN_PRINT = __PRINT__;
   // 1. Printing on: drop only the "Printing is disabled" print rule, and undo the hide-on-print handler.
   function allowPrint() {
     for (var i = 0; i < document.styleSheets.length; i++) {
@@ -168,8 +181,10 @@ ADDON_JS = """
     reopen = [];
     document.querySelectorAll("details:not([open])").forEach(function (d) { d.open = true; reopen.push(d); });
   }
-  window.addEventListener("beforeprint", function () { document.body.style.visibility = ""; expandAll(); });
-  window.addEventListener("afterprint", function () { reopen.forEach(function (d) { d.open = false; }); reopen = []; });
+  if (CAN_PRINT) {
+    window.addEventListener("beforeprint", function () { document.body.style.visibility = ""; expandAll(); });
+    window.addEventListener("afterprint", function () { reopen.forEach(function (d) { d.open = false; }); reopen = []; });
+  }
   // 2. Links to other pages by file name → the signed page link.
   function relink(root) {
     (root || document).querySelectorAll("a[href]").forEach(function (a) {
@@ -177,8 +192,8 @@ ADDON_JS = """
       if (LINKS[name]) { a.setAttribute("href", LINKS[name]); a.removeAttribute("target"); }
     });
   }
-  // 3. The button.
-  function button() {
+  // 3. The button (left out of the page without a plan).
+  /*PRINT*/function button() {
     if (document.querySelector(".yc-edu-print")) return;
     var b = document.createElement("button");
     b.type = "button"; b.className = "yc-edu-print";
@@ -187,17 +202,17 @@ ADDON_JS = """
       '<span class="long">Print / Save as PDF</span><span class="short">Print / PDF</span>';
     b.addEventListener("click", function () { allowPrint(); document.body.style.visibility = ""; expandAll(); window.print(); });
     document.body.appendChild(b);
-  }
-  function ready() { allowPrint(); relink(); button(); }
+  }/*END PRINT*/
+  function ready() { relink(); if (CAN_PRINT) { allowPrint(); button(); } }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready); else ready();
-  window.addEventListener("load", function () { allowPrint(); relink(); });
+  window.addEventListener("load", function () { relink(); if (CAN_PRINT) allowPrint(); });
   new MutationObserver(function () { relink(); }).observe(document.documentElement, { childList: true, subtree: true });
 })();
 </script>"""
 
 
-def render(page: Page, src: str, links: dict[str, str], app_config: dict | None) -> str:
-    """The supplied page with the add-on placed before </head> and </body>."""
+def render(page: Page, src: str, links: dict[str, str], app_config: dict | None, can_print: bool = False) -> str:
+    """The supplied page with the add-on placed before </head> and </body>. can_print: the viewer has a plan."""
     out = src
     if page.reader and app_config is not None:
         # The supplied sample config stays; the live values are merged in just before mount.
@@ -209,9 +224,12 @@ def render(page: Page, src: str, links: dict[str, str], app_config: dict | None)
         nav = ("Object.assign(window.YC_CONFIG, window.__YC_APP__, { onNavigate: function (slug) {"
                " var u = (window.__YC_APP__.links || {})[slug]; if (u) location.href = u; } });\n")
         out = out[:i] + nav + out[i:]
-    out = out.replace("</head>", ADDON_CSS + "\n</head>", 1)
+    css = ADDON_CSS if can_print else ADDON_CSS.replace("</style>", NO_PRINT_CSS + "</style>")
+    out = out.replace("</head>", css + "\n</head>", 1)
     j = out.rfind("</body>")
-    addon = ADDON_JS.replace("__LINKS__", _js(links))
+    addon = ADDON_JS.replace("__LINKS__", _js(links)).replace("__PRINT__", "true" if can_print else "false")
+    if not can_print:
+        addon = re.sub(r"/\*PRINT\*/.*?/\*END PRINT\*/", "", addon, flags=re.S)
     return out[:j] + addon + "\n" + out[j:] if j >= 0 else out + addon
 
 
@@ -235,8 +253,10 @@ PAGE_HEADERS = {
 
 
 class EducationService:
-    def __init__(self, signer: Signer, viewer_lookup, catalog: list[Page] | None = None, region: str = "IN"):
-        self.signer, self.viewer_lookup, self.region = signer, viewer_lookup, region
+    def __init__(self, signer: Signer, viewer_lookup, catalog: list[Page] | None = None, region: str = "IN",
+                 has_plan=None):
+        """has_plan(user_id) → bool: the clinician has a plan in effect (unlocks printing)."""
+        self.signer, self.viewer_lookup, self.region, self.has_plan = signer, viewer_lookup, region, has_plan
         self.catalog = catalog if catalog is not None else load_catalog()
         self.by_slug = {p.slug: p for p in self.catalog}
         self._src: dict[str, str] = {}
@@ -245,6 +265,15 @@ class EducationService:
         if page.file not in self._src:
             self._src[page.file] = (WEB / page.file).read_text(encoding="utf-8")
         return self._src[page.file]
+
+    def can_print(self, user_id: str) -> bool:
+        """Fails closed: no lookup, or any error, means no printing."""
+        if self.has_plan is None:
+            return False
+        try:
+            return bool(self.has_plan(user_id))
+        except Exception:
+            return False
 
     def url(self, base: str, page: Page, token: str) -> str:
         path = f"/learn/file/{page.file}" if page.kind == "handout" else f"/learn/{page.slug}"
@@ -264,7 +293,7 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
         token, base = svc.signer.token(user["id"]), base_url(request)
         return {"pages": [{"slug": p.slug, "title": p.title, "summary": p.summary, "kind": p.kind,
                            "url": svc.url(base, p, token)} for p in svc.catalog],
-                "link_hours": svc.signer.hours}
+                "link_hours": svc.signer.hours, "can_print": svc.can_print(user["id"])}
 
     @app.get("/learn/file/{name}")
     def education_file(name: str, t: str = ""):
@@ -290,15 +319,15 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
             return _expired()
         base = base_url(request)
         links = {p.file: svc.url(base, p, t) for p in svc.catalog}
-        config = None
+        config, can_print = None, svc.can_print(user_id)
         if page.reader:
             viewer = svc.viewer_lookup(user_id) or {}
             readers = [p for p in svc.catalog if p.reader]
             config = {"viewer": {"name": viewer.get("name") or "", "email": viewer.get("email") or ""},
-                      "region": svc.region, "subscriptionActive": True,
+                      "region": svc.region, "subscriptionActive": can_print,
                       "modules": [{"slug": p.slug, "title": p.title} for p in readers],
                       "links": {p.slug: svc.url(base, p, t) for p in readers}}
-        return HTMLResponse(render(page, svc.source(page), links, config), headers=PAGE_HEADERS)
+        return HTMLResponse(render(page, svc.source(page), links, config, can_print), headers=PAGE_HEADERS)
 
 
 def _expired() -> HTMLResponse:

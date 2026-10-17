@@ -38,17 +38,18 @@ class _Adapter implements HttpClientAdapter {
 }
 
 class _Repo implements EducationRepository {
-  _Repo(this.result);
+  _Repo(this.result, {this.canPrint = true});
 
   Object result;
+  bool canPrint;
   int calls = 0;
 
   @override
-  Future<List<EducationPage>> pages() async {
+  Future<EducationCatalog> pages() async {
     calls++;
     final r = result;
     if (r is Exception) throw r;
-    return r as List<EducationPage>;
+    return EducationCatalog(pages: r as List<EducationPage>, canPrint: canPrint);
   }
 }
 
@@ -105,6 +106,7 @@ void main() {
         {'slug': 'pdf', 'title': 'Handout', 'kind': 'handout', 'url': 'u2'},
       ],
       'link_hours': 12,
+      'can_print': true,
     });
     final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))..httpClientAdapter = adapter;
     final api = ApiClient(
@@ -113,8 +115,11 @@ void main() {
       timeout: const Duration(seconds: 5),
       dio: dio,
     );
-    final pages = await api.education();
+    final catalog = await api.education();
+    final pages = catalog.pages;
     expect(adapter.requests.single.path, '/v1/education');
+    expect(catalog.canPrint, isTrue);
+    expect(EducationCatalog.fromJson(const {'pages': []}).canPrint, isFalse, reason: 'missing means no');
     expect(pages.map((p) => (p.title, p.kindLabel, p.url)), [
       ('Cognitive Behavioural Therapy (CBT)', 'Module', 'u1'),
       ('Handout', 'Handout · PDF', 'u2'),
@@ -127,6 +132,16 @@ void main() {
     expect(find.text('Therapy Comparison Chart'), findsOneWidget);
     expect(find.text('Case History and MSE Practice Handout'), findsOneWidget);
     expect(find.textContaining('Print / Save as PDF'), findsOneWidget);
+  });
+
+  testWidgets('without a plan: still free to read, printing explained, a way to the plans', (tester) async {
+    final opened = await _pump(tester, _Repo(List.of(_pages), canPrint: false));
+    expect(find.textContaining('Printing and saving as PDF come with any plan'), findsOneWidget);
+    expect(find.textContaining('Print / Save as PDF button'), findsNothing);
+    expect(find.text('See plans'), findsOneWidget);
+    await tester.tap(find.text('Therapy Comparison Chart'));
+    await tester.pumpAndSettle();
+    expect(opened, hasLength(1), reason: 'the pages themselves stay free');
   });
 
   testWidgets('tapping a card opens that page; the list is fetched again for fresh links', (tester) async {

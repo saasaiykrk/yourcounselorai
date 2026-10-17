@@ -261,10 +261,7 @@ class ApiClient {
   // --- Education (free for every signed-in user) ---
 
   /// The teaching pages, each with a fresh signed link.
-  Future<List<EducationPage>> education() async => [
-    for (final p in ((await _send('GET', '/v1/education'))['pages'] as List? ?? const []))
-      EducationPage.fromJson(p as Map<String, dynamic>),
-  ];
+  Future<EducationCatalog> education() async => EducationCatalog.fromJson(await _send('GET', '/v1/education'));
 
   // --- calendar and online booking (the consultant's own) ---
 
