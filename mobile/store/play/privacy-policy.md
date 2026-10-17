@@ -11,18 +11,20 @@ YourCounselor ("we", "us") is operated by [legal entity name], [registered addre
 **From clinicians (app users)**
 - Account details: email address, name, gender, age, professional role, registration body and registration number, used to verify that you are a registered professional.
 - Case text you write: before anything leaves your phone, the app removes names, phone numbers, email addresses, ID numbers and similar identifiers, and you confirm the text contains none. Our server checks again and refuses text with identifiers. We store de-identified case text and the replies so you can see them in History.
-- Payments: plan, amount and payment status. Card, UPI and bank details are handled by Razorpay; we never see or store them.
+- Payments for plans, single reports and single prints of education pages: plan, amount and payment status. Card, UPI and bank details are handled by Razorpay; we never see or store them.
 - Your own AI provider API key, if you choose to add one: stored encrypted, never shown again.
 - Safety reports you send us about a reply.
 
 **From clients who book an appointment** through a clinician's booking page
-- First name, email address and the appointment time. These are stored encrypted and used only to manage that appointment.
+- First name, email address and the appointment time. Nothing else is asked.
+- These are stored encrypted, used only to manage that appointment and send its emails, never sent to an AI provider, and deleted 90 days after the appointment.
 
 **What we do not collect**: no location, contacts, photos, advertising IDs, analytics or crash-reporting data. The app shows no advertising.
 
 ## 2. How we use it
 - To verify registration and provide the service.
 - To generate consultation replies and reports from de-identified case text.
+- To show your name and email as a watermark on education pages you open.
 - To check every reply for clinical safety before it is shown.
 - To process payments and keep records required by law.
 - To manage appointments and send booking emails.
@@ -33,12 +35,12 @@ We do not sell personal data, and we do not use it for advertising.
 ## 3. Who we share it with (processors)
 | Service | What it receives | Why |
 |---|---|---|
-| Anthropic (Claude) and Google (Gemini) | De-identified case text only | To write consultation replies. Processed outside India. |
+| Anthropic (Claude) or Google (Gemini) | De-identified case text only, never account or booking details | To write consultation replies. Our administrators choose one provider from an approved list. Processed outside India. If you add your own Anthropic key, your reports go to Anthropic under your own account. |
 | World Health Organization ICD-11 service | Short search terms such as a condition name; never case text | To verify diagnostic codes |
 | Google Cloud (Mumbai, India) | All service data | Hosting |
 | Supabase (Mumbai, India) | Account and service data | Database and sign-in |
 | Razorpay | Payment details you enter at checkout | Payments |
-| [Email provider] | Booking emails | Appointment notices |
+| [Email provider] | Client first name, email and appointment time | Booking confirmations and reminders |
 
 We may disclose information if required by law.
 
