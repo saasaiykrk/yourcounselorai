@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/api/api_exceptions.dart';
 import '../../core/education/education_repository.dart';
@@ -9,14 +8,15 @@ import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
+import 'education_reader_screen.dart';
 
-/// Opens a page in the phone's in-app browser (Chrome Custom Tab / Safari view), where the page's own
-/// "Print / Save as PDF" button works. Tests override it.
-typedef PageOpener = Future<bool> Function(Uri url);
+/// The screen a card opens: the page inside the app, under the app's own bar. Tests override it
+/// (a web view can't run in widget tests).
+typedef PageView = Widget Function(EducationPage page, bool canPrint);
 
-final educationOpenerProvider = Provider<PageOpener>(
+final educationPageViewProvider = Provider<PageView>(
   (ref) =>
-      (url) => launchUrl(url, mode: LaunchMode.inAppBrowserView),
+      (page, canPrint) => EducationReaderScreen(page: page, canPrint: canPrint),
 );
 
 enum _Filter {
@@ -47,27 +47,19 @@ class EducationScreen extends ConsumerStatefulWidget {
 
 class _EducationScreenState extends ConsumerState<EducationScreen> {
   _Filter _filter = _Filter.all;
-  String? _opening;
 
-  Future<void> _open(EducationPage p) async {
-    if (_opening != null) return;
-    final messenger = ScaffoldMessenger.of(context);
+  Future<void> _open(EducationPage p, bool canPrint) async {
     if (p.url.isEmpty) {
-      messenger.showSnackBar(const SnackBar(content: Text('Preview build: pages open when connected to the server.')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Preview build: pages open when connected to the server.')));
       return;
     }
-    setState(() => _opening = p.slug);
-    var ok = false;
-    try {
-      ok = await ref.read(educationOpenerProvider)(Uri.parse(p.url));
-    } catch (_) {
-      ok = false;
-    }
+    final view = ref.read(educationPageViewProvider);
+    // Full screen, above the bottom bar, like the rest of the app's detail screens.
+    await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => view(p, canPrint)));
     if (!mounted) return;
-    setState(() => _opening = null);
     // The signed links last a few hours; a fresh list means fresh links next time.
     ref.invalidate(educationPagesProvider);
-    if (!ok) messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the page. Please try again.")));
   }
 
   @override
@@ -116,8 +108,7 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
               children: [
                 if (catalog.canPrint)
                   const Text(
-                    'Free for every YourCounselor user. Pages open in your browser; each has a '
-                    'Print / Save as PDF button.',
+                    'Free for every YourCounselor user. Each page has a Print / Save as PDF button.',
                     style: AppText.smallMuted,
                   )
                 else
@@ -151,7 +142,7 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
                     padding: EdgeInsets.symmetric(vertical: 32),
                     child: Text('Nothing here yet.', style: AppText.bodyMuted, textAlign: TextAlign.center),
                   ),
-                for (final p in shown) _PageCard(page: p, opening: _opening == p.slug, onTap: () => _open(p)),
+                for (final p in shown) _PageCard(page: p, onTap: () => _open(p, catalog.canPrint)),
               ],
             );
           },
@@ -162,11 +153,10 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
 }
 
 class _PageCard extends StatelessWidget {
-  const _PageCard({required this.page, required this.onTap, this.opening = false});
+  const _PageCard({required this.page, required this.onTap});
 
   final EducationPage page;
   final VoidCallback onTap;
-  final bool opening;
 
   IconData get _icon => switch (page.kind) {
     'module' => Icons.menu_book_rounded,
@@ -209,11 +199,9 @@ class _PageCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: opening
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.open_in_new_rounded, size: 20, color: AppColors.royalPurple),
+                const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: Icon(Icons.chevron_right_rounded, size: 24, color: AppColors.royalPurple),
                 ),
               ],
             ),

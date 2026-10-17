@@ -69,10 +69,12 @@ class RenderTests(unittest.TestCase):
             _, free = self.rendered(p.file, can_print=False)
             self.assertGreater(paid.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
             self.assertIn("var CAN_PRINT = true;", paid)
+            self.assertIn('app.callHandler("ycPrint")', paid, "inside the app, the app prints")
             self.assertNotIn("Printing and saving as PDF come with any YourCounselor plan", paid)
             # no plan: no button, printing stays blocked (the browser's own Print shows a note instead)
             self.assertEqual(free.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
             self.assertIn("var CAN_PRINT = false;", free)
+            self.assertNotIn("ycPrint", free)
             self.assertIn("Printing and saving as PDF come with any YourCounselor plan", free)
 
     def test_live_values_never_replace_brand_crisis_or_legal_text(self):

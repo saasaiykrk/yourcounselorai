@@ -301,8 +301,10 @@ The pages in `app/education_web/` (the owner's handover, unchanged) appear in th
 every signed-in user, one card per page titled with the page's own title. Nothing to set up: they ship with the
 server.
 
-- A card opens the page in the phone's browser through a signed link that works for 12 hours (the browser
-  can't send the app's sign-in). Without a valid link the page says "This link has expired".
+- A card opens the page inside the app, full screen under the app's own bar, through a signed link that works
+  for 12 hours (the page view can't send the app's sign-in). Without a valid link the page says "This link has
+  expired". Links to other education pages stay in the app; phone numbers, email and outside websites open on
+  the phone. The PDF handout opens in the app's PDF viewer, with print and share only for plan holders.
 - Reading is free. **Print / Save as PDF comes with a plan:** only a clinician with a plan in effect (bought
   or granted by an admin in Subscriptions & Users; not cancelled, not expired; a single-report purchase counts
   even after it is used) gets the button. Without one, the button is left out, printing from the browser shows

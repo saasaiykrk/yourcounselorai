@@ -9,7 +9,8 @@ gets the button.
 
 The pages are served exactly as supplied. At serving time an add-on is placed before </head> and
 </body>; nothing in the original markup, text or styles is edited:
-  * with a plan: a "Print / Save as PDF" button on every page, and
+  * with a plan: a "Print / Save as PDF" button on every page (inside the app it asks the app, which
+    opens the phone's print / save-as-PDF dialog), and
   * print layout: every section expanded, menus and buttons hidden, A4 margins, no breaks inside
     boxes, rows or figures. The reader modules ship a print block ("Printing is disabled") and a
     beforeprint handler that hides the page; the add-on removes that one print rule from the
@@ -200,7 +201,12 @@ ADDON_JS = """
     b.setAttribute("aria-label", "Print or save this page as a PDF");
     b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>' +
       '<span class="long">Print / Save as PDF</span><span class="short">Print / PDF</span>';
-    b.addEventListener("click", function () { allowPrint(); document.body.style.visibility = ""; expandAll(); window.print(); });
+    b.addEventListener("click", function () {
+      allowPrint(); document.body.style.visibility = ""; expandAll();
+      // Inside the YourCounselor app the page's print call does nothing; the app opens the print dialog.
+      var app = window.flutter_inappwebview;
+      if (app && app.callHandler) app.callHandler("ycPrint"); else window.print();
+    });
     document.body.appendChild(b);
   }/*END PRINT*/
   function ready() { relink(); if (CAN_PRINT) { allowPrint(); button(); } }
