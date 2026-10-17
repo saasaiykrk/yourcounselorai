@@ -1,5 +1,5 @@
-// Education tab: one card per page (the page's own title), filters, opening a page in the browser,
-// fresh links on every visit, errors, and the 320px layout.
+// Education tab: one card per page (the page's own title), filters, opening a page inside the app,
+// fresh links on every visit, errors, links inside a page, and the 320px layout.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,6 +11,7 @@ import 'package:your_counselor/core/api/api_client.dart';
 import 'package:your_counselor/core/api/api_exceptions.dart';
 import 'package:your_counselor/core/education/education_repository.dart';
 import 'package:your_counselor/core/providers.dart';
+import 'package:your_counselor/features/education/education_reader_screen.dart';
 import 'package:your_counselor/features/education/education_screen.dart';
 import 'package:your_counselor/main.dart';
 import 'package:your_counselor/router.dart';
@@ -75,8 +76,9 @@ const _pages = [
   ),
 ];
 
-Future<List<Uri>> _pump(WidgetTester tester, _Repo repo, {double width = 390, bool opens = true}) async {
-  final opened = <Uri>[];
+/// Each page opened: (url, canPrint). The real reader is a web view, which widget tests can't run.
+Future<List<(Uri, bool)>> _pump(WidgetTester tester, _Repo repo, {double width = 390}) async {
+  final opened = <(Uri, bool)>[];
   tester.view.physicalSize = Size(width, 800) * 3;
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
@@ -84,9 +86,9 @@ Future<List<Uri>> _pump(WidgetTester tester, _Repo repo, {double width = 390, bo
     ProviderScope(
       overrides: [
         educationRepositoryProvider.overrideWithValue(repo),
-        educationOpenerProvider.overrideWithValue((u) async {
-          opened.add(u);
-          return opens;
+        educationPageViewProvider.overrideWithValue((page, canPrint) {
+          opened.add((Uri.parse(page.url), canPrint));
+          return Scaffold(appBar: AppBar(title: Text('Reading ${page.title}')));
         }),
       ],
       child: YourCounselorApp(router: buildRouter(initialLocation: '/consult')),
@@ -141,24 +143,40 @@ void main() {
     expect(find.text('See plans'), findsOneWidget);
     await tester.tap(find.text('Therapy Comparison Chart'));
     await tester.pumpAndSettle();
-    expect(opened, hasLength(1), reason: 'the pages themselves stay free');
+    expect(opened.single.$2, isFalse, reason: 'the pages stay free to read; the reader is told: no printing');
   });
 
-  testWidgets('tapping a card opens that page; the list is fetched again for fresh links', (tester) async {
+  testWidgets('a card opens the page inside the app; back returns to fresh links', (tester) async {
     final repo = _Repo(List.of(_pages));
     final opened = await _pump(tester, repo);
-    final before = repo.calls;
     await tester.tap(find.text('Therapy Comparison Chart'));
     await tester.pumpAndSettle();
-    expect(opened, [Uri.parse('https://api.test/learn/therapy-comparison-chart?t=abc')]);
+    expect(opened, [(Uri.parse('https://api.test/learn/therapy-comparison-chart?t=abc'), true)]);
+    expect(find.text('Reading Therapy Comparison Chart'), findsOneWidget);
+    expect(find.text('Account'), findsNothing, reason: 'full screen, above the bottom bar');
+    final before = repo.calls;
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Therapy Comparison Chart'), findsOneWidget);
     expect(repo.calls, greaterThan(before));
   });
 
-  testWidgets('a page that cannot open says so', (tester) async {
-    await _pump(tester, _Repo(List.of(_pages)), opens: false);
-    await tester.tap(find.text('Therapy Comparison Chart'));
-    await tester.pumpAndSettle();
-    expect(find.text("Couldn't open the page. Please try again."), findsOneWidget);
+  test('links inside a page: other pages stay in the app, phone numbers and websites leave, the rest is ignored', () {
+    final page = Uri.parse('https://api.test/learn/cbt?t=abc');
+    expect(linkTarget(page, Uri.parse('https://api.test/learn/dbt?t=abc')), LinkTarget.stay);
+    expect(linkTarget(page, Uri.parse('https://api.test/learn/cbt?t=abc#techniques')), LinkTarget.stay);
+    expect(linkTarget(page, Uri.parse('tel:14416')), LinkTarget.phone);
+    expect(linkTarget(page, Uri.parse('mailto:help@example.org')), LinkTarget.phone);
+    expect(linkTarget(page, Uri.parse('https://www.who.int/')), LinkTarget.phone);
+    expect(linkTarget(page, Uri.parse('https://api.test/v1/me')), LinkTarget.phone, reason: 'not a page: never inside');
+    expect(linkTarget(page, Uri.parse('intent://x#Intent;end')), LinkTarget.block);
+    expect(linkTarget(page, Uri.parse('file:///etc/hosts')), LinkTarget.block);
+  });
+
+  test('page titles lose the brand prefix', () {
+    expect(cleanTitle('YourCounselor | Therapy Comparison Chart'), 'Therapy Comparison Chart');
+    expect(cleanTitle('The Core Eight | YourCounselor'), 'The Core Eight');
+    expect(cleanTitle('Cognitive Behavioural Therapy (CBT)'), 'Cognitive Behavioural Therapy (CBT)');
   });
 
   testWidgets('filters show one kind at a time', (tester) async {
