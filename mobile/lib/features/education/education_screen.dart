@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exceptions.dart';
+import '../../core/api/billing_models.dart';
 import '../../core/education/education_repository.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
@@ -12,11 +13,11 @@ import 'education_reader_screen.dart';
 
 /// The screen a card opens: the page inside the app, under the app's own bar. Tests override it
 /// (a web view can't run in widget tests).
-typedef PageView = Widget Function(EducationPage page, bool canPrint);
+typedef PageView = Widget Function(EducationPage page, PrintOffer? offer);
 
 final educationPageViewProvider = Provider<PageView>(
   (ref) =>
-      (page, canPrint) => EducationReaderScreen(page: page, canPrint: canPrint),
+      (page, offer) => EducationReaderScreen(page: page, offer: offer),
 );
 
 enum _Filter {
@@ -48,7 +49,7 @@ class EducationScreen extends ConsumerStatefulWidget {
 class _EducationScreenState extends ConsumerState<EducationScreen> {
   _Filter _filter = _Filter.all;
 
-  Future<void> _open(EducationPage p, bool canPrint) async {
+  Future<void> _open(EducationPage p, PrintOffer? offer) async {
     if (p.url.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Preview build: pages open when connected to the server.')));
@@ -56,7 +57,7 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
     }
     final view = ref.read(educationPageViewProvider);
     // Full screen, above the bottom bar, like the rest of the app's detail screens.
-    await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => view(p, canPrint)));
+    await Navigator.of(context, rootNavigator: true).push(MaterialPageRoute<void>(builder: (_) => view(p, offer)));
     if (!mounted) return;
     // The signed links last a few hours; a fresh list means fresh links next time.
     ref.invalidate(educationPagesProvider);
@@ -115,8 +116,11 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
                   Wrap(
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Text(
-                        'Free to read for every YourCounselor user. Printing and saving as PDF come with any plan.',
+                      Text(
+                        'Free to read for every YourCounselor user. Printing and saving as PDF come with a '
+                        'subscription${catalog.printOffer == null ? '' : ', or buy a single page for '
+                                  '${formatMoney(catalog.printOffer!.price, catalog.printOffer!.currency)} '
+                                  '(${catalog.printOffer!.hours} hours)'}.',
                         style: AppText.smallMuted,
                       ),
                       TextButton(onPressed: () => context.push('/pricing'), child: const Text('See plans')),
@@ -142,7 +146,7 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
                     padding: EdgeInsets.symmetric(vertical: 32),
                     child: Text('Nothing here yet.', style: AppText.bodyMuted, textAlign: TextAlign.center),
                   ),
-                for (final p in shown) _PageCard(page: p, onTap: () => _open(p, catalog.canPrint)),
+                for (final p in shown) _PageCard(page: p, onTap: () => _open(p, catalog.printOffer)),
               ],
             );
           },
@@ -150,6 +154,15 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
       ),
     );
   }
+}
+
+/// "3:05 pm" today, otherwise "17 Oct, 3:05 pm".
+String _until(DateTime t) {
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final time = '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'am' : 'pm'}';
+  final now = DateTime.now();
+  return t.year == now.year && t.month == now.month && t.day == now.day ? time : '${t.day} ${m[t.month - 1]}, $time';
 }
 
 class _PageCard extends StatelessWidget {
@@ -194,7 +207,15 @@ class _PageCard extends StatelessWidget {
                         Text(page.summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppText.caption),
                       ],
                       const SizedBox(height: 8),
-                      StatusPill(page.kindLabel, tone: Tone.neutral),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          StatusPill(page.kindLabel, tone: Tone.neutral),
+                          if (page.printUntil != null)
+                            StatusPill('Print until ${_until(page.printUntil!)}', icon: Icons.print_outlined),
+                        ],
+                      ),
                     ],
                   ),
                 ),

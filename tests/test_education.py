@@ -4,6 +4,7 @@ import importlib.util
 import os
 import re
 import unittest
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from app import education
@@ -61,21 +62,23 @@ class RenderTests(unittest.TestCase):
                                 " var u = (window.__YC_APP__.links || {})[slug]; if (u) location.href = u; } });\n", "")
             self.assertEqual(back, src, p.file)
 
-    def test_print_button_only_with_a_plan(self):
+    def test_the_button_shows_for_everyone_and_prints_only_when_unlocked(self):
         for p in CATALOG:
             if p.kind == "handout":
                 continue
             src, paid = self.rendered(p.file, can_print=True)
             _, free = self.rendered(p.file, can_print=False)
-            self.assertGreater(paid.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+            for out in (paid, free):
+                self.assertGreater(out.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
             self.assertIn("var CAN_PRINT = true;", paid)
             self.assertIn("app.postMessage(snapshot())", paid, "inside the app, the app prints")
-            self.assertNotIn("Printing and saving as PDF come with any YourCounselor plan", paid)
-            # no plan: no button, printing stays blocked (the browser's own Print shows a note instead)
-            self.assertEqual(free.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+            self.assertNotIn("body *{display:none!important}", paid, "unlocked: printing is not blocked")
+            # locked: the button asks the app to offer a single print; printing itself stays blocked
             self.assertIn("var CAN_PRINT = false;", free)
-            self.assertNotIn("YCApp", free)
-            self.assertIn("Printing and saving as PDF come with any YourCounselor plan", free)
+            self.assertIn('app.postMessage("yc:buy")', free)
+            self.assertNotIn("function snapshot", free, "nothing to print with is sent")
+            self.assertIn(education.LOCKED_NOTE, free)
+            self.assertIn("body *{display:none!important}", free)
 
     def test_live_values_never_replace_brand_crisis_or_legal_text(self):
         src, out = self.rendered("YourCounselor_Cognitive_Behavioural_Therapy_CBT.html",
@@ -91,15 +94,20 @@ class RenderTests(unittest.TestCase):
 
 
 class ServiceTests(unittest.TestCase):
-    def test_print_needs_a_plan_and_fails_closed(self):
-        svc = lambda f: education.EducationService(Signer(b"k"), lambda u: None, CATALOG, has_plan=f)
-        self.assertTrue(svc(lambda u: u == "paid").can_print("paid"))
-        self.assertFalse(svc(lambda u: u == "paid").can_print("free"))
-        self.assertFalse(education.EducationService(Signer(b"k"), lambda u: None, CATALOG).can_print("x"))
+    def test_access_is_per_page_and_fails_closed(self):
+        A = education.PrintAccess
+        svc = lambda f: education.EducationService(Signer(b"k"), lambda u: None, CATALOG, access=f)  # noqa: E731
+        everything = svc(lambda u: A(everything=True)).print_access("sub")
+        self.assertTrue(everything.allows("cbt") and everything.allows("dbt"))
+        one = svc(lambda u: A(pages={"cbt": "later"})).print_access("pass")
+        self.assertTrue(one.allows("cbt"))
+        self.assertFalse(one.allows("dbt"), "a single print is for its page only")
+        self.assertFalse(education.EducationService(Signer(b"k"), lambda u: None, CATALOG).print_access("x").allows("cbt"))
 
         def broken(u):
             raise RuntimeError("database down")
-        self.assertFalse(svc(broken).can_print("paid"), "an error never unlocks printing")
+        self.assertEqual(svc(broken).print_access("sub"), A(), "an error never unlocks printing")
+        self.assertEqual(svc(lambda u: True).print_access("sub"), A(), "only a PrintAccess counts")
 
 
 class SignerTests(unittest.TestCase):
@@ -120,10 +128,10 @@ class SignerTests(unittest.TestCase):
 class ApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
-        self.plans = {"dev-clinician"}
-        orig = main.EDUCATION.has_plan
-        main.EDUCATION.has_plan = lambda u: u in self.plans
-        self.addCleanup(setattr, main.EDUCATION, "has_plan", orig)
+        self.access = education.PrintAccess(everything=True)
+        orig = main.EDUCATION.access
+        main.EDUCATION.access = lambda u: self.access
+        self.addCleanup(setattr, main.EDUCATION, "access", orig)
 
     def get(self, url):
         u = urlparse(url)
@@ -146,15 +154,28 @@ class ApiTests(unittest.TestCase):
         pdf = self.get(next(p for p in pages if p["kind"] == "handout")["url"])
         self.assertEqual((pdf.status_code, pdf.headers["content-type"]), (200, "application/pdf"))
 
-    def test_without_a_plan_no_print_button_and_no_handout_downloads(self):
-        self.plans.clear()
+    def test_pricing_off_in_dev_means_everyone_prints(self):
+        main.EDUCATION.access = main._print_access
         r = self.client.get("/v1/education", headers={"Authorization": "Bearer dev-L1"})
-        self.assertFalse(r.json()["can_print"])
-        cbt = next(p for p in r.json()["pages"] if p["slug"] == "cbt")
-        page = self.get(cbt["url"])
-        self.assertEqual(page.status_code, 200, "the page itself stays free")
-        self.assertIn("var CAN_PRINT = false;", page.text)
-        self.assertIn('"subscriptionActive": false', page.text, "the module's own handout print is locked too")
+        self.assertTrue(r.json()["can_print"])
+        self.assertIsNone(r.json()["print_offer"])
+
+    def test_locked_pages_offer_a_single_print_and_a_pass_unlocks_its_page_only(self):
+        offer = {"price": 4900, "currency": "INR", "hours": 24, "name": "Print one page"}
+        self.access = education.PrintAccess(pages={"cbt": datetime(2030, 1, 1, tzinfo=timezone.utc)}, offer=offer)
+        r = self.client.get("/v1/education", headers={"Authorization": "Bearer dev-L1"}).json()
+        self.assertFalse(r["can_print"])
+        self.assertEqual(r["print_offer"], offer)
+        pages = {p["slug"]: p for p in r["pages"]}
+        self.assertEqual((pages["cbt"]["can_print"], pages["cbt"]["print_until"]), (True, "2030-01-01T00:00:00+00:00"))
+        self.assertEqual((pages["dbt"]["can_print"], pages["dbt"]["print_until"]), (False, None))
+        cbt, dbt = self.get(pages["cbt"]["url"]).text, self.get(pages["dbt"]["url"]).text
+        self.assertIn("var CAN_PRINT = true;", cbt)
+        self.assertIn('"subscriptionActive": true', cbt)
+        self.assertEqual(self.get(pages["dbt"]["url"]).status_code, 200, "the page itself stays free")
+        self.assertIn("var CAN_PRINT = false;", dbt)
+        self.assertIn("Print / Save as PDF", dbt, "the button shows; locked, it offers the purchase")
+        self.assertIn('"subscriptionActive": false', dbt, "the module's own handout print is locked too")
 
     def test_pages_need_a_valid_link(self):
         for path in ("/learn/cbt", "/learn/cbt?t=nope", "/learn/file/YourCounselor_Case_History_and_MSE_Practice_Handout.pdf"):
