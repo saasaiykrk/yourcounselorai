@@ -83,6 +83,31 @@ class PriceTests(unittest.TestCase):
         with self.assertRaises(billing.NotPurchasable):
             billing.price_for(self.c, "sub_30", None)
 
+    def test_a_single_print_is_one_page_for_the_admins_hours(self):
+        p = billing.price_for(self.c, "print", None, item="cbt")
+        self.assertEqual((p.amount, p.credits, p.days, p.item, p.report_type), (4900, 0, None, "cbt", None))
+        self.assertEqual(self.c["plans"]["print"]["hours"], 24)
+        for item in (None, ""):
+            with self.assertRaises(billing.NotPurchasable, msg=item):
+                billing.price_for(self.c, "print", None, item=item)
+        with self.assertRaises(billing.NotPurchasable):
+            billing.price_for(self.c, "print", "guided", item="cbt")
+        with self.assertRaises(billing.NotPurchasable, msg="a page is only for a single print"):
+            billing.price_for(self.c, "sub_30", None, item="cbt")
+        self.c["plans"]["print"]["enabled"] = False
+        with self.assertRaises(billing.NotPurchasable):
+            billing.price_for(self.c, "print", None, item="cbt")
+
+    def test_single_print_settings_are_checked(self):
+        for bad in ({"price": -1}, {"hours": 0}, {"hours": 24 * 8}):
+            c = cfg()
+            c["plans"]["print"].update(bad)
+            with self.assertRaises(billing.ConfigError, msg=bad):
+                billing.validate(c)
+        old = copy.deepcopy(billing.DEFAULT_CONFIG)
+        del old["plans"]["print"]
+        self.assertEqual(billing.validate(old)["plans"]["print"]["price"], 4900, "saved configs from before get the default")
+
     def test_app_sees_only_enabled_visible_plans_in_order(self):
         self.c["plans"]["sub_50"]["visible"] = False
         self.c["plans"]["byok"].update(enabled=True, order=0)
@@ -90,6 +115,7 @@ class PriceTests(unittest.TestCase):
         self.assertEqual([p["id"] for p in view["plans"]], ["byok", "per_report", "sub_30"])
         self.assertEqual(view["plans"][2], {**view["plans"][2], "kind": "subscription", "price": 199900, "reports": 30})
         self.assertNotIn("consumes_credits", view["plans"][1])
+        self.assertNotIn("print", [p["id"] for p in view["plans"]], "bought from the page, not the plans list")
 
 
 if __name__ == "__main__":

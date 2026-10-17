@@ -20,6 +20,7 @@ import os
 import unittest
 import uuid
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 URL = os.environ.get("TEST_DATABASE_URL", "")
 HAVE = bool(URL) and all(importlib.util.find_spec(m) for m in ("fastapi", "httpx", "psycopg", "cryptography",
@@ -35,6 +36,10 @@ if HAVE:
     from app import billing, billing_db, byok, db, main
     from app.pipeline import Pipeline
     from app.razorpay import Razorpay
+
+    def _sql_exec(q, *a):
+        with psycopg.connect(URL, autocommit=True) as c:
+            c.execute(q, a)
     db._DSN = URL
 
 KEY_SECRET, WEBHOOK_SECRET = "test_key_secret", "test_webhook_secret"
@@ -346,6 +351,76 @@ class BillingApiTests(unittest.TestCase):
         self.assertEqual(r.json()["order"]["amount"], 199900, "an amount sent by the app is ignored")
         plans = self.client.get("/v1/billing/plans").json()
         self.assertEqual([p["id"] for p in plans["plans"]], ["per_report", "sub_30"])
+
+    # --- single print (education pages) -------------------------------------------------------
+    def paid(self, order):
+        r = self.verify(order, self.rzp.pay(order["checkout"]["order_id"]))
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()["order"]
+
+    def education(self):
+        r = self.client.get("/v1/education")
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()
+
+    def page(self, edu, slug):
+        url = next(p["url"] for p in edu["pages"] if p["slug"] == slug)
+        u = urlsplit(url)
+        return self.client.get(u.path + "?" + u.query).text
+
+    def test_pricing_off_everyone_prints_and_nothing_is_sold(self):
+        edu = self.education()
+        self.assertTrue(edu["can_print"])
+        self.assertIn("var CAN_PRINT = true;", self.page(edu, "cbt"))
+        r = self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt"})
+        self.assertEqual(r.status_code, 409, "pricing off: nothing to buy")
+
+    def test_single_print_unlocks_that_page_for_24_hours(self):
+        self.configure({"enabled": True})
+        edu = self.education()
+        self.assertFalse(edu["can_print"])
+        self.assertEqual(edu["print_offer"], {"price": 4900, "currency": "INR", "hours": 24, "name": "Print one page"})
+        self.assertIn("var CAN_PRINT = false;", self.page(edu, "cbt"))
+        for bad in ({"plan": "print"}, {"plan": "print", "item": "no-such-page"}, {"plan": "print", "item": "../x"},
+                    {"plan": "sub_30", "item": "cbt"}):
+            self.assertIn(self.client.post("/v1/billing/orders", json=bad).status_code, (409, 422), bad)
+        o = self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt", "amount": 1}).json()
+        self.assertEqual((o["order"]["amount"], o["order"]["item"]), (4900, "cbt"), "the price is the server's")
+        self.assertIn("Cognitive Behavioural Therapy (CBT)", o["checkout"]["description"])
+        self.assertEqual(self.paid(o)["status"], "paid")
+        edu = self.education()
+        cards = {p["slug"]: p for p in edu["pages"]}
+        self.assertTrue(cards["cbt"]["can_print"])
+        self.assertIsNotNone(cards["cbt"]["print_until"])
+        self.assertFalse(cards["dbt"]["can_print"], "that page only")
+        self.assertIn("var CAN_PRINT = true;", self.page(edu, "cbt"))
+        self.assertIn("var CAN_PRINT = false;", self.page(edu, "dbt"))
+        self.assertEqual(self.balance()["any"], 0, "no report credits")
+        _sql_exec("update entitlements set expires_at = now() - interval '1 minute' where clinician_id=%s and plan='print'",
+                  self.cid)
+        self.assertFalse({p["slug"]: p for p in self.education()["pages"]}["cbt"]["can_print"], "ends after 24 hours")
+
+    def test_a_subscription_prints_every_page_and_is_not_sold_a_single_print(self):
+        self.configure({"enabled": True})
+        self.paid(self.buy("sub_30"))
+        edu = self.education()
+        self.assertTrue(edu["can_print"])
+        self.assertIsNone(edu["print_offer"])
+        self.assertIn("var CAN_PRINT = true;", self.page(edu, "dbt"))
+        r = self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt"})
+        self.assertEqual(r.json()["detail"]["error"], "already_active")
+
+    def test_a_single_report_purchase_does_not_unlock_printing(self):
+        self.configure({"enabled": True})
+        self.paid(self.buy("per_report", "direct"))
+        self.assertFalse(self.education()["can_print"])
+
+    def test_single_print_switched_off_is_not_offered(self):
+        c = billing.validate({"enabled": True})
+        c["plans"]["print"]["enabled"] = False
+        self.configure(c)
+        self.assertIsNone(self.education()["print_offer"])
+        self.assertEqual(self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt"}).status_code, 409)
 
     # --- own Anthropic key -----------------------------------------------------------------------
     def byok_on(self, **plan):

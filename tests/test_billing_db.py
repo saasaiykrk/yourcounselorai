@@ -146,6 +146,56 @@ class BillingDbTests(unittest.TestCase):
         self.assertTrue(billing_db.byok_access(self.cid))
         self.assertEqual(b["starts_at"], a["expires_at"], "a renewal starts when the paid period ends")
 
+    def test_has_subscription_counts_only_running_plans(self):
+        self.assertFalse(billing_db.has_subscription(self.cid), "nothing bought yet")
+        unpaid = self.order("sub_30")
+        self.assertFalse(billing_db.has_subscription(self.cid), "an unpaid order is not a plan")
+        billing_db.fulfil(self.order("per_report", "guided")["id"], pay(), self.cfg)
+        self.assertFalse(billing_db.has_subscription(self.cid), "a single report is not a subscription")
+        e = billing_db.fulfil(unpaid["id"], pay(), self.cfg)
+        self.assertTrue(billing_db.has_subscription(self.cid))
+        _sql("update entitlements set credits_used = 30 where id=%s", str(e["id"]))
+        self.assertTrue(billing_db.has_subscription(self.cid), "still running after its credits are used")
+        _sql("update entitlements set expires_at = now() - interval '1 minute' where id=%s", str(e["id"]))
+        self.assertFalse(billing_db.has_subscription(self.cid), "an expired subscription")
+        billing_db.admin_grant(self.cid, "manual", self.admin, "beta tester", self.cfg, 5, 30)
+        self.assertTrue(billing_db.has_subscription(self.cid), "an admin grant counts")
+        self.assertFalse(billing_db.has_subscription("not-a-uuid"), "a bad id is simply no plan")
+
+    def test_a_refund_that_revokes_the_subscription_ends_it(self):
+        o = self.order("sub_50")
+        billing_db.fulfil(o["id"], pay(), self.cfg)
+        self.assertTrue(billing_db.has_subscription(self.cid))
+        billing_db.record_refund(o["id"], "rfnd_s", 299900, self.admin, True, "refund")
+        self.assertFalse(billing_db.has_subscription(self.cid))
+
+    def print_order(self, item="cbt"):
+        o = billing_db.create_order(self.cid, billing.price_for(self.cfg, "print", None, item=item), 1)
+        billing_db.set_provider_order(o["id"], "order_" + uuid.uuid4().hex[:14])
+        return o
+
+    def test_single_print_unlocks_one_page_for_its_hours(self):
+        self.assertEqual(billing_db.print_passes(self.cid), {})
+        o = self.print_order("cbt")
+        self.assertEqual(billing_db.get_order(o["id"])["item"], "cbt")
+        self.assertEqual(billing_db.print_passes(self.cid), {}, "not until it is paid")
+        e = billing_db.fulfil(o["id"], pay(), self.cfg)
+        self.assertEqual((e["plan"], e["item"], e["credits_total"]), ("print", "cbt", 0))
+        self.assertAlmostEqual((e["expires_at"] - e["starts_at"]).total_seconds(), 24 * 3600, delta=2)
+        passes = billing_db.print_passes(self.cid)
+        self.assertEqual(list(passes), ["cbt"], "that page only")
+        self.assertEqual(billing_db.entitlements(self.cid)[0]["state"], "active", "no credits, still active")
+        self.assertEqual(billing_db.balance(self.cid)["any"], 0, "a print pass is not a report credit")
+        self.assertFalse(billing_db.has_subscription(self.cid), "nor a subscription")
+        # buying the same page again later extends from now; the pass with the later end wins
+        billing_db.fulfil(self.print_order("cbt")["id"], pay(), self.cfg)
+        self.assertGreaterEqual(billing_db.print_passes(self.cid)["cbt"], passes["cbt"])
+        _sql("update entitlements set expires_at = now() - interval '1 minute' where clinician_id=%s and plan='print'",
+             self.cid)
+        self.assertEqual(billing_db.print_passes(self.cid), {}, "ended after its hours")
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            _sql("insert into entitlements (clinician_id, plan, credits_total) values (%s,'print',0)", self.cid)
+
     def test_admin_adjust_extend_deactivate_are_audited(self):
         e = billing_db.fulfil(self.order("sub_30")["id"], pay(), self.cfg)
         billing_db.admin_adjust(self.cid, 5, self.admin, "goodwill")

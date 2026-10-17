@@ -159,8 +159,10 @@ class ApiClient {
   Future<BillingStatus> billingStatus() async => BillingStatus.fromJson(await _send('GET', '/v1/billing/me'));
 
   /// Starts a purchase. The server prices it; the app never sends an amount.
-  Future<OrderStart> createOrder({required String plan, String? reportType}) async =>
-      OrderStart.fromJson(await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType}));
+  /// [item]: a single print's education page (slug).
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async => OrderStart.fromJson(
+    await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType, 'item': ?item}),
+  );
 
   /// Checkout finished: the server checks the signature AND asks Razorpay before granting anything.
   Future<BillingOrder> verifyPayment(
@@ -261,10 +263,7 @@ class ApiClient {
   // --- Education (free for every signed-in user) ---
 
   /// The teaching pages, each with a fresh signed link.
-  Future<List<EducationPage>> education() async => [
-    for (final p in ((await _send('GET', '/v1/education'))['pages'] as List? ?? const []))
-      EducationPage.fromJson(p as Map<String, dynamic>),
-  ];
+  Future<EducationCatalog> education() async => EducationCatalog.fromJson(await _send('GET', '/v1/education'));
 
   // --- calendar and online booking (the consultant's own) ---
 

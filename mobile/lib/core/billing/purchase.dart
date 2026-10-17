@@ -42,10 +42,10 @@ class PurchaseFlow {
   final Duration pollEvery;
   final int pollTimes;
 
-  Future<PurchaseOutcome> buy({required String plan, String? reportType}) async {
+  Future<PurchaseOutcome> buy({required String plan, String? reportType, String? item}) async {
     final OrderStart start;
     try {
-      start = await _repo.createOrder(plan: plan, reportType: reportType);
+      start = await _repo.createOrder(plan: plan, reportType: reportType, item: item);
     } on BillingRefused catch (e) {
       return PurchaseFailed(e.message);
     } on NetworkProblem {

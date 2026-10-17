@@ -9,7 +9,8 @@ abstract interface class BillingRepository {
 
   Future<BillingStatus> status();
 
-  Future<OrderStart> createOrder({required String plan, String? reportType});
+  /// [item]: a single print's education page (slug).
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item});
 
   Future<BillingOrder> verify(String orderId, CheckoutCompleted payment);
 
@@ -40,8 +41,8 @@ class ApiBillingRepository implements BillingRepository {
   Future<BillingStatus> status() => _api.billingStatus();
 
   @override
-  Future<OrderStart> createOrder({required String plan, String? reportType}) =>
-      _api.createOrder(plan: plan, reportType: reportType);
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) =>
+      _api.createOrder(plan: plan, reportType: reportType, item: item);
 
   @override
   Future<BillingOrder> verify(String orderId, CheckoutCompleted p) =>
@@ -80,7 +81,7 @@ class PreviewBillingRepository implements BillingRepository {
   Future<BillingStatus> status() async => const BillingStatus(enabled: false);
 
   @override
-  Future<OrderStart> createOrder({required String plan, String? reportType}) async => throw _off;
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async => throw _off;
 
   @override
   Future<BillingOrder> verify(String orderId, CheckoutCompleted payment) async => throw _off;

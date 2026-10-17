@@ -51,8 +51,9 @@ class Funding:
 
 
 class OrderIn(BaseModel):
-    plan: str = Field(pattern="^(per_report|sub_30|sub_50|byok)$")
+    plan: str = Field(pattern="^(per_report|sub_30|sub_50|byok|print)$")
     report_type: str | None = Field(default=None, pattern="^(guided|direct)$")
+    item: str | None = Field(default=None, pattern="^[a-z0-9-]{1,80}$")     # single print: the page
 
 
 class VerifyPaymentIn(BaseModel):
@@ -124,6 +125,7 @@ class BillingService:
         self.vault = byok.Vault.from_secrets(cfg.byok_encryption_key, cfg.byok_encryption_key_previous,
                                              cfg.byok_key_version)
         self._cached = None
+        self.print_items: dict[str, str] = {}     # education pages a single print may name: {slug: title}
 
     # --- configuration -------------------------------------------------------------------
     CACHE_SECONDS = 15
@@ -290,13 +292,19 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
     def billing_order(body: OrderIn, c: dict = Depends(verified_clinician)):
         _need_store()
         version, cfg = svc.config()
+        if body.plan == "print":
+            if body.item not in svc.print_items:
+                raise HTTPException(409, {"error": "not_purchasable", "message": "unknown page"})
+            if svc.store.has_subscription(c["id"]):
+                raise HTTPException(409, {"error": "already_active",
+                                          "message": "Your subscription already includes printing."})
         try:
-            price = billing.price_for(cfg, body.plan, body.report_type)
+            price = billing.price_for(cfg, body.plan, body.report_type, item=body.item)
         except billing.NotPurchasable as e:
             raise HTTPException(409, {"error": "not_purchasable", "message": e.detail})
         if price.amount == 0:
             # A free plan: granted at once, at most one running at a time.
-            if any(e["plan"] == body.plan and e["state"] in ("active", "scheduled")
+            if any(e["plan"] == body.plan and e.get("item") == price.item and e["state"] in ("active", "scheduled")
                    for e in svc.store.entitlements(c["id"])):
                 raise HTTPException(409, {"error": "already_active", "message": "This plan is already active."})
             o = svc.store.create_order(c["id"], price, version)
@@ -318,7 +326,8 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         return {"order": _order_view(svc.store.get_order(o["id"])),
                 "checkout": {"key": svc.cfg.razorpay_key_id, "order_id": ro["id"], "amount": price.amount,
                              "currency": price.currency, "name": "YourCounselor",
-                             "description": plan["name"] + (f" · {price.report_type}" if price.report_type else "")}}
+                             "description": plan["name"] + (f" · {price.report_type}" if price.report_type else "")
+                             + (f" · {svc.print_items[price.item]}"[:250] if price.item else "")}}
 
     def _finish(order: dict, payment: dict, cfg: dict) -> dict:
         """Apply Razorpay's own record of a payment to our order (shared by verify, poll and webhook)."""
@@ -580,7 +589,7 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
 
     @app.get("/v1/admin/payments")
     def admin_payments(status: str | None = Query(None, pattern="^(created|pending|paid|failed|cancelled|refunded)$"),
-                       plan: str | None = Query(None, pattern="^(per_report|sub_30|sub_50|byok)$"),
+                       plan: str | None = Query(None, pattern="^(per_report|sub_30|sub_50|byok|print)$"),
                        q: str | None = Query(None, max_length=100),
                        since: datetime | None = None, until: datetime | None = None, a: dict = Depends(admin)):
         _need_store()

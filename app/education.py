@@ -1,5 +1,8 @@
 """
-Education module: the owner's teaching pages (app/education_web/), free for every signed-in user.
+Education module: the owner's teaching pages (app/education_web/), free to read for every signed-in user.
+Printing and saving as PDF: free while pricing is off; otherwise with a running subscription (every
+page) or a single print bought for one page (24 hours by default). The button shows for everyone;
+locked, it offers the single print in the app (see PrintAccess and main._print_access).
 
   GET /v1/education            → the cards: title, short description, kind, and a signed link per page
   GET /learn/{slug}?t=…        → the page itself, as supplied, plus a small add-on (see below)
@@ -7,12 +10,18 @@ Education module: the owner's teaching pages (app/education_web/), free for ever
 
 The pages are served exactly as supplied. At serving time an add-on is placed before </head> and
 </body>; nothing in the original markup, text or styles is edited:
-  * a "Print / Save as PDF" button on every page;
+  * a "Print / Save as PDF" button on every page. Unlocked, inside the app it hands the app the page
+    as it looks now, which the app prints through the phone's print / save-as-PDF dialog; with
+    unlocked printing comes the
   * print layout: every section expanded, menus and buttons hidden, A4 margins, no breaks inside
     boxes, rows or figures. The reader modules ship a print block ("Printing is disabled") and a
     beforeprint handler that hides the page; the add-on removes that one print rule from the
     stylesheet and undoes the handler, so the page prints. Copy protection and the viewer
     watermark stay on;
+  * locked: the button asks the app to offer the single print (in a browser it shows a note), and
+    printing stays blocked (the browser's own Print shows the note); the modules get
+    subscriptionActive false, which locks their handout downloads, since those would otherwise
+    open a print window;
   * reader modules get the live config the README asks for (viewer name and email for the
     watermark, the published module list, navigation between modules), merged into the
     supplied sample config, so brand, crisis and legal text stay exactly as supplied;
@@ -32,7 +41,7 @@ import json
 import pathlib
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 try:  # the catalog, renderer and signer are stdlib-only; the routes need FastAPI
     from fastapi import Depends, FastAPI, HTTPException, Request
@@ -140,18 +149,30 @@ ADDON_CSS = """
   summary::after,details.section>summary::after{content:none!important;display:none!important}
   h1,h2,h3,h4,summary{break-after:avoid;page-break-after:avoid}
   .box,figure,.dg-slot,svg,tr,img,.card,blockquote{break-inside:avoid;page-break-inside:avoid}
-  table{break-inside:auto}thead{display:table-header-group}
+  table{break-inside:auto;min-width:0!important;width:100%!important;table-layout:auto!important}
+  thead{display:table-header-group}th,td{overflow-wrap:break-word;min-width:0!important}
   p,li{orphans:3;widows:3}
   .table-wrap,.table-scroll{overflow:visible!important}
   a[href^="http"]::after{content:""}
 }
 </style>"""
+LOCKED_NOTE = "Printing and saving as PDF come with a YourCounselor subscription, or buy this page in the app."
+# Not unlocked: printing stays blocked on every page (the modules block it already; this covers the rest).
+NO_PRINT_CSS = """@media print{
+  body *{display:none!important}
+  body::after{content:"__NOTE__";display:block!important;
+    padding:40px;font:18px/1.5 "Nunito Sans",system-ui,sans-serif;color:#3F0079}
+}
+.yc-edu-note{position:fixed;left:16px;right:16px;bottom:72px;z-index:2147483000;max-width:420px;padding:12px 14px;
+  border-radius:12px;background:#1E1030;color:#fff;font:600 14px/1.4 "Nunito Sans",system-ui,sans-serif}
+""".replace("__NOTE__", LOCKED_NOTE)
 
 ADDON_JS = """
 <script id="yc-edu-addon-js">
 (function () {
   "use strict";
   var LINKS = __LINKS__;
+  var CAN_PRINT = __PRINT__;
   // 1. Printing on: drop only the "Printing is disabled" print rule, and undo the hide-on-print handler.
   function allowPrint() {
     for (var i = 0; i < document.styleSheets.length; i++) {
@@ -168,8 +189,10 @@ ADDON_JS = """
     reopen = [];
     document.querySelectorAll("details:not([open])").forEach(function (d) { d.open = true; reopen.push(d); });
   }
-  window.addEventListener("beforeprint", function () { document.body.style.visibility = ""; expandAll(); });
-  window.addEventListener("afterprint", function () { reopen.forEach(function (d) { d.open = false; }); reopen = []; });
+  if (CAN_PRINT) {
+    window.addEventListener("beforeprint", function () { document.body.style.visibility = ""; expandAll(); });
+    window.addEventListener("afterprint", function () { reopen.forEach(function (d) { d.open = false; }); reopen = []; });
+  }
   // 2. Links to other pages by file name → the signed page link.
   function relink(root) {
     (root || document).querySelectorAll("a[href]").forEach(function (a) {
@@ -177,7 +200,34 @@ ADDON_JS = """
       if (LINKS[name]) { a.setAttribute("href", LINKS[name]); a.removeAttribute("target"); }
     });
   }
-  // 3. The button.
+  // 3. The button. Unlocked, it prints; otherwise inside the app it offers the purchase (the app asks the
+  //    server again afterwards), and in a browser it explains.
+  function locked() {
+    var app = window.YCApp;
+    if (app && app.postMessage) { app.postMessage("yc:buy"); return; }
+    var n = document.querySelector(".yc-edu-note");
+    if (!n) {
+      n = document.createElement("div"); n.className = "yc-edu-note"; n.setAttribute("role", "status");
+      n.textContent = __NOTE__; document.body.appendChild(n);
+    }
+    clearTimeout(n._t); n.hidden = false; n._t = setTimeout(function () { n.hidden = true; }, 6000);
+  }
+  /*PRINT*/
+  // Inside the YourCounselor app the page's print call does nothing. The app gets the page as it looks now
+  // (every section open, the print block removed, no scripts) and prints that.
+  function snapshot() {
+    var clone = document.documentElement.cloneNode(true);
+    var live = document.querySelectorAll("style"), copy = clone.querySelectorAll("style");
+    for (var i = 0; i < live.length && i < copy.length; i++) {
+      try {
+        var rules = live[i].sheet && live[i].sheet.cssRules;
+        if (rules) copy[i].textContent = Array.prototype.map.call(rules, function (r) { return r.cssText; }).join("\\n");
+      } catch (e) {}
+    }
+    clone.querySelectorAll("script,noscript,.yc-edu-print").forEach(function (n) { n.remove(); });
+    return "<!doctype html>\\n" + clone.outerHTML;
+  }
+  /*END PRINT*/
   function button() {
     if (document.querySelector(".yc-edu-print")) return;
     var b = document.createElement("button");
@@ -185,19 +235,25 @@ ADDON_JS = """
     b.setAttribute("aria-label", "Print or save this page as a PDF");
     b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>' +
       '<span class="long">Print / Save as PDF</span><span class="short">Print / PDF</span>';
-    b.addEventListener("click", function () { allowPrint(); document.body.style.visibility = ""; expandAll(); window.print(); });
+    b.addEventListener("click", function () {
+      if (!CAN_PRINT) { locked(); return; }
+      allowPrint(); document.body.style.visibility = ""; expandAll();
+      var app = window.YCApp;
+      if (app && app.postMessage) app.postMessage(snapshot()); else window.print();
+    });
     document.body.appendChild(b);
   }
-  function ready() { allowPrint(); relink(); button(); }
+  function ready() { relink(); button(); if (CAN_PRINT) allowPrint(); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ready); else ready();
-  window.addEventListener("load", function () { allowPrint(); relink(); });
+  window.addEventListener("load", function () { relink(); if (CAN_PRINT) allowPrint(); });
   new MutationObserver(function () { relink(); }).observe(document.documentElement, { childList: true, subtree: true });
 })();
 </script>"""
 
 
-def render(page: Page, src: str, links: dict[str, str], app_config: dict | None) -> str:
-    """The supplied page with the add-on placed before </head> and </body>."""
+def render(page: Page, src: str, links: dict[str, str], app_config: dict | None, can_print: bool = False) -> str:
+    """The supplied page with the add-on placed before </head> and </body>.
+    can_print: this viewer may print this page (see PrintAccess)."""
     out = src
     if page.reader and app_config is not None:
         # The supplied sample config stays; the live values are merged in just before mount.
@@ -209,9 +265,13 @@ def render(page: Page, src: str, links: dict[str, str], app_config: dict | None)
         nav = ("Object.assign(window.YC_CONFIG, window.__YC_APP__, { onNavigate: function (slug) {"
                " var u = (window.__YC_APP__.links || {})[slug]; if (u) location.href = u; } });\n")
         out = out[:i] + nav + out[i:]
-    out = out.replace("</head>", ADDON_CSS + "\n</head>", 1)
+    css = ADDON_CSS if can_print else ADDON_CSS.replace("</style>", NO_PRINT_CSS + "</style>")
+    out = out.replace("</head>", css + "\n</head>", 1)
     j = out.rfind("</body>")
-    addon = ADDON_JS.replace("__LINKS__", _js(links))
+    addon = (ADDON_JS.replace("__LINKS__", _js(links)).replace("__PRINT__", "true" if can_print else "false")
+             .replace("__NOTE__", _js(LOCKED_NOTE)))
+    if not can_print:
+        addon = re.sub(r"/\*PRINT\*/.*?/\*END PRINT\*/", "", addon, flags=re.S)
     return out[:j] + addon + "\n" + out[j:] if j >= 0 else out + addon
 
 
@@ -234,9 +294,23 @@ PAGE_HEADERS = {
 }
 
 
+@dataclass(frozen=True)
+class PrintAccess:
+    """Who may print which page. everything: pricing is off, or a running subscription. pages: single
+    prints still running, {slug: ends at}. offer: a single print for sale ({price, currency, hours}), or None."""
+    everything: bool = False
+    pages: dict = field(default_factory=dict)
+    offer: dict | None = None
+
+    def allows(self, slug: str) -> bool:
+        return self.everything or slug in self.pages
+
+
 class EducationService:
-    def __init__(self, signer: Signer, viewer_lookup, catalog: list[Page] | None = None, region: str = "IN"):
-        self.signer, self.viewer_lookup, self.region = signer, viewer_lookup, region
+    def __init__(self, signer: Signer, viewer_lookup, catalog: list[Page] | None = None, region: str = "IN",
+                 access=None):
+        """access(user_id) → PrintAccess (main.py: pricing, subscriptions and single prints)."""
+        self.signer, self.viewer_lookup, self.region, self.access = signer, viewer_lookup, region, access
         self.catalog = catalog if catalog is not None else load_catalog()
         self.by_slug = {p.slug: p for p in self.catalog}
         self._src: dict[str, str] = {}
@@ -245,6 +319,16 @@ class EducationService:
         if page.file not in self._src:
             self._src[page.file] = (WEB / page.file).read_text(encoding="utf-8")
         return self._src[page.file]
+
+    def print_access(self, user_id: str) -> PrintAccess:
+        """Fails closed: no lookup, or any error, means no printing (and nothing on offer)."""
+        if self.access is None:
+            return PrintAccess()
+        try:
+            a = self.access(user_id)
+            return a if isinstance(a, PrintAccess) else PrintAccess()
+        except Exception:
+            return PrintAccess()
 
     def url(self, base: str, page: Page, token: str) -> str:
         path = f"/learn/file/{page.file}" if page.kind == "handout" else f"/learn/{page.slug}"
@@ -262,9 +346,13 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
     @app.get("/v1/education")
     def education_list(request: Request, user: dict = Depends(current_user)):
         token, base = svc.signer.token(user["id"]), base_url(request)
+        access = svc.print_access(user["id"])
+        until = lambda p: access.pages[p.slug].isoformat() if p.slug in access.pages else None  # noqa: E731
         return {"pages": [{"slug": p.slug, "title": p.title, "summary": p.summary, "kind": p.kind,
-                           "url": svc.url(base, p, token)} for p in svc.catalog],
-                "link_hours": svc.signer.hours}
+                           "url": svc.url(base, p, token), "can_print": access.allows(p.slug),
+                           "print_until": None if access.everything else until(p)} for p in svc.catalog],
+                "link_hours": svc.signer.hours, "can_print": access.everything,
+                "print_offer": None if access.everything else access.offer}
 
     @app.get("/learn/file/{name}")
     def education_file(name: str, t: str = ""):
@@ -290,15 +378,15 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
             return _expired()
         base = base_url(request)
         links = {p.file: svc.url(base, p, t) for p in svc.catalog}
-        config = None
+        config, can_print = None, svc.print_access(user_id).allows(page.slug)
         if page.reader:
             viewer = svc.viewer_lookup(user_id) or {}
             readers = [p for p in svc.catalog if p.reader]
             config = {"viewer": {"name": viewer.get("name") or "", "email": viewer.get("email") or ""},
-                      "region": svc.region, "subscriptionActive": True,
+                      "region": svc.region, "subscriptionActive": can_print,
                       "modules": [{"slug": p.slug, "title": p.title} for p in readers],
                       "links": {p.slug: svc.url(base, p, t) for p in readers}}
-        return HTMLResponse(render(page, svc.source(page), links, config), headers=PAGE_HEADERS)
+        return HTMLResponse(render(page, svc.source(page), links, config, can_print), headers=PAGE_HEADERS)
 
 
 def _expired() -> HTMLResponse:

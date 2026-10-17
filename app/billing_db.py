@@ -64,13 +64,13 @@ def active_counts() -> dict[str, int]:
         rows = c.execute(
             """select plan, count(distinct clinician_id) n from entitlements
                where status='active' and starts_at <= now() and (expires_at is null or expires_at > now())
-                 and (plan = 'byok' or credits_used + credits_reserved < credits_total)
+                 and (plan in ('byok','print') or credits_used + credits_reserved < credits_total)
                group by plan""").fetchall()
     return {r["plan"]: r["n"] for r in rows}
 
 
 # --- orders ----------------------------------------------------------------------------
-_ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.amount, o.currency, o.config_version, o.provider,
+_ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.item, o.amount, o.currency, o.config_version, o.provider,
                  o.provider_order_id, o.provider_payment_id, o.status, o.failure_reason, o.refund_status,
                  o.refunded_amount, o.created_at, o.paid_at, o.updated_at"""
 
@@ -78,9 +78,10 @@ _ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.amount, o.curren
 def create_order(cid, price: billing.Price, config_version: int) -> dict:
     with _conn() as c:
         return c.execute(
-            f"""insert into billing_orders as o (clinician_id, plan, report_type, amount, currency, config_version)
-                values (%s,%s,%s,%s,%s,%s) returning {_ORDER_COLS}""",
-            (str(cid), price.plan, price.report_type, price.amount, price.currency, config_version)).fetchone()
+            f"""insert into billing_orders as o (clinician_id, plan, report_type, item, amount, currency, config_version)
+                values (%s,%s,%s,%s,%s,%s,%s) returning {_ORDER_COLS}""",
+            (str(cid), price.plan, price.report_type, price.item, price.amount, price.currency,
+             config_version)).fetchone()
 
 
 def set_provider_order(order_id, provider_order_id: str) -> None:
@@ -144,8 +145,11 @@ def _grant(c, cid, plan: str, order: dict | None, cfg: dict, *, credits: int | N
            actor=None, note: str | None = None) -> dict:
     now = _now()
     p = cfg["plans"].get(plan, {})
-    starts, expires, report_type = now, None, None
-    if plan == "per_report":
+    starts, expires, report_type, item = now, None, None, None
+    if plan == "print":
+        credits, item = 0, order["item"]
+        expires = now + timedelta(hours=p["hours"])
+    elif plan == "per_report":
         credits, report_type = 1, order["report_type"]
     elif plan in ("sub_30", "sub_50"):
         credits = p["reports"] if credits is None else credits
@@ -161,10 +165,10 @@ def _grant(c, cid, plan: str, order: dict | None, cfg: dict, *, credits: int | N
     else:  # manual
         expires = now + timedelta(days=days) if days else None
     ent = c.execute(
-        """insert into entitlements (clinician_id, plan, report_type, credits_total, starts_at, expires_at, order_id,
-                                      note, created_by)
-           values (%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
-        (str(cid), plan, report_type, credits, starts, expires, str(order["id"]) if order else None, note,
+        """insert into entitlements (clinician_id, plan, report_type, item, credits_total, starts_at, expires_at,
+                                      order_id, note, created_by)
+           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
+        (str(cid), plan, report_type, item, credits, starts, expires, str(order["id"]) if order else None, note,
          str(actor) if actor else None)).fetchone()
     if credits:
         c.execute("""insert into credit_ledger (clinician_id, entitlement_id, kind, amount, report_type, order_id,
@@ -291,6 +295,33 @@ def byok_access(cid) -> bool:
                               and starts_at <= now() and expires_at > now() limit 1""", (str(cid),)).fetchone() is not None
 
 
+def has_subscription(cid) -> bool:
+    """A running subscription: a 30/50-report plan, the own-key plan or an admin grant that is not
+    cancelled, has started and has not ended (used-up credits still count). A single report or a
+    single print does not. A refund that revokes the plan ends it."""
+    try:
+        uuid.UUID(str(cid))
+    except ValueError:
+        return False
+    with _conn() as c:
+        return c.execute("""select 1 from entitlements where clinician_id=%s and status='active' and starts_at <= now()
+                              and plan in ('sub_30','sub_50','byok','manual')
+                              and (expires_at is null or expires_at > now()) limit 1""", (str(cid),)).fetchone() is not None
+
+
+def print_passes(cid) -> dict:
+    """Pages this clinician bought a single print for, still running: {page slug: ends at}."""
+    try:
+        uuid.UUID(str(cid))
+    except ValueError:
+        return {}
+    with _conn() as c:
+        rows = c.execute("""select item, max(expires_at) e from entitlements where clinician_id=%s and plan='print'
+                              and status='active' and starts_at <= now() and expires_at > now()
+                            group by item""", (str(cid),)).fetchall()
+    return {r["item"]: r["e"] for r in rows}
+
+
 def _state(e: dict, now: datetime) -> str:
     if e["status"] == "cancelled":
         return "cancelled"
@@ -298,7 +329,7 @@ def _state(e: dict, now: datetime) -> str:
         return "expired"
     if e["starts_at"] > now:
         return "scheduled"
-    if e["plan"] != "byok" and e["credits_used"] + e["credits_reserved"] >= e["credits_total"]:
+    if e["plan"] not in ("byok", "print") and e["credits_used"] + e["credits_reserved"] >= e["credits_total"]:
         return "exhausted"
     return "active"
 
@@ -463,7 +494,7 @@ def admin_users(plan: str | None, state: str | None, q: str | None, pay: str | N
         rows = c.execute(
             """select c.id, c.full_name, u.email, c.level, c.verification_status,
                  (select row_to_json(e) from (select id, plan, status, credits_total, credits_used, credits_reserved,
-                    starts_at, expires_at, created_at from entitlements where clinician_id=c.id and plan <> 'per_report'
+                    starts_at, expires_at, created_at from entitlements where clinician_id=c.id and plan not in ('per_report','print')
                     order by created_at desc limit 1) e) as latest,
                  (select coalesce(sum(credits_total - credits_used - credits_reserved), 0) from entitlements
                     where clinician_id=c.id and status='active' and starts_at <= now()
