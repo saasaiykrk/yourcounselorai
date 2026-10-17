@@ -48,11 +48,23 @@ const kPrivacyDoc = InfoDoc(
           'never in the app.',
     ]),
     InfoSection('The AI and other services', [
-      'The de-identified case text is sent to Anthropic, the provider of the Claude AI model, which '
-          'processes it outside India.',
+      'The de-identified case text is sent to one AI provider to write the reply: Anthropic (the Claude '
+          'model) or Google (the Gemini model). Our administrators choose which one from an approved list. '
+          'Both process the text outside India. If you add your own Anthropic key, your reports go to '
+          'Anthropic under your own account.',
       'For diagnostic codes, short search terms (such as a condition name) are sent to the World Health '
           "Organization's ICD-11 service. Case text is not sent.",
       'Every reply passes an automatic safety check before it reaches you.',
+      'Payments are handled by Razorpay. Your card, UPI or bank details go to Razorpay only; we keep the '
+          'plan, amount and payment status.',
+    ]),
+    InfoSection('Clients who book with you', [
+      'If you use online booking, a client gives their first name and email address and picks a time on your '
+          'booking page. Nothing else is asked.',
+      'These details are stored encrypted, used only for that appointment and its emails, and deleted 90 days '
+          'after the appointment. They are never sent to the AI.',
+      'A client can cancel with the link in their confirmation email, or write to us to have their details '
+          'deleted sooner.',
     ]),
     InfoSection('What is kept, and who can see it', [
       'Your consults (de-identified text and replies) are stored so you can see them in History.',
@@ -102,24 +114,34 @@ const kDpaDoc = InfoDoc(
     InfoSection('What is processed', [
       'Your account details: name, gender, age, email address, role, registration body and number, and the date '
           'you accepted these terms. These are about you, never a client, and are not sent to the AI.',
+      'If you use online booking: each client\'s first name, email address and appointment time, which they '
+          'enter on your booking page. These are stored encrypted, are not sent to the AI, and are deleted 90 '
+          'days after the appointment.',
+      'Payments: plan, amount and status (card, UPI and bank details stay with Razorpay). Your own AI key, if '
+          'you add one: stored encrypted and never shown again.',
       'De-identified case text you send, the replies, safety-check results and usage figures.',
       'Problem reports you send, and the types of any identifiers that were caught.',
     ]),
     InfoSection('Why', [
-      'Only to provide the consultation service, keep it safe, review reported problems and verify '
-          'clinicians. The data is not sold and is not used for advertising.',
+      'Only to provide the consultation service, keep it safe, review reported problems, verify clinicians, '
+          'take payments and manage appointments. The data is not sold and is not used for advertising.',
     ]),
     InfoSection('Where, and by whom', [
       'Google Cloud (Mumbai): runs the server.',
       'Supabase: database and email sign-in.',
-      'Anthropic: the Claude AI model, which processes de-identified text outside India.',
+      'Anthropic (the Claude model) or Google (the Gemini model): one of them, chosen by our administrators, '
+          'writes the replies. Each processes de-identified text only, outside India.',
+      'Razorpay: payments.',
+      'Our email service: booking confirmations and reminders to clients.',
       'World Health Organization ICD-11 service: receives short diagnostic search terms only.',
     ]),
     InfoSection('Safeguards', [
       'Identifiers are removed on the phone and checked again on the server.',
-      'Data is encrypted in transit. Service keys are kept in a secrets vault.',
+      'Data is encrypted in transit. Clients\' booking details and AI keys are also encrypted at rest. Service '
+          'keys are kept in a secrets vault.',
       'Administrator access to consults is recorded.',
-      'The beta retention period is 12 months, except for open safety reports.',
+      'The beta retention period is 12 months for consults, except for open safety reports, and 90 days after '
+          'the appointment for client booking details.',
     ]),
     InfoSection('Your requests', [
       'To ask about your data, or to have your account and its data removed, email $kSafetyEmail.',
