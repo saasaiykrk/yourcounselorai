@@ -10,6 +10,7 @@
 | Contact email | (owner to choose: a support address, e.g. support@<your domain>) |
 | Website | (optional) |
 | Privacy policy URL | (public page: see privacy-policy.md) |
+| Account deletion URL | (required: a web page or form where users ask to delete their account; see play-console-answers.md) |
 
 ## Short description (max 80 characters)
 Clinical reference and case reports for registered mental-health professionals
@@ -37,23 +38,33 @@ Share your booking link. Clients choose a free time, and you approve or confirm 
 YOUR HISTORY
 Search, label and revisit your past consults. Only you can see them.
 
+EDUCATION LIBRARY
+Free for every user: therapy modules (CBT, ACT, DBT, Behavioural Activation, Motivational Interviewing, Exposure Therapy and more), a therapy comparison chart, a protocol matrix and glossary, and a case history and MSE practice handout. Pages open inside the app. Print or save any page as a PDF with a subscription, or unlock a single page for 24 hours.
+
+PLANS
+Monthly plans with 30 or 50 reports, single reports, or your own AI provider key. Payments are handled securely by Razorpay.
+
 WHO IT IS FOR
 YourCounselor is for registered mental-health professionals only. Every account is checked against professional registration (for example, RCI) before use.
 
 IMPORTANT
 YourCounselor supports your clinical judgement; it does not replace it. It is not a diagnostic device and is not intended for use by patients or the public. You remain responsible for every clinical decision. In an emergency, contact local emergency services (112 in India).
 
-## Screenshots (phone, 1080 × 1920, upload in this order)
+## Screenshots (phone, 1080 × 1920, in a phone frame; upload in this order)
 1. screenshots/01-consult.png: Describe the case
 2. screenshots/02-check.png: Checked on your phone first
 3. screenshots/03-guided.png: Guided consultation
 4. screenshots/04-report.png: Structured clinical work-up
-5. screenshots/05-calendar.png: Your calendar and bookings
-6. screenshots/06-history.png: Your past consults
+5. screenshots/05-education.png: Free education library
+6. screenshots/06-module.png: Read, print or save as PDF
+7. screenshots/07-calendar.png: Your calendar and bookings
+8. screenshots/08-history.png: Your past consults
+
+All sample content: no real client. Tablet screenshots are optional; leave them out unless you list tablet support.
 
 ## Graphics
 - App icon: app-icon-512.png (512 × 512)
 - Feature graphic: feature-graphic-1024x500.png (1024 × 500)
 
 ## Release notes, version 1.0.0
-First release: guided consultations with structured reports, direct consults, ICD-11 checked codes, PDF reports, consult history and appointment booking.
+First release: guided consultations with structured reports, direct consults, ICD-11 checked codes, PDF reports, consult history, appointment booking and a free education library.
