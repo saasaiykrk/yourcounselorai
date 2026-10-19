@@ -81,35 +81,40 @@ class RenderTests(unittest.TestCase):
                                 " var u = (window.__YC_APP__.links || {})[slug]; if (u) location.href = u; } });\n", "")
             self.assertEqual(back, src, p.file)
 
-    def test_the_button_shows_for_everyone_and_prints_only_when_unlocked(self):
+    def test_no_page_wide_button_printing_goes_through_the_modules_own_buttons(self):
         for p in CATALOG:
             if p.kind == "handout":
                 continue
             src, paid = self.rendered(p.file, can_print=True)
             _, free = self.rendered(p.file, can_print=False)
             for out in (paid, free):
-                self.assertGreater(out.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+                self.assertNotIn("yc-edu-print", out, "no floating button")
+                self.assertEqual(out.count("Print / Save as PDF"), src.count("Print / Save as PDF"), p.file)
+                self.assertIn("body *{display:none!important}", out, "whole pages never print")
+                self.assertIn("YC_CONFIG.onHandoutDownload = hook", out)
             self.assertIn("var CAN_PRINT = true;", paid)
-            self.assertIn("app.postMessage(snapshot())", paid, "inside the app, the app prints")
-            self.assertNotIn("body *{display:none!important}", paid, "unlocked: printing is not blocked")
-            # locked: the button asks the app to offer a single print; printing itself stays blocked
+            self.assertIn("function handoutHtml", paid, "unlocked: the app gets the handout to print")
+            # locked: the module's buttons ask the app to offer a purchase, or show the note in a browser
             self.assertIn("var CAN_PRINT = false;", free)
             self.assertIn('app.postMessage("yc:buy")', free)
-            self.assertNotIn("function snapshot", free, "nothing to print with is sent")
+            self.assertNotIn("function handoutHtml", free, "nothing to print with is sent")
             self.assertIn(education.LOCKED_NOTE, free)
-            self.assertIn("body *{display:none!important}", free)
 
     def test_live_values_never_replace_brand_crisis_or_legal_text(self):
         src, out = self.rendered("YourCounselor_Cognitive_Behavioural_Therapy_CBT.html",
                                  {"viewer": {"name": "Dr </script><b>x", "email": "x@y.z"}, "links": {}})
         self.assertNotIn("</script><b>x", out, "viewer text is escaped inside the script")
+        # the handout hook only reads the page's own brand and crisis data; it never sets them
+        hook = re.search(r'<script id="yc-edu-addon-js">.*?</script>', out, re.S).group(0)
+        rest = out.replace(hook, "")
         for k in ("crisis", "brand", "disclaimer", "ip_notice"):
-            self.assertEqual(out.count(k), src.count(k) + (1 if k == "crisis" else 0) - (1 if k == "crisis" else 0))
+            self.assertEqual(rest.count(k), src.count(k), k)
+            self.assertNotRegex(hook, rf"\.{k}\s*=[^=]", f"the hook never assigns {k}")
 
     def test_static_pages_get_no_reader_config(self):
         _, out = self.rendered("YourCounselor_Therapy_Comparison_Chart.html")
         self.assertNotIn("__YC_APP__", out)
-        self.assertIn("Print / Save as PDF", out)
+        self.assertNotIn("yc-edu-print", out)
 
 
 class ServiceTests(unittest.TestCase):
@@ -166,7 +171,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(cbt["section"], "therapies")
         page = self.get(cbt["url"])
         self.assertEqual(page.status_code, 200)
-        self.assertIn("Print / Save as PDF", page.text)
+        self.assertIn("var CAN_PRINT = true;", page.text)
         self.assertIn('"subscriptionActive": true', page.text)
         self.assertIn('"name": "Dev clinician"', page.text, "the viewer's name for the watermark")
         self.assertIn("frame-ancestors 'none'", page.headers["content-security-policy"])
@@ -194,8 +199,8 @@ class ApiTests(unittest.TestCase):
         self.assertIn('"subscriptionActive": true', cbt)
         self.assertEqual(self.get(pages["dbt"]["url"]).status_code, 200, "the page itself stays free")
         self.assertIn("var CAN_PRINT = false;", dbt)
-        self.assertIn("Print / Save as PDF", dbt, "the button shows; locked, it offers the purchase")
-        self.assertIn('"subscriptionActive": false', dbt, "the module's own handout print is locked too")
+        self.assertIn('app.postMessage("yc:buy")', dbt, "locked: the module's buttons offer the purchase")
+        self.assertIn('"subscriptionActive": true', dbt, "the module's buttons stay on; the hook decides")
 
     def test_pages_need_a_valid_link(self):
         for path in ("/learn/cbt", "/learn/cbt?t=nope", "/learn/file/YourCounselor_Case_History_and_MSE_Practice_Handout.pdf"):
