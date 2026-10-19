@@ -14,9 +14,10 @@ abstract interface class AuthService {
   /// Signs in with the emailed code. Throws [AuthFailure] if it is wrong or expired.
   Future<void> verifyCode(String email, String code);
 
-  /// The store reviewer's account only ([AppConfig.reviewEmail]): reviewers can't receive the
-  /// emailed code, so that one account signs in with a password set in Supabase. Throws [AuthFailure].
-  Future<void> signInWithPassword(String email, String password);
+  /// The store reviewer's account only ([AppConfig.reviewEmail]). Reviewers can't receive the emailed
+  /// code, so that one account has a fixed 6-digit code: it is the account's password in Supabase
+  /// (never in the app). Same screens as everyone else. Throws [AuthFailure] if it is wrong.
+  Future<void> signInWithReviewCode(String email, String code);
 
   /// Bearer token for the backend, or null when signed out.
   Future<String?> accessToken();
@@ -54,10 +55,7 @@ class DevAuthService implements AuthService {
   }
 
   @override
-  Future<void> signInWithPassword(String email, String password) async {
-    if (password.isEmpty) throw const AuthFailure('Enter the password.');
-    _signedIn = true;
-  }
+  Future<void> signInWithReviewCode(String email, String code) => verifyCode(email, code);
 
   @override
   Future<String?> accessToken() async => _signedIn ? _token : null;
@@ -93,12 +91,12 @@ class SupabaseAuthService implements AuthService {
   }
 
   @override
-  Future<void> signInWithPassword(String email, String password) async {
+  Future<void> signInWithReviewCode(String email, String code) async {
     try {
-      await _auth.signInWithPassword(email: email, password: password);
+      await _auth.signInWithPassword(email: email, password: code);
     } on sb.AuthException catch (e) {
       if (e.code == 'invalid_credentials' || e.message.toLowerCase().contains('invalid login')) {
-        throw const AuthFailure('That password is wrong.');
+        throw const AuthFailure('That code is wrong or has expired. Try again or resend it.');
       }
       throw AuthFailure(friendlyAuthError(e, sendingCode: false));
     }

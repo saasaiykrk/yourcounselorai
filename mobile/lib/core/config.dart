@@ -24,8 +24,9 @@ abstract final class AppConfig {
   /// `dev` mode only: the backend's DEV_TOKEN (dev-L1 / dev-L2 / dev-L3). Not a secret.
   static const devToken = String.fromEnvironment('DEV_TOKEN', defaultValue: 'dev-L2');
 
-  /// The store reviewer's sign-in email (Google Play / App Store review). Not a secret: the password
-  /// is set in Supabase and given only in Play Console. Empty = no reviewer sign-in.
+  /// The store reviewer's sign-in email (Google Play / App Store review). Not a secret: its fixed
+  /// 6-digit code is set in Supabase (as the account's password) and given only in Play Console.
+  /// No email is sent to it. Empty = no reviewer account.
   static String reviewEmail = const String.fromEnvironment('REVIEW_EMAIL'); // settable in tests
 
   static bool isReviewEmail(String email) =>
