@@ -131,7 +131,14 @@ void main() {
   test('the API list parses into cards with signed links', () async {
     final adapter = _Adapter({
       'pages': [
-        {'slug': 'cbt', 'title': 'Cognitive Behavioural Therapy (CBT)', 'summary': 'S', 'kind': 'module', 'url': 'u1'},
+        {
+          'slug': 'cbt',
+          'title': 'Cognitive Behavioural Therapy (CBT)',
+          'summary': 'S',
+          'kind': 'module',
+          'section': 'therapies',
+          'url': 'u1',
+        },
         {'slug': 'pdf', 'title': 'Handout', 'kind': 'handout', 'url': 'u2'},
       ],
       'link_hours': 12,
@@ -150,8 +157,8 @@ void main() {
     expect(adapter.requests.single.path, '/v1/education');
     expect(catalog.canPrint, isTrue);
     expect(EducationCatalog.fromJson(const {'pages': []}).canPrint, isFalse, reason: 'missing means no');
-    expect(pages.map((p) => (p.title, p.kindLabel, p.url)), [
-      ('Cognitive Behavioural Therapy (CBT)', 'Module', 'u1'),
+    expect(pages.map((p) => (p.title, p.sectionLabel, p.url)), [
+      ('Cognitive Behavioural Therapy (CBT)', 'Therapy', 'u1'),
       ('Handout', 'Handout · PDF', 'u2'),
     ]);
   });
@@ -335,6 +342,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Case History and MSE Practice Handout'), findsOneWidget, reason: 'a PDF goes to Handouts');
     expect(find.text('Cognitive Behavioural Therapy (CBT)'), findsNothing);
+  });
+
+  test('the tag under each card names its section', () {
+    String tag(String section, [String kind = 'module']) =>
+        EducationPage(slug: 's', title: 't', kind: kind, url: 'u', section: section).sectionLabel;
+    expect(
+      [tag('basics'), tag('therapies'), tag('practice'), tag('others'), tag('handouts', 'handout')],
+      ['Basics', 'Therapy', 'Practice', 'Other', 'Handout · PDF'],
+    );
   });
 
   test('a page without a section from the server: PDFs to Handouts, the rest to Others', () {
