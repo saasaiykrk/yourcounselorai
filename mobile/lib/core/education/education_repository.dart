@@ -45,10 +45,13 @@ class EducationPage {
   /// When a single print bought for this page ends (null: none, or a subscription covers it).
   final DateTime? printUntil;
 
-  String get kindLabel => switch (kind) {
-    'module' => 'Module',
-    'handout' => 'Handout · PDF',
-    _ => 'Reference',
+  /// The tag under the card: its Knowledge section (a PDF also says so).
+  String get sectionLabel => switch (section) {
+    'basics' => 'Basics',
+    'therapies' => 'Therapy',
+    'practice' => 'Practice',
+    'handouts' => kind == 'handout' ? 'Handout · PDF' : 'Handout',
+    _ => 'Other',
   };
 }
 

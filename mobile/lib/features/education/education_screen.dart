@@ -213,7 +213,7 @@ class _PageCard extends StatelessWidget {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          StatusPill(page.kindLabel, tone: Tone.neutral),
+                          StatusPill(page.sectionLabel, tone: Tone.neutral),
                           if (page.printUntil != null)
                             StatusPill('Print until ${_until(page.printUntil!)}', icon: Icons.print_outlined),
                         ],
