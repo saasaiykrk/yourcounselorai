@@ -333,6 +333,60 @@ every signed-in user, one card per page titled with the page's own title. They s
   the card title. The reader modules read their live settings (viewer, published module list) from the app,
   as described in that folder's README.
 
+## Custom domain: app.yourcounselor.in (API and admin panel)
+
+One address for everything the server serves: the app's API, the admin panel (`/admin`), the booking pages
+(`/book/...`) and the Knowledge pages (`/learn/...`). The server needs no code change: it builds its links from
+the address a request arrives on, or from `PUBLIC_BASE_URL`.
+
+Cloud Run's simple "domain mapping" isn't offered in Mumbai (asia-south1), so the domain goes through a Google
+Cloud **external HTTPS load balancer** in front of the same Cloud Run service. It keeps the server and data in
+Mumbai, gives a free Google-managed certificate, and allows long consults (Cloud Run's own 300-second limit
+applies). Cost: about US$18 a month for the load balancer, plus a little per GB. The old `*.run.app` address
+keeps working, so apps already installed are not affected.
+
+1. **Load balancer** (Cloud Shell, once):
+   ```bash
+   PROJECT=yourcounselor-beta; REGION=asia-south1; SERVICE=yourcounselor-api; DOMAIN=app.yourcounselor.in
+   gcloud config set project $PROJECT
+   gcloud services enable compute.googleapis.com
+   gcloud compute addresses create yc-ip --global --ip-version=IPV4 --network-tier=PREMIUM
+   gcloud compute network-endpoint-groups create yc-neg --region=$REGION \
+     --network-endpoint-type=serverless --cloud-run-service=$SERVICE
+   gcloud compute backend-services create yc-backend --global --load-balancing-scheme=EXTERNAL_MANAGED
+   gcloud compute backend-services add-backend yc-backend --global \
+     --network-endpoint-group=yc-neg --network-endpoint-group-region=$REGION
+   gcloud compute url-maps create yc-urlmap --default-service=yc-backend
+   gcloud compute ssl-certificates create yc-cert --global --domains=$DOMAIN
+   gcloud compute target-https-proxies create yc-https-proxy --url-map=yc-urlmap --ssl-certificates=yc-cert
+   gcloud compute forwarding-rules create yc-https --global --load-balancing-scheme=EXTERNAL_MANAGED \
+     --network-tier=PREMIUM --address=yc-ip --target-https-proxy=yc-https-proxy --ports=443
+   # http:// → https://
+   printf 'name: yc-http-redirect\ndefaultUrlRedirect:\n  redirectResponseCode: MOVED_PERMANENTLY_DEFAULT\n  httpsRedirect: true\n' \
+     | gcloud compute url-maps import yc-http-redirect --global --source=/dev/stdin --quiet
+   gcloud compute target-http-proxies create yc-http-proxy --url-map=yc-http-redirect
+   gcloud compute forwarding-rules create yc-http --global --load-balancing-scheme=EXTERNAL_MANAGED \
+     --network-tier=PREMIUM --address=yc-ip --target-http-proxy=yc-http-proxy --ports=80
+   gcloud compute addresses describe yc-ip --global --format='value(address)'   # the IP for step 2
+   ```
+2. **DNS** (where you bought yourcounselor.in): add an **A** record, name `app`, value: the IP from step 1.
+   If the domain uses Cloudflare, set the record to **DNS only** (grey cloud), not proxied.
+3. **Wait for the certificate** (15–60 minutes after DNS is live). Check with:
+   ```bash
+   gcloud compute ssl-certificates describe yc-cert --global --format='value(managed.status)'
+   ```
+   When it says `ACTIVE`, open https://app.yourcounselor.in/health and https://app.yourcounselor.in/admin.
+4. **Links in emails and the app** use the new address:
+   ```bash
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-env-vars PUBLIC_BASE_URL=https://app.yourcounselor.in
+   ```
+5. **The app:** `mobile/config/live.json` → `BACKEND_URL` becomes `https://app.yourcounselor.in`, then rebuild the
+   APK. Change this only after step 3 works, or new builds can't reach the server.
+
+Sign-in needs no change: the app and the admin panel sign in with a 6-digit code (no email links), and the admin
+panel calls the server on its own address.
+
 ## Changing settings or secrets
 
 Deploys keep the service's existing environment variables and Secret Manager mounts. To change them, run
