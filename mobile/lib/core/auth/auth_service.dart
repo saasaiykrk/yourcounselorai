@@ -14,6 +14,10 @@ abstract interface class AuthService {
   /// Signs in with the emailed code. Throws [AuthFailure] if it is wrong or expired.
   Future<void> verifyCode(String email, String code);
 
+  /// The store reviewer's account only ([AppConfig.reviewEmail]): reviewers can't receive the
+  /// emailed code, so that one account signs in with a password set in Supabase. Throws [AuthFailure].
+  Future<void> signInWithPassword(String email, String password);
+
   /// Bearer token for the backend, or null when signed out.
   Future<String?> accessToken();
 
@@ -50,6 +54,12 @@ class DevAuthService implements AuthService {
   }
 
   @override
+  Future<void> signInWithPassword(String email, String password) async {
+    if (password.isEmpty) throw const AuthFailure('Enter the password.');
+    _signedIn = true;
+  }
+
+  @override
   Future<String?> accessToken() async => _signedIn ? _token : null;
 
   @override
@@ -78,6 +88,18 @@ class SupabaseAuthService implements AuthService {
     try {
       await _auth.verifyOTP(email: email, token: code, type: sb.OtpType.email);
     } on sb.AuthException catch (e) {
+      throw AuthFailure(friendlyAuthError(e, sendingCode: false));
+    }
+  }
+
+  @override
+  Future<void> signInWithPassword(String email, String password) async {
+    try {
+      await _auth.signInWithPassword(email: email, password: password);
+    } on sb.AuthException catch (e) {
+      if (e.code == 'invalid_credentials' || e.message.toLowerCase().contains('invalid login')) {
+        throw const AuthFailure('That password is wrong.');
+      }
       throw AuthFailure(friendlyAuthError(e, sendingCode: false));
     }
   }
