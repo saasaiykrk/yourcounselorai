@@ -125,7 +125,7 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
               children: [
                 if (catalog.canPrint)
                   const Text(
-                    'Free for every YourCounselor user. Each page has a Print / Save as PDF button.',
+                    'Free for every YourCounselor user. Print or save the handouts and worksheets in each module as PDF.',
                     style: AppText.smallMuted,
                   )
                 else
@@ -133,8 +133,8 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Free to read for every YourCounselor user. Printing and saving as PDF come with a '
-                        'subscription${catalog.printOffer == null ? '' : ', or buy a single page for '
+                        'Free to read for every YourCounselor user. Printing handouts and worksheets as PDF comes '
+                        'with a subscription${catalog.printOffer == null ? '' : ', or unlock one module for '
                                   '${formatMoney(catalog.printOffer!.price, catalog.printOffer!.currency)} '
                                   '(${catalog.printOffer!.hours} hours)'}.',
                         style: AppText.smallMuted,

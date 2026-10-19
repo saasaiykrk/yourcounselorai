@@ -163,18 +163,18 @@ void main() {
     ]);
   });
 
-  testWidgets('Education is in the bottom bar and shows one card per page with its title', (tester) async {
+  testWidgets('Knowledge is in the bottom bar and shows one card per page with its title', (tester) async {
     await _pump(tester, _Repo(List.of(_pages)));
     expect(find.text('Cognitive Behavioural Therapy (CBT)'), findsOneWidget);
     expect(find.text('Therapy Comparison Chart'), findsOneWidget);
     expect(find.text('Case History and MSE Practice Handout'), findsOneWidget);
-    expect(find.textContaining('Print / Save as PDF'), findsOneWidget);
+    expect(find.textContaining('Print or save the handouts and worksheets'), findsOneWidget);
   });
 
   testWidgets('without a subscription: free to read, the single print offered, bought pages marked', (tester) async {
     final opened = await _pump(tester, _Repo(_locked, canPrint: false, offer: _offer));
-    expect(find.textContaining('come with a subscription, or buy a single page for ₹49 (24 hours)'), findsOneWidget);
-    expect(find.textContaining('Print / Save as PDF button'), findsNothing);
+    expect(find.textContaining('comes with a subscription, or unlock one module for ₹49 (24 hours)'), findsOneWidget);
+    expect(find.textContaining('Print or save the handouts'), findsNothing);
     expect(find.text('See plans'), findsOneWidget);
     expect(find.textContaining('Print until'), findsOneWidget, reason: 'only the page bought (CBT)');
     await tester.tap(find.text('Therapy Comparison Chart'));
@@ -184,7 +184,7 @@ void main() {
 
   testWidgets('no single print on sale: only the subscription is mentioned', (tester) async {
     await _pump(tester, _Repo(_locked, canPrint: false));
-    expect(find.textContaining('Printing and saving as PDF come with a subscription.'), findsOneWidget);
+    expect(find.textContaining('Printing handouts and worksheets as PDF comes with a subscription.'), findsOneWidget);
     expect(find.textContaining('single page'), findsNothing);
   });
 
@@ -287,12 +287,15 @@ void main() {
       final gateway = FakeGateway(paid);
       await run(tester, billing, gateway);
       expect(find.text('Included with every subscription, for every page.'), findsOneWidget);
-      expect(find.text('Print or save it as a PDF as often as you need for 24 hours.'), findsOneWidget);
+      expect(
+        find.text('Print or save its handouts and worksheets as PDF, as often as you need, for 24 hours.'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Buy for ₹49'));
       await tester.pumpAndSettle();
       expect(billing.createdPlan, 'print::cbt', reason: 'the page is named; the server sets the price');
       expect(gateway.opened, 1);
-      expect(find.text('Payment received. You can print or save this page for 24 hours.'), findsOneWidget);
+      expect(find.text("Payment received. You can print this module's handouts for 24 hours."), findsOneWidget);
     });
 
     testWidgets('a cancelled payment unlocks nothing', (tester) async {

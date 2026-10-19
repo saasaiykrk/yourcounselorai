@@ -40,12 +40,13 @@ String? pageSlug(Uri? url) {
 /// "YourCounselor | Therapy Comparison Chart" → "Therapy Comparison Chart".
 String cleanTitle(String t) => t.replaceAll(RegExp(r'^\s*YourCounselor\s*\|\s*|\s*\|\s*YourCounselor\s*$'), '').trim();
 
-/// One education page inside the app, under the app's own bar. Its "Print / Save as PDF" button
-/// shows for everyone. Unlocked (pricing off, a subscription, or a single print of that page), it
-/// hands the app the page as it looks now (every section open, no scripts), which the app prints
-/// through the phone's print / save-as-PDF dialog. Locked, it asks the app, which offers a single
-/// print or the subscriptions; after a confirmed payment the page is loaded again and the server
-/// unlocks it. The in-app view ignores the page's own print call.
+/// One Knowledge page inside the app, under the app's own bar. There is no page-wide print button:
+/// printing goes through each module's own "Print or save as PDF" buttons (client handouts and
+/// counsellor sheets). Unlocked (pricing off, a subscription, or a single print of that module), a
+/// button hands the app the handout as the module would print it, and the app prints it through the
+/// phone's print / save-as-PDF dialog. Locked, it asks the app, which offers a single print or the
+/// subscriptions; after a confirmed payment the page is loaded again and the server unlocks it. The
+/// Case History PDF has no buttons of its own, so its viewer keeps one.
 class EducationReaderScreen extends StatelessWidget {
   const EducationReaderScreen({super.key, required this.page, this.offer});
 
@@ -116,7 +117,8 @@ class _WebPageViewState extends ConsumerState<_WebPageView> {
           },
         ),
       )
-      // The page's Print / Save as PDF button (only there with a plan) sends the page as it looks now.
+      // The module's own "Print or save as PDF" buttons (handouts, worksheets) send the handout to print,
+      // or "yc:buy" when printing is locked (the server decides which).
       ..addJavaScriptChannel('YCApp', onMessageReceived: (m) => _onPageMessage(m.message))
       ..loadRequest(_home);
   }

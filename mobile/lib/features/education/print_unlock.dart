@@ -36,7 +36,7 @@ Future<bool> unlockPrinting(BuildContext context, WidgetRef ref, EducationPage p
   switch (outcome) {
     case PurchaseDone():
       messenger.showSnackBar(
-        SnackBar(content: Text('Payment received. You can print or save this page for $hours hours.')),
+        SnackBar(content: Text("Payment received. You can print this module's handouts for $hours hours.")),
       );
     case PurchaseCancelled():
       messenger.showSnackBar(const SnackBar(content: Text('Payment cancelled. Nothing was charged.')));
@@ -89,9 +89,12 @@ class PrintOfferSheet extends StatelessWidget {
             const Text('Included with every subscription, for every page.', style: AppText.bodyMuted),
             if (o != null) ...[
               const SizedBox(height: 18),
-              Text('Just this page', style: AppText.label.copyWith(fontSize: 16)),
+              Text('Just this module', style: AppText.label.copyWith(fontSize: 16)),
               const SizedBox(height: 4),
-              Text('Print or save it as a PDF as often as you need for ${o.hours} hours.', style: AppText.smallMuted),
+              Text(
+                'Print or save its handouts and worksheets as PDF, as often as you need, for ${o.hours} hours.',
+                style: AppText.smallMuted,
+              ),
               const SizedBox(height: 12),
               FilledButton(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
