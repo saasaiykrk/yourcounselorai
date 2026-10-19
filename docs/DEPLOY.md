@@ -376,6 +376,8 @@ keeps working, so apps already installed are not affected.
    gcloud compute ssl-certificates describe yc-cert --global --format='value(managed.status)'
    ```
    When it says `ACTIVE`, open https://app.yourcounselor.in/health and https://app.yourcounselor.in/admin.
+   `/health` in a browser is a status page (server, database, AI model, knowledge base, WHO ICD-11, payments,
+   email, live mode); scripts still get JSON from the same address, or use `/health?format=json`.
 4. **Links in emails and the app** use the new address:
    ```bash
    gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
