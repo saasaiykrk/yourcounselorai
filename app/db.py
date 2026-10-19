@@ -19,6 +19,15 @@ def _conn():
     return psycopg.connect(_DSN, row_factory=dict_row, autocommit=True)
 
 
+def ping() -> bool:
+    """For the status page: does the database answer within a few seconds? Never raises."""
+    try:
+        with psycopg.connect(_DSN, connect_timeout=5, autocommit=True) as c:
+            return c.execute("select 1").fetchone() is not None
+    except Exception:
+        return False
+
+
 def get_clinician(cid) -> dict | None:
     with _conn() as c:
         return c.execute("select * from clinicians where id=%s", (str(cid),)).fetchone()

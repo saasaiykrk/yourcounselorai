@@ -4,7 +4,8 @@ Anthropic key, the WHO key or the database key.
 
 Endpoints (all JSON, all require a Supabase Auth JWT except /healthz):
   GET  /healthz   (local; Cloud Run's front end reserves paths ending in "z")
-  GET  /health    (same response; use this one on *.run.app)
+  GET  /health    (same response; use this one on *.run.app). A browser gets a readable status
+                  page instead (app/status_page.py); ?format=json forces the JSON.
   GET  /v1/me                         → profile, level, verification status
   POST /v1/profile                    → role + registration number at signup (status=pending)
   PATCH /v1/profile                   → the clinician edits their details (role/registration change → re-verify)
@@ -52,12 +53,12 @@ import uuid
 from datetime import date
 from types import SimpleNamespace
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query
-from fastapi.responses import JSONResponse, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import ai_admin_api, billing_api, booking_api, byok, db, deid, education
+from . import ai_admin_api, billing_api, booking_api, byok, db, deid, education, status_page
 from .ai_settings import AiStore, ModelRouter
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
@@ -336,9 +337,14 @@ class CleanIn(BaseModel):
 # --- routes -----------------------------------------------------------------
 @app.get("/healthz")
 @app.get("/health")
-def healthz():
-    return {"ok": True, "skill_version": SKILL.version, "prompt_hash": SKILL.prompt_hash,
+def healthz(request: Request, format: str | None = Query(None, pattern="^(json|html)$")):
+    info = {"ok": True, "skill_version": SKILL.version, "prompt_hash": SKILL.prompt_hash,
             "model": MODEL.model, **CFG.public()}
+    if not status_page.wants_html(request.headers.get("accept", ""), format):
+        return info                       # scripts and the deploy smoke test: unchanged JSON
+    database = None if CFG.dev_mode else db.ping()
+    return HTMLResponse(status_page.render(info, database),
+                        headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex"})
 
 
 @app.get("/v1/me")
