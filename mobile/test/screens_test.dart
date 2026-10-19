@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:your_counselor/core/config.dart';
 import 'package:go_router/go_router.dart';
 import 'package:your_counselor/core/api/api_exceptions.dart';
 import 'package:your_counselor/core/api/api_models.dart';
@@ -329,6 +330,29 @@ void main() {
     expect(p.toJson(), containsPair('full_name', 'Dr Sample Clinician'));
     expect(p.toJson(), containsPair('gender', 'female'));
     expect(p.toJson(), containsPair('age', 34));
+  });
+
+  testWidgets('the store reviewer signs in with a password; everyone else gets an emailed code', (tester) async {
+    AppConfig.reviewEmail = 'playreview@yourcounselor.in';
+    addTearDown(() => AppConfig.reviewEmail = '');
+    final router = await _pumpAt(tester, '/sign-in');
+    await tester.enterText(find.byType(TextField), 'doctor@clinic.in');
+    await tester.pump();
+    expect(find.text('Send code'), findsOneWidget);
+    expect(find.text('Password'), findsNothing, reason: 'no password for anyone else');
+
+    await tester.enterText(find.byType(TextField), ' PlayReview@YourCounselor.in ');
+    await tester.pump();
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.text('Send code'), findsNothing, reason: 'no code is emailed to the reviewer');
+    final signIn = find.widgetWithText(FilledButton, 'Sign in');
+    expect(tester.widget<FilledButton>(signIn).onPressed, isNull, reason: 'needs the password');
+    await tester.enterText(find.byType(TextField).last, 'reviewer-password');
+    await tester.pump();
+    await tester.tap(signIn);
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, isNot('/code'));
+    expect(router.state.uri.path, '/details');
   });
 
   testWidgets('sign-in flow: email, code, details, pending, verified', (tester) async {
