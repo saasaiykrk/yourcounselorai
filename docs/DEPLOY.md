@@ -309,21 +309,26 @@ every signed-in user, one card per page titled with the page's own title. They s
   for 12 hours (the page view can't send the app's sign-in). Without a valid link the page says "This link has
   expired". Links to other education pages stay in the app; phone numbers, email and outside websites open on
   the phone. The PDF handout opens in the app's PDF viewer.
-- Reading is free. Every page shows a **Print / Save as PDF** button. Who can use it:
+- Reading is free. There is no page-wide print button, and whole pages don't print. Printing and saving as PDF
+  happen only through each module's own **Print or save as PDF** buttons, on its client handouts and counsellor
+  sheets (the reference pages have none). Who can use them:
   - **Charging off** (/admin → Pricing Plans): everyone. Nothing is charged, so printing is free too.
-  - **A running subscription**: every page. That is a 30- or 50-report plan, the own-key plan, or credits given
-    by an admin, not cancelled and not ended (used-up credits still count). A single report purchase does not
-    count.
-  - **A single print**: one page, printed or saved as often as needed for 24 hours, ₹49 by default. Set the
-    price, the hours or switch it off in /admin → Pricing Plans → **Single print (education page)**. It is
-    paid through Razorpay like the plans and appears in Payments as "Single print".
-- Locked, the button opens a sheet in the app: **Buy for ₹49** (this page) or **See subscriptions**. After the
-  payment is confirmed the page reloads unlocked and the card shows "Print until …". In a browser outside the
-  app, the button explains instead. Printing from the browser's own menu shows the same note, and the modules'
-  handout downloads stay locked. If the check fails, printing stays off.
-- Unlocked, the server adds the print layout (A4, every section expanded, menus hidden) as it sends each page.
-  The reader modules block printing on purpose; for these pages only that one print rule is switched off. Copy
-  protection and the viewer's name and email in the watermark stay on.
+  - **A running subscription**: every module. That is a 30- or 50-report plan, the own-key plan, or credits
+    given by an admin, not cancelled and not ended (used-up credits still count). A single report purchase does
+    not count.
+  - **A single print**: one module's handouts and sheets, printed or saved as often as needed for 24 hours, ₹49
+    by default. Set the price, the hours or switch it off in /admin → Pricing Plans → **Single print (education
+    page)**. It is paid through Razorpay like the plans and appears in Payments as "Single print".
+- Unlocked, inside the app a button hands the app the handout exactly as the module would print it, and the app
+  opens the phone's print / save-as-PDF dialog. In a browser outside the app, the module's own print window opens.
+- Locked, inside the app a button opens a sheet: **Buy for ₹49** (this module) or **See subscriptions**. After the
+  payment is confirmed the page reloads unlocked and the card shows "Print until …". In a browser outside the app,
+  the note appears under the button. If the check fails, printing stays off.
+- The Case History PDF has no buttons of its own: its viewer in the app has the Print / Save as PDF button, under
+  the same rules.
+- The app shows these pages in the **Knowledge** tab, under the tabs All · Basics · Therapies · Practice ·
+  Others · Handouts. Which page sits in which tab is `SECTION_OF` in `app/education.py` (by the page's slug); a
+  page not listed there shows under Others, and a PDF under Handouts. Moving a page needs no app update.
 - **To add or replace a page:** put the `.html` file in `app/education_web/` and merge. Its `<title>` becomes
   the card title. The reader modules read their live settings (viewer, published module list) from the app,
   as described in that folder's README.

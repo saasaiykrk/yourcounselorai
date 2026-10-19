@@ -49,7 +49,7 @@ class HomeShell extends ConsumerWidget {
           NavigationDestination(
             icon: Icon(Icons.school_outlined),
             selectedIcon: Icon(Icons.school_rounded),
-            label: 'Education',
+            label: 'Knowledge',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline_rounded),
