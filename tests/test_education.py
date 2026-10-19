@@ -41,7 +41,17 @@ class CatalogTests(unittest.TestCase):
     def test_every_page_has_a_known_section(self):
         self.assertTrue(all(p.section in education.SECTIONS for p in CATALOG))
         self.assertEqual(set(education.SECTION_OF) - {p.slug for p in CATALOG}, set(), "no stale slugs")
-        self.assertEqual(BY_FILE["YourCounselor_Cognitive_Behavioural_Therapy_CBT.html"].section, "therapies")
+        by_section = {}
+        for p in CATALOG:
+            by_section.setdefault(p.section, set()).add(p.slug)
+        self.assertEqual(by_section, {
+            "basics": {"foundations", "the-core-eight-practical-guide"},
+            "therapies": {"acceptance-commitment-therapy", "behavioural-activation", "cbt", "dbt", "exposure-therapy",
+                          "motivational-interviewing", "person-centred-therapy", "solution-focused-brief-therapy"},
+            "practice": {"adult-psychotherapy-protocol-matrix-and-glossary", "therapy-comparison-chart"},
+            "others": {"neuro-linguistic-programming"},
+            "handouts": {"case-history-and-mse-practice-handout"},
+        }, "the owner's sections")
         [pdf] = [p for p in CATALOG if p.kind == "handout"]
         self.assertEqual(pdf.section, "handouts")
         unknown = education.Page("new-page", "x.html", "X", "", "reference", False)

@@ -69,7 +69,7 @@ SECTION_OF = {
     "dbt": "therapies",
     "exposure-therapy": "therapies",
     "motivational-interviewing": "therapies",
-    "neuro-linguistic-programming": "therapies",
+    "neuro-linguistic-programming": "others",
     "person-centred-therapy": "therapies",
     "solution-focused-brief-therapy": "therapies",
     "therapy-comparison-chart": "practice",
