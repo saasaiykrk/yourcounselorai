@@ -67,6 +67,7 @@ const _pages = [
     summary: 'A structured, time-limited approach.',
     url: 'https://api.test/learn/cbt?t=abc',
     canPrint: true,
+    section: 'therapies',
   ),
   EducationPage(
     slug: 'therapy-comparison-chart',
@@ -74,6 +75,7 @@ const _pages = [
     kind: 'reference',
     url: 'https://api.test/learn/therapy-comparison-chart?t=abc',
     canPrint: true,
+    section: 'practice',
   ),
   EducationPage(
     slug: 'case-history',
@@ -93,6 +95,7 @@ final _locked = [
       kind: p.kind,
       url: p.url,
       summary: p.summary,
+      section: p.section,
       canPrint: p.slug == 'cbt',
       printUntil: p.slug == 'cbt' ? DateTime.now().add(const Duration(hours: 5)) : null,
     ),
@@ -119,7 +122,7 @@ Future<List<(Uri, bool)>> _pump(WidgetTester tester, _Repo repo, {double width =
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Education').last);
+  await tester.tap(find.text('Knowledge'));
   await tester.pumpAndSettle();
   return opened;
 }
@@ -311,16 +314,33 @@ void main() {
     expect(cleanTitle('Cognitive Behavioural Therapy (CBT)'), 'Cognitive Behavioural Therapy (CBT)');
   });
 
-  testWidgets('filters show one kind at a time', (tester) async {
+  testWidgets('the Knowledge tabs show one section at a time', (tester) async {
     await _pump(tester, _Repo(List.of(_pages)));
-    await tester.tap(find.text('Modules'));
+    expect(find.text('Knowledge'), findsWidgets, reason: 'screen title and bottom tab');
+    for (final t in ['All', 'Basics', 'Therapies', 'Practice', 'Others', 'Handouts']) {
+      expect(find.widgetWithText(Tab, t), findsOneWidget, reason: t);
+    }
+    await tester.tap(find.widgetWithText(Tab, 'Therapies'));
     await tester.pumpAndSettle();
     expect(find.text('Cognitive Behavioural Therapy (CBT)'), findsOneWidget);
     expect(find.text('Therapy Comparison Chart'), findsNothing);
-    await tester.tap(find.text('Handouts'));
+    await tester.tap(find.widgetWithText(Tab, 'Practice'));
     await tester.pumpAndSettle();
-    expect(find.text('Case History and MSE Practice Handout'), findsOneWidget);
+    expect(find.text('Therapy Comparison Chart'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, 'Others'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing here yet.'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(Tab, 'Handouts'));
+    await tester.tap(find.widgetWithText(Tab, 'Handouts'));
+    await tester.pumpAndSettle();
+    expect(find.text('Case History and MSE Practice Handout'), findsOneWidget, reason: 'a PDF goes to Handouts');
     expect(find.text('Cognitive Behavioural Therapy (CBT)'), findsNothing);
+  });
+
+  test('a page without a section from the server: PDFs to Handouts, the rest to Others', () {
+    expect(EducationPage.fromJson(const {'slug': 'x', 'kind': 'handout'}).section, 'handouts');
+    expect(EducationPage.fromJson(const {'slug': 'y', 'kind': 'module'}).section, 'others');
+    expect(EducationPage.fromJson(const {'slug': 'z', 'kind': 'module', 'section': 'basics'}).section, 'basics');
   });
 
   testWidgets('no connection: a message and Try again', (tester) async {
@@ -337,7 +357,7 @@ void main() {
     testWidgets('fits on a ${width.toInt()}px phone, five tabs included', (tester) async {
       await _pump(tester, _Repo(List.of(_pages)), width: width);
       expect(tester.takeException(), isNull);
-      for (final tab in ['Consult', 'History', 'Calendar', 'Education', 'Account']) {
+      for (final tab in ['Consult', 'History', 'Calendar', 'Knowledge', 'Account']) {
         expect(find.text(tab), findsWidgets, reason: tab);
       }
     });
