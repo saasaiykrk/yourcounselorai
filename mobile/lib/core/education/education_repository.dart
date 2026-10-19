@@ -10,7 +10,8 @@ class EducationPage {
     this.summary = '',
     this.canPrint = false,
     this.printUntil,
-  });
+    String? section,
+  }) : section = section ?? (kind == 'handout' ? 'handouts' : 'others');
 
   factory EducationPage.fromJson(Map<String, dynamic> j) => EducationPage(
     slug: j['slug'] as String? ?? '',
@@ -18,6 +19,7 @@ class EducationPage {
     summary: j['summary'] as String? ?? '',
     kind: j['kind'] as String? ?? 'reference',
     url: j['url'] as String? ?? '',
+    section: j['section'] as String?,
     canPrint: j['can_print'] == true,
     printUntil: DateTime.tryParse(j['print_until'] as String? ?? '')?.toLocal(),
   );
@@ -31,6 +33,9 @@ class EducationPage {
   /// module · reference · handout
   final String kind;
 
+  /// The Knowledge tab it sits under: basics · therapies · practice · others · handouts (set by the server).
+  final String section;
+
   /// A signed link to the page, valid for a few hours; fetched fresh each time the list loads.
   final String url;
 
@@ -40,10 +45,13 @@ class EducationPage {
   /// When a single print bought for this page ends (null: none, or a subscription covers it).
   final DateTime? printUntil;
 
-  String get kindLabel => switch (kind) {
-    'module' => 'Module',
-    'handout' => 'Handout · PDF',
-    _ => 'Reference',
+  /// The tag under the card: its Knowledge section (a PDF also says so).
+  String get sectionLabel => switch (section) {
+    'basics' => 'Basics',
+    'therapies' => 'Therapy',
+    'practice' => 'Practice',
+    'handouts' => kind == 'handout' ? 'Handout · PDF' : 'Handout',
+    _ => 'Other',
   };
 }
 
@@ -145,11 +153,28 @@ class PreviewEducationRepository implements EducationRepository {
     ),
   ];
 
+  static const _sections = {
+    'foundations': 'basics',
+    'the-core-eight-practical-guide': 'basics',
+    'therapy-comparison-chart': 'practice',
+    'adult-psychotherapy-protocol-matrix-and-glossary': 'practice',
+    'acceptance-commitment-therapy': 'therapies',
+    'cbt': 'therapies',
+  };
+
   @override
   Future<EducationCatalog> pages() async => EducationCatalog(
     pages: [
       for (final (slug, title, kind, summary) in _pages)
-        EducationPage(slug: slug, title: title, kind: kind, summary: summary, url: '', canPrint: true),
+        EducationPage(
+          slug: slug,
+          title: title,
+          kind: kind,
+          summary: summary,
+          url: '',
+          canPrint: true,
+          section: _sections[slug],
+        ),
     ],
     canPrint: true,
   );

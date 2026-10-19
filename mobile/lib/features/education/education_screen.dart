@@ -20,13 +20,16 @@ final educationPageViewProvider = Provider<PageView>(
       (page, offer) => EducationReaderScreen(page: page, offer: offer),
 );
 
-enum _Filter {
+/// The Knowledge tabs. Which page sits in which section is set on the server (`section`).
+enum _Section {
   all('All'),
-  module('Modules'),
-  reference('Reference'),
-  handout('Handouts');
+  basics('Basics'),
+  therapies('Therapies'),
+  practice('Practice'),
+  others('Others'),
+  handouts('Handouts');
 
-  const _Filter(this.label);
+  const _Section(this.label);
 
   final String label;
 }
@@ -46,8 +49,19 @@ class EducationScreen extends ConsumerStatefulWidget {
   ConsumerState<EducationScreen> createState() => _EducationScreenState();
 }
 
-class _EducationScreenState extends ConsumerState<EducationScreen> {
-  _Filter _filter = _Filter.all;
+class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTickerProviderStateMixin {
+  late final TabController _tabs = TabController(length: _Section.values.length, vsync: this)
+    ..addListener(() {
+      if (!_tabs.indexIsChanging) setState(() {});
+    });
+
+  _Section get _section => _Section.values[_tabs.index];
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
 
   Future<void> _open(EducationPage p, PrintOffer? offer) async {
     if (p.url.isEmpty) {
@@ -67,7 +81,15 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
   Widget build(BuildContext context) {
     final pages = ref.watch(educationPagesProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Education')),
+      appBar: AppBar(
+        title: const Text('Knowledge'),
+        bottom: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: [for (final t in _Section.values) Tab(text: t.label)],
+        ),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(educationPagesProvider);
@@ -92,24 +114,18 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
           ),
           data: (catalog) {
             final all = catalog.pages;
-            final kinds = {for (final p in all) p.kind};
-            final filters = [
-              _Filter.all,
-              for (final f in _Filter.values.skip(1))
-                if (kinds.contains(f.name)) f,
-            ];
-            final shown = _filter == _Filter.all
+            final shown = _section == _Section.all
                 ? all
                 : [
                     for (final p in all)
-                      if (p.kind == _filter.name) p,
+                      if (p.section == _section.name) p,
                   ];
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
                 if (catalog.canPrint)
                   const Text(
-                    'Free for every YourCounselor user. Each page has a Print / Save as PDF button.',
+                    'Free for every YourCounselor user. Print or save the handouts and worksheets in each module as PDF.',
                     style: AppText.smallMuted,
                   )
                 else
@@ -117,27 +133,13 @@ class _EducationScreenState extends ConsumerState<EducationScreen> {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Free to read for every YourCounselor user. Printing and saving as PDF come with a '
-                        'subscription${catalog.printOffer == null ? '' : ', or buy a single page for '
+                        'Free to read for every YourCounselor user. Printing handouts and worksheets as PDF comes '
+                        'with a subscription${catalog.printOffer == null ? '' : ', or unlock one module for '
                                   '${formatMoney(catalog.printOffer!.price, catalog.printOffer!.currency)} '
                                   '(${catalog.printOffer!.hours} hours)'}.',
                         style: AppText.smallMuted,
                       ),
                       TextButton(onPressed: () => context.push('/pricing'), child: const Text('See plans')),
-                    ],
-                  ),
-                const SizedBox(height: 12),
-                if (filters.length > 2)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final f in filters)
-                        ChoiceChip(
-                          label: Text(f.label),
-                          selected: _filter == f,
-                          onSelected: (_) => setState(() => _filter = f),
-                        ),
                     ],
                   ),
                 const SizedBox(height: 12),
@@ -211,7 +213,7 @@ class _PageCard extends StatelessWidget {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          StatusPill(page.kindLabel, tone: Tone.neutral),
+                          StatusPill(page.sectionLabel, tone: Tone.neutral),
                           if (page.printUntil != null)
                             StatusPill('Print until ${_until(page.printUntil!)}', icon: Icons.print_outlined),
                         ],

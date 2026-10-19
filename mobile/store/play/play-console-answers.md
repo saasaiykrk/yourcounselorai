@@ -1,0 +1,78 @@
+# Play Console: answers for every form
+
+Fill these in Play Console → your app → **Policy and programs → App content** (and the store listing pages). Each answer describes what the app does today; check it again if the app changes.
+
+## Before you submit: three things to sort out
+1. **Payments policy (most important).** The app sells digital content (report plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
+2. **Account deletion.** Play requires a way to delete an account from inside the app **and** a web link for it. The app has no "Delete account" button yet; today the privacy pages say to email the safety address. A web form or a page with that email address can serve as the link for now. The in-app button still needs building.
+3. **Reviewer sign-in.** Sign-in is by a 6-digit code sent by email, and the app only opens for verified clinicians. Google's reviewers need a working login (see App access below). The usual way is a reviewer account with a fixed code, which needs a small change in the app and backend.
+
+## App access
+- **All or some functionality is restricted** → *Some functionality is restricted*. Add instructions:
+  > YourCounselor is for registered mental-health professionals. Sign in with the reviewer email below; enter the code shown below when asked. The account is already verified.
+  > Email: [reviewer email] · Code: [fixed reviewer code]
+- Without a reviewer account, review will fail at sign-in.
+
+## Ads
+- **Does your app contain ads?** No.
+
+## Content rating (IARC questionnaire)
+- Category: **Reference, News, or Educational** (a medical reference app for professionals).
+- Violence, sexual content, profanity, gambling: **No**.
+- Controlled substances: the clinical reference text discusses substance use as a clinical topic only. Answer **No** to promoting or depicting use; mention educational references if asked.
+- Suicide and self-harm: the app discusses risk assessment and crisis helplines in a clinical, educational way. Answer accordingly; it does not depict or encourage self-harm.
+- User interaction: users don't interact with each other, no chat between users, no sharing of location.
+- Digital purchases: **Yes** (plans, single reports, single prints).
+- Expect a Teen / 12+ to 16+ rating, depending on the self-harm answers.
+
+## Target audience and content
+- Target age: **18 and over** only.
+- Appeals to children: **No**.
+
+## News app
+- No.
+
+## COVID-19 contact tracing and status
+- No.
+
+## Data safety
+Encryption in transit: **Yes** (HTTPS everywhere). Users can ask for their data to be deleted: **Yes** (by email today; see the account deletion item above). Data is never sold and never used for advertising.
+
+| Data type (Play category) | Collected | Shared | Optional? | Why | Notes |
+|---|---|---|---|---|---|
+| Personal info → **Name** | Yes | No | Required | Account management, app functionality | Clinician's name. Clients' first names, when the clinician adds an appointment (optional field). |
+| Personal info → **Email address** | Yes | No | Required | Account management, app functionality | Sign-in code. Clients' emails for appointment notices (optional field). |
+| Personal info → **Other info** | Yes | No | Required | Account management (verification) | Gender, age, professional role, registration body and number. |
+| Health and fitness → **Health info** | Yes | No | Required to use consults | App functionality | De-identified case descriptions and the replies. Identifiers are removed on the phone first. |
+| Financial info → **Purchase history** | Yes | No | Optional (only if you buy) | App functionality, account management | Plan, amount, payment status. |
+| Financial info → **User payment info** | Yes, by the Razorpay SDK in the app | No | Optional (only if you buy) | Payments | Card, UPI and bank details go to Razorpay only; YourCounselor never sees or stores them. |
+| App activity, web browsing, location, contacts, photos, files, messages, audio, device or other IDs | No | | | | No analytics, no crash reporting, no advertising ID. |
+
+**Shared** means given to a third party for its own use. Processors acting for YourCounselor (Google Cloud, Supabase, Anthropic or Google for AI replies, Razorpay, the email service) count as service providers, so this data counts as collected but not shared.
+
+## Health apps declaration
+- Choose the categories that fit: **Medical reference and education**, and **Clinical decision support** (for healthcare professionals).
+- The app is not a regulated medical device, does not diagnose, and is not for patients or the public.
+
+## Financial features
+- None. The app does not offer loans, banking, crypto, insurance or other financial services.
+
+## Government apps
+- No.
+
+## Store settings
+- App category: **Medical**. Tags: Medical reference, Productivity.
+- Contact email: a support address you monitor (required). Website: optional.
+- Privacy policy URL: a public web page with `privacy-policy.md` (after the lawyer's review).
+
+## Graphics checklist
+| Asset | File | Size |
+|---|---|---|
+| App icon | app-icon-512.png | 512 × 512, 32-bit PNG |
+| Feature graphic | feature-graphic-1024x500.png | 1024 × 500 |
+| Phone screenshots (8) | screenshots/01–08 | 1080 × 1920 each, in a phone frame |
+
+## Release
+- Upload an **Android App Bundle (.aab)** signed for release, not the test APK. Play App Signing keeps the signing key; you keep the upload key, never in git.
+- Version: 1.0.0 (build 1). Each upload needs a higher build number.
+- Start with **Internal testing**, then Closed testing. New personal developer accounts must run a closed test with at least 12 testers for 14 days before Production.
