@@ -38,6 +38,15 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(len({p.slug for p in CATALOG}), len(CATALOG), "slugs are unique")
         self.assertEqual(sum(p.reader for p in CATALOG), 10, "ten reader modules")
 
+    def test_every_page_has_a_known_section(self):
+        self.assertTrue(all(p.section in education.SECTIONS for p in CATALOG))
+        self.assertEqual(set(education.SECTION_OF) - {p.slug for p in CATALOG}, set(), "no stale slugs")
+        self.assertEqual(BY_FILE["YourCounselor_Cognitive_Behavioural_Therapy_CBT.html"].section, "therapies")
+        [pdf] = [p for p in CATALOG if p.kind == "handout"]
+        self.assertEqual(pdf.section, "handouts")
+        unknown = education.Page("new-page", "x.html", "X", "", "reference", False)
+        self.assertEqual(unknown.section, "others", "a new page lands in Others until it is placed")
+
     def test_the_handout_pdf_is_listed_too(self):
         [pdf] = [p for p in CATALOG if p.kind == "handout"]
         self.assertTrue(pdf.file.endswith(".pdf"))
@@ -144,6 +153,7 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(r.json()["can_print"])
         self.assertEqual(len(pages), 14)
         cbt = next(p for p in pages if p["slug"] == "cbt")
+        self.assertEqual(cbt["section"], "therapies")
         page = self.get(cbt["url"])
         self.assertEqual(page.status_code, 200)
         self.assertIn("Print / Save as PDF", page.text)

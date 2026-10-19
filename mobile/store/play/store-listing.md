@@ -38,8 +38,8 @@ Share your booking link. Clients choose a free time, and you approve or confirm 
 YOUR HISTORY
 Search, label and revisit your past consults. Only you can see them.
 
-EDUCATION LIBRARY
-Free for every user: therapy modules (CBT, ACT, DBT, Behavioural Activation, Motivational Interviewing, Exposure Therapy and more), a therapy comparison chart, a protocol matrix and glossary, and a case history and MSE practice handout. Pages open inside the app. Print or save any page as a PDF with a subscription, or unlock a single page for 24 hours.
+KNOWLEDGE LIBRARY
+Free for every user, in sections (Basics, Therapies, Practice, Others, Handouts): therapy modules (CBT, ACT, DBT, Behavioural Activation, Motivational Interviewing, Exposure Therapy and more), a therapy comparison chart, a protocol matrix and glossary, and a case history and MSE practice handout. Pages open inside the app. Print or save any page as a PDF with a subscription, or unlock a single page for 24 hours.
 
 PLANS
 Monthly plans with 30 or 50 reports, single reports, or your own AI provider key. Payments are handled securely by Razorpay.
@@ -55,7 +55,7 @@ YourCounselor supports your clinical judgement; it does not replace it. It is no
 2. screenshots/02-check.png: Checked on your phone first
 3. screenshots/03-guided.png: Guided consultation
 4. screenshots/04-report.png: Structured clinical work-up
-5. screenshots/05-education.png: Free education library
+5. screenshots/05-knowledge.png: Free knowledge library
 6. screenshots/06-module.png: Read, print or save as PDF
 7. screenshots/07-calendar.png: Your calendar and bookings
 8. screenshots/08-history.png: Your past consults
@@ -67,4 +67,4 @@ All sample content: no real client. Tablet screenshots are optional; leave them 
 - Feature graphic: feature-graphic-1024x500.png (1024 × 500)
 
 ## Release notes, version 1.0.0
-First release: guided consultations with structured reports, direct consults, ICD-11 checked codes, PDF reports, consult history, appointment booking and a free education library.
+First release: guided consultations with structured reports, direct consults, ICD-11 checked codes, PDF reports, consult history, appointment booking and a free knowledge library.

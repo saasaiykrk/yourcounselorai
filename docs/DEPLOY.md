@@ -324,6 +324,9 @@ every signed-in user, one card per page titled with the page's own title. They s
 - Unlocked, the server adds the print layout (A4, every section expanded, menus hidden) as it sends each page.
   The reader modules block printing on purpose; for these pages only that one print rule is switched off. Copy
   protection and the viewer's name and email in the watermark stay on.
+- The app shows these pages in the **Knowledge** tab, under the tabs All · Basics · Therapies · Practice ·
+  Others · Handouts. Which page sits in which tab is `SECTION_OF` in `app/education.py` (by the page's slug); a
+  page not listed there shows under Others, and a PDF under Handouts. Moving a page needs no app update.
 - **To add or replace a page:** put the `.html` file in `app/education_web/` and merge. Its `<title>` becomes
   the card title. The reader modules read their live settings (viewer, published module list) from the app,
   as described in that folder's README.

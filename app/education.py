@@ -56,6 +56,26 @@ FIRST = ["YourCounselor_Foundations_for_Counsellors_and_Psychologists.html",
          "YourCounselor_The_Core_Eight_Practical_Guide.html",
          "YourCounselor_Therapy_Comparison_Chart.html",
          "YourCounselor_Adult_Psychotherapy_Protocol_Matrix_and_Glossary.html"]
+# The Knowledge tab's sections, in tab order (the app adds "All" in front). A page's section comes from
+# SECTION_OF by its slug; a page not listed goes to "others", and a PDF to "handouts". Moving a page
+# between sections is a change here only; the app shows whatever the server says.
+SECTIONS = ("basics", "therapies", "practice", "others", "handouts")
+SECTION_OF = {
+    "foundations": "basics",
+    "the-core-eight-practical-guide": "basics",
+    "acceptance-commitment-therapy": "therapies",
+    "behavioural-activation": "therapies",
+    "cbt": "therapies",
+    "dbt": "therapies",
+    "exposure-therapy": "therapies",
+    "motivational-interviewing": "therapies",
+    "neuro-linguistic-programming": "therapies",
+    "person-centred-therapy": "therapies",
+    "solution-focused-brief-therapy": "therapies",
+    "therapy-comparison-chart": "practice",
+    "adult-psychotherapy-protocol-matrix-and-glossary": "practice",
+    "case-history-and-mse-practice-handout": "handouts",
+}
 BRAND_RE = re.compile(r"^\s*YourCounselor\s*\|\s*|\s*\|\s*YourCounselor\s*$")
 
 
@@ -67,6 +87,10 @@ class Page:
     summary: str
     kind: str                 # module · reference · handout
     reader: bool              # a YCReader module (takes YC_CONFIG)
+
+    @property
+    def section(self) -> str:
+        return SECTION_OF.get(self.slug, "handouts" if self.kind == "handout" else "others")
 
 
 def _slugify(name: str) -> str:
@@ -348,7 +372,7 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
         token, base = svc.signer.token(user["id"]), base_url(request)
         access = svc.print_access(user["id"])
         until = lambda p: access.pages[p.slug].isoformat() if p.slug in access.pages else None  # noqa: E731
-        return {"pages": [{"slug": p.slug, "title": p.title, "summary": p.summary, "kind": p.kind,
+        return {"pages": [{"slug": p.slug, "title": p.title, "summary": p.summary, "kind": p.kind, "section": p.section,
                            "url": svc.url(base, p, token), "can_print": access.allows(p.slug),
                            "print_until": None if access.everything else until(p)} for p in svc.catalog],
                 "link_hours": svc.signer.hours, "can_print": access.everything,
