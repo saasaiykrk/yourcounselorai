@@ -218,35 +218,18 @@ class SignInScreen extends ConsumerStatefulWidget {
 
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _email = TextEditingController();
-  final _password = TextEditingController();
   bool _busy = false;
   String? _error;
 
   bool get _valid => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_email.text.trim());
 
-  /// The store reviewer's account signs in with a password instead of an emailed code.
-  bool get _reviewer => AppConfig.isReviewEmail(_email.text);
-
-  Future<void> _reviewerSignIn() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await ref.read(authServiceProvider).signInWithPassword(_email.text.trim(), _password.text);
-      ref.invalidate(meProvider);
-      final me = await ref.read(profileRepositoryProvider).me();
-      if (mounted) context.go(routeForProfile(me));
-    } catch (e) {
-      if (mounted) setState(() => _error = _messageFor(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _send() async {
-    if (_reviewer) return _reviewerSignIn();
     final email = _email.text.trim();
+    // The store reviewer can't receive emails: no code is sent; they type their fixed code instead.
+    if (AppConfig.isReviewEmail(email)) {
+      context.push('/code', extra: email);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -264,7 +247,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
   @override
   void dispose() {
     _email.dispose();
-    _password.dispose();
     super.dispose();
   }
 
@@ -276,11 +258,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
         gap: 24,
         actions: [
-          _BusyButton(
-            label: _reviewer ? 'Sign in' : 'Send code',
-            busy: _busy,
-            onPressed: _valid && (!_reviewer || _password.text.isNotEmpty) ? _send : null,
-          ),
+          _BusyButton(label: 'Send code', busy: _busy, onPressed: _valid ? _send : null),
           Center(
             child: TextButton(
               onPressed: () => context.push('/terms'),
@@ -308,24 +286,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 style: const TextStyle(fontSize: 17),
                 decoration: const InputDecoration(hintText: 'name@clinic.in'),
                 onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _valid && !_busy && !_reviewer ? _send() : null,
+                onSubmitted: (_) => _valid && !_busy ? _send() : null,
               ),
-              if (_reviewer) ...[
-                const SizedBox(height: 16),
-                const Text('Password', style: AppText.label),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _password,
-                  obscureText: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textInputAction: TextInputAction.done,
-                  style: const TextStyle(fontSize: 17),
-                  decoration: const InputDecoration(hintText: 'Reviewer password'),
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _password.text.isNotEmpty && !_busy ? _send() : null,
-                ),
-              ],
               const SizedBox(height: 8),
               _ErrorText(_error),
             ],
@@ -373,6 +335,7 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
     final email = widget.email;
     if (email == null) return;
     _startCountdown();
+    if (AppConfig.isReviewEmail(email)) return; // nothing is emailed to the reviewer
     try {
       await ref.read(authServiceProvider).requestCode(email);
     } catch (e) {
@@ -391,7 +354,12 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
       _error = null;
     });
     try {
-      await ref.read(authServiceProvider).verifyCode(email, _code.text);
+      final auth = ref.read(authServiceProvider);
+      if (AppConfig.isReviewEmail(email)) {
+        await auth.signInWithReviewCode(email, _code.text);
+      } else {
+        await auth.verifyCode(email, _code.text);
+      }
       ref.invalidate(meProvider);
       final me = await ref.read(profileRepositoryProvider).me();
       if (mounted) context.go(routeForProfile(me));

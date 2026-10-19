@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:your_counselor/core/auth/auth_service.dart';
 import 'package:your_counselor/core/config.dart';
 import 'package:go_router/go_router.dart';
 import 'package:your_counselor/core/api/api_exceptions.dart';
@@ -85,6 +86,7 @@ Future<GoRouter> _pumpAt(
   String location, {
   Size size = const Size(390, 844),
   ConsultRepository? consult,
+  AuthService? auth,
 }) async {
   tester.view.physicalSize = size * 3;
   tester.view.devicePixelRatio = 3;
@@ -95,12 +97,44 @@ Future<GoRouter> _pumpAt(
       overrides: [
         consultRepositoryProvider.overrideWithValue(consult ?? _FakeConsult()),
         consultRecoveryProvider.overrideWithValue((within: Duration.zero, every: Duration.zero)),
+        if (auth != null) authServiceProvider.overrideWithValue(auth),
       ],
       child: YourCounselorApp(router: router),
     ),
   );
   await tester.pump(const Duration(milliseconds: 500));
   return router;
+}
+
+class _RecordingAuth implements AuthService {
+  final codesRequested = <String>[];
+  final verified = <String>[];
+  final reviewCodes = <String>[];
+  bool _in = false;
+
+  @override
+  bool get isSignedIn => _in;
+
+  @override
+  Future<void> requestCode(String email) async => codesRequested.add(email);
+
+  @override
+  Future<void> verifyCode(String email, String code) async {
+    verified.add(code);
+    _in = true;
+  }
+
+  @override
+  Future<void> signInWithReviewCode(String email, String code) async {
+    reviewCodes.add(code);
+    _in = true;
+  }
+
+  @override
+  Future<String?> accessToken() async => _in ? 'dev-L2' : null;
+
+  @override
+  Future<void> signOut() async => _in = false;
 }
 
 /// Opens the check panel from the consult screen, attests, and sends.
@@ -332,27 +366,36 @@ void main() {
     expect(p.toJson(), containsPair('age', 34));
   });
 
-  testWidgets('the store reviewer signs in with a password; everyone else gets an emailed code', (tester) async {
+  testWidgets('the store reviewer uses the normal screens with a fixed code; nothing is emailed', (tester) async {
     AppConfig.reviewEmail = 'playreview@yourcounselor.in';
     addTearDown(() => AppConfig.reviewEmail = '');
-    final router = await _pumpAt(tester, '/sign-in');
-    await tester.enterText(find.byType(TextField), 'doctor@clinic.in');
-    await tester.pump();
-    expect(find.text('Send code'), findsOneWidget);
-    expect(find.text('Password'), findsNothing, reason: 'no password for anyone else');
-
+    final auth = _RecordingAuth();
+    final router = await _pumpAt(tester, '/sign-in', auth: auth);
     await tester.enterText(find.byType(TextField), ' PlayReview@YourCounselor.in ');
     await tester.pump();
-    expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Send code'), findsNothing, reason: 'no code is emailed to the reviewer');
-    final signIn = find.widgetWithText(FilledButton, 'Sign in');
-    expect(tester.widget<FilledButton>(signIn).onPressed, isNull, reason: 'needs the password');
-    await tester.enterText(find.byType(TextField).last, 'reviewer-password');
-    await tester.pump();
-    await tester.tap(signIn);
+    expect(find.text('Password'), findsNothing, reason: 'the same screen as everyone else');
+    await tester.tap(find.text('Send code'));
     await tester.pumpAndSettle();
-    expect(router.state.uri.path, isNot('/code'));
+    expect(router.state.uri.path, '/code');
+    expect(auth.codesRequested, isEmpty, reason: 'no email is sent to the reviewer');
+    await tester.enterText(find.byType(TextField), '482913');
+    await tester.pump();
+    await tester.tap(find.text('Verify'));
+    await tester.pumpAndSettle();
+    expect(auth.reviewCodes, ['482913'], reason: 'checked as the account password in Supabase');
+    expect(auth.verified, isEmpty);
     expect(router.state.uri.path, '/details');
+
+    // everyone else still gets an emailed code
+    AppConfig.reviewEmail = 'playreview@yourcounselor.in';
+    final auth2 = _RecordingAuth();
+    final router2 = await _pumpAt(tester, '/sign-in', auth: auth2);
+    await tester.enterText(find.byType(TextField), 'doctor@clinic.in');
+    await tester.pump();
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+    expect(auth2.codesRequested, ['doctor@clinic.in']);
+    expect(router2.state.uri.path, '/code');
   });
 
   testWidgets('sign-in flow: email, code, details, pending, verified', (tester) async {
