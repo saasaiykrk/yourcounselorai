@@ -6,6 +6,10 @@ on:
         description: "Only build the Android app (APK). Skips the server tests, the iOS build, evals and the ICD check"
         type: boolean
         default: false
+      play_bundle:
+        description: "With android_only: also build the signed Play Store bundle (.aab). Needs the ANDROID_UPLOAD_* secrets"
+        type: boolean
+        default: false
       run_evals:
         description: "Also run the clinical evals (real model, costs money; needs the eval secrets in GitHub)"
         type: boolean
@@ -121,6 +125,39 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      # Play Store bundle, signed with the upload key from GitHub secrets (never in git). The version
+      # comes from pubspec.yaml (version: name+build); each upload needs a higher build number.
+      - name: Play Store bundle (.aab)
+        if: inputs.play_bundle
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+            echo "::error::Add the four ANDROID_UPLOAD_* secrets first (mobile/README.md → Play Store bundle)."
+            exit 1
+          fi
+          ks="$RUNNER_TEMP/upload.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$ks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+            "$ks" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/key.properties
+          flutter build appbundle --release --dart-define-from-file=config/live.json
+          rm -f android/key.properties "$ks"
+          aab=build/app/outputs/bundle/release/app-release.aab
+          if keytool -printcert -jarfile "$aab" | grep -q "CN=Android Debug"; then
+            echo "::error::The bundle is signed with the debug key, not the upload key."; exit 1
+          fi
+          keytool -printcert -jarfile "$aab" | grep -E "Owner|SHA256:" | head -2
+      - uses: actions/upload-artifact@v4
+        if: inputs.play_bundle
+        with:
+          name: yourcounselor-play-bundle
+          path: mobile/build/app/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
 
   mobile-ios:
     # Manual only (macOS minutes cost more): compiles the iOS app, including

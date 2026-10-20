@@ -133,3 +133,34 @@ The app is built and released by its owner; CI/CD only deploys the backend. On e
    from `lib/core/content/legal_content.dart`; replace them with the reviewed text and bump `consentVersion`
    in `lib/core/config.dart` so everyone accepts the new version.
 4. **Psychologist review** of `lib/core/deid/cleaner.dart` (a safety file), and the open cleaner and inspector findings in the pull request.
+
+## Play Store bundle (.aab)
+Google Play takes an Android App Bundle signed with **your upload key**. The key lives only in GitHub secrets
+and in your own safe backup: never in git, in the app, or in a chat.
+
+**Once: create the upload key** (Google Cloud Shell has the tools). Use letters and digits only for the
+password; keytool asks for it twice and for a name, which can be your company name.
+```bash
+keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
+base64 -w0 upload.jks > upload.jks.b64      # the text form GitHub secrets can hold
+cloudshell download upload.jks              # keep this file and its password safe (a password manager)
+```
+
+**Once: add four repository secrets** (GitHub → the repo → Settings → Secrets and variables → Actions →
+New repository secret):
+| Name | Value |
+|---|---|
+| `ANDROID_UPLOAD_KEYSTORE_BASE64` | the whole contents of `upload.jks.b64` (`cat upload.jks.b64` in Cloud Shell, copy it) |
+| `ANDROID_UPLOAD_STORE_PASSWORD` | the keystore password |
+| `ANDROID_UPLOAD_KEY_ALIAS` | `upload` |
+| `ANDROID_UPLOAD_KEY_PASSWORD` | the same password (keytool uses one password for both unless you chose two) |
+
+Then delete the files from Cloud Shell: `rm upload.jks upload.jks.b64` (after the download).
+
+**Each release:**
+1. Raise `version:` in `pubspec.yaml` (`1.0.0+1` is version 1.0.0, build 1). Every upload needs a higher build
+   number than the last one, for example `1.0.1+2`.
+2. GitHub → Actions → **ci** → Run workflow on `main`, tick **android_only** and **play_bundle**.
+3. Download **yourcounselor-play-bundle** from the run (Artifacts), unzip it, and upload `app-release.aab` in
+   Play Console → Testing → Internal testing → Create new release. Keep **Play App Signing** on (the default):
+   Google holds the app signing key, and you can ask Google to reset a lost upload key.
