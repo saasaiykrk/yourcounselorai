@@ -4,7 +4,10 @@ Fill these in Play Console → your app → **Policy and programs → App conten
 
 ## Before you submit: three things to sort out
 1. **Payments policy (most important).** The app sells digital content (report plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
-2. **Account deletion.** Play requires a way to delete an account from inside the app **and** a web link for it. The app has no "Delete account" button yet; today the privacy pages say to email the safety address. A web form or a page with that email address can serve as the link for now. The in-app button still needs building.
+2. **Account deletion.** Done: **Account → Delete account** in the app (also on the "We're verifying you"
+   screen), and a web page at `https://<server>/delete-account` (for example
+   `https://app.yourcounselor.in/delete-account` once the domain works). Enter that URL in Play Console →
+   App content → **Data deletion**. Run migration 011 first (docs/DEPLOY.md).
 3. **Reviewer sign-in.** Done in the app: a fixed 6-digit code for one reviewer email only. Set up the account as in App access below.
 
 ## App access (reviewer sign-in)
@@ -53,7 +56,7 @@ email and code can sign in as the reviewer.
 - No.
 
 ## Data safety
-Encryption in transit: **Yes** (HTTPS everywhere). Users can ask for their data to be deleted: **Yes** (by email today; see the account deletion item above). Data is never sold and never used for advertising.
+Encryption in transit: **Yes** (HTTPS everywhere). Users can ask for their data to be deleted: **Yes** (in the app, Account → Delete account, or via the web link above). Payment records and de-identified consults are kept for the periods in the privacy policy. Data is never sold and never used for advertising.
 
 | Data type (Play category) | Collected | Shared | Optional? | Why | Notes |
 |---|---|---|---|---|---|

@@ -25,6 +25,13 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(baseUrl: AppConfig.backendUrl, token: auth.accessToken, timeout: AppConfig.consultTimeout);
 });
 
+/// Account → Delete account. Preview builds delete nothing.
+final deleteAccountProvider = Provider<Future<void> Function()>(
+  (ref) => AppConfig.previewMode
+      ? () => Future<void>.delayed(const Duration(milliseconds: 300))
+      : () => ref.read(apiClientProvider).deleteAccount(),
+);
+
 final profileRepositoryProvider = Provider<ProfileRepository>(
   (ref) => AppConfig.previewMode ? PreviewProfileRepository() : ApiProfileRepository(ref.watch(apiClientProvider)),
 );
