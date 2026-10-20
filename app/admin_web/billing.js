@@ -4,8 +4,17 @@
 // backend, which validates it, needs a reason where it touches a clinician, and records it.
 "use strict";
 
-const PLAN = { per_report: "Per report", sub_30: "Monthly · 30 reports", sub_50: "Monthly · 50 reports",
-               byok: "Own API key", manual: "Given by admin", print: "Single print (education page)" };
+const PLAN = { learn: "Learn", practice: "Practice", byok_scale: "BYOK Scale", scale: "Scale",
+               scale_extra: "Scale · extra AI-Guided report", per_report: "Per report", manual: "Credits given by admin",
+               print: "Single print (education page)",
+               sub_30: "Monthly · 30 reports (retired)", sub_50: "Monthly · 50 reports (retired)", byok: "Own API key (retired)" };
+const TIERS = ["learn", "practice", "byok_scale", "scale"];
+const CARDS = [...TIERS, "per_report", "print"];
+const UNLOCKS = { learn: "Full practice library",
+                  practice: "Library · PDF downloads with your name · booking page · appointments",
+                  byok_scale: "Everything in Practice · unlimited AI-Guided Case Taking with their own AI key",
+                  scale: "Everything in Practice · AI-Guided reports every month · extra ones at the price below" };
+const PERIOD = { month: "monthly", year: "yearly", trial: "free months", admin: "given by admin", allowance: "this month's reports" };
 const STATE = { active: ["Active", "ok"], scheduled: ["Starts later", "grey"], exhausted: ["Used up", "check"],
                 expired: ["Expired", "grey"], cancelled: ["Cancelled", "crisis"], none: ["No plan", "grey"] };
 const PAY = { paid: ["Paid", "ok"], pending: ["Pending", "check"], created: ["Not completed", "grey"],
@@ -146,21 +155,22 @@ function renderPricing(history) {
       text: pricing.byok_configured ? "Own-key encryption ready" : "Own-key encryption not set up" }),
     el("span", { class: "pill grey", text: "Version " + pricing.version }));
 
-  const on = check("Charge for reports", cfg.enabled,
-    "When off, every report is free, as before. When on, a report needs a credit or the clinician's own key.");
-  const roll = check("Carry unused credits into the renewal", cfg.rollover,
-    "If off, unused credits end with their 30-day period.");
+  const on = check("Plans and charging on", cfg.enabled,
+    "When off, everything is free and unlocked, as before. When on, each clinician's plan decides what they can use, and reports need a credit or BYOK Scale's own key.");
+  const monthDays = numberInput(cfg.month_days, 1, 400), yearDays = numberInput(cfg.year_days, 1, 400);
   const general = el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h2", { text: "General" })),
     status, on.node,
     el("div", { class: "form-grid" },
       field("Currency", el("select", { disabled: "" }, el("option", { text: "INR (₹)" }))),
       field("Payment method", el("select", { disabled: "" }, el("option", { text: "Razorpay" })))),
-    el("p", { class: "muted small", text: "A renewal starts at once; credits left from the earlier period stay usable until that period ends." }),
-    roll.node);
+    el("div", { class: "form-grid" },
+      field("A month of a plan lasts (days)", monthDays), field("A year of a plan lasts (days)", yearDays)),
+    el("p", { class: "muted small", text: "Plans are paid in advance for a month or a year. Paying again early adds the new period after the current one ends, so no days are lost." }));
   form.enabled = () => on.box.checked;
-  form.rollover = () => roll.box.checked;
+  form.month_days = () => Number(monthDays.value);
+  form.year_days = () => Number(yearDays.value);
 
-  const cards = ["per_report", "sub_30", "sub_50", "byok", "print"].map((id) => planCard(id, cfg.plans[id], form));
+  const cards = CARDS.map((id) => planCard(id, cfg.plans[id], form));
 
   const errors = el("div", { class: "error", role: "alert" });
   const save = el("button", { type: "button", class: "btn primary", text: "Save changes" });
@@ -180,7 +190,7 @@ function renderPricing(history) {
 
 function describeChange(path, a, b) {
   const label = path.replace(/^plans\./, "").replace(/^(\w+)/, (m) => PLAN[m] || m);
-  const money = /price|fee$/.test(path) ? rupees : (v) => JSON.stringify(v);
+  const money = /price|fee$|was_/.test(path) ? rupees : (v) => JSON.stringify(v);
   return label + ": " + money(a) + " → " + money(b);
 }
 
@@ -201,23 +211,38 @@ function planCard(id, p, form) {
   } else if (id === "print") {
     const price = moneyInput(p.price), hours = numberInput(p.hours, 1, 168);
     body.push(el("div", { class: "form-grid" }, field("Price (₹)", price), field("Unlocked for (hours)", hours)),
-      el("p", { class: "muted small", text: "Bought from an education page in the app: that one page can be printed or saved as a PDF as often as needed for these hours. A subscription (30 or 50 reports, own key, or a grant by an admin) already includes printing every page. While charging is off, printing is free for everyone." }));
+      el("p", { class: "muted small", text: "Bought from an education page in the app: that one page can be printed or saved as a PDF as often as needed for these hours. Practice, BYOK Scale and Scale already include printing every page. While plans are off, printing is free for everyone." }));
     extra = () => ({ price: toPaise(price.value), hours: Number(hours.value) });
-  } else if (id === "sub_30" || id === "sub_50") {
-    const price = moneyInput(p.price), reports = numberInput(p.reports, 1, 10000), days = numberInput(p.duration_days, 1, 366);
-    body.push(el("div", { class: "form-grid three" }, field("Price (₹)", price), field("Reports", reports), field("Valid for (days)", days)));
-    extra = () => ({ price: toPaise(price.value), reports: Number(reports.value), duration_days: Number(days.value) });
   } else {
-    const fee = moneyInput(p.fee), days = numberInput(p.fee_days, 1, 366);
-    const credits = check("Also uses report credits", p.consumes_credits, "Off: reports with their own key need no credit.");
-    const guided = check("Guided reports", p.guided), direct = check("Direct reports", p.direct);
-    const instr = el("textarea", { maxlength: "1000", rows: "3" }); instr.value = p.instructions;
-    body.push(el("div", { class: "form-grid" }, field("Platform fee (₹, 0 = free)", fee), field("Fee covers (days)", days)),
-      credits.node, el("p", { class: "muted small", text: "Allowed for:" }), guided.node, direct.node,
-      field("Instructions shown to clinicians", instr),
-      el("p", { class: "notice" }, icon("key"), el("span", { text: "Keys are checked with Anthropic, stored encrypted and never shown — not even here. A failed key never falls back to the platform key." })));
-    extra = () => ({ fee: toPaise(fee.value), fee_days: Number(days.value), consumes_credits: credits.box.checked,
-                     guided: guided.box.checked, direct: direct.box.checked, instructions: instr.value });
+    const badge = el("input", { maxlength: "30", placeholder: "e.g. Launch offer (empty for none)" }); badge.value = p.badge;
+    const sellM = check("Sell monthly", p.sell_month), sellY = check("Sell yearly", p.sell_year);
+    const pm = moneyInput(p.price_month), wm = moneyInput(p.was_month), py = moneyInput(p.price_year), wy = moneyInput(p.was_year);
+    body.push(el("p", { class: "notice" }, icon("check"), el("span", { text: "Unlocks: " + UNLOCKS[id] })),
+      field("Badge", badge),
+      el("div", { class: "toggles" }, sellM.node, sellY.node),
+      el("div", { class: "form-grid" }, field("Monthly price (₹)", pm), field("Monthly old price, struck through (₹, 0 = none)", wm)),
+      el("div", { class: "form-grid" }, field("Yearly price (₹)", py), field("Yearly old price, struck through (₹, 0 = none)", wy)));
+    const more = {};
+    if (id === "learn") {
+      const trial = numberInput(p.trial_days, 0, 400);
+      body.push(field("Free days for new clinicians", trial, "90 = 3 months. Starts by itself the first time a verified clinician opens the app; once per account. 0 = no free days."));
+      more.trial_days = () => Number(trial.value);
+    } else if (id === "scale") {
+      const n = numberInput(p.guided_per_month, 1, 10000), ex = moneyInput(p.extra_price);
+      body.push(el("div", { class: "form-grid" }, field("AI-Guided reports a month", n), field("Each extra report (₹)", ex)),
+        el("p", { class: "muted small", text: "A yearly plan gets this many every month (12 months). Unused reports don't carry over." }));
+      more.guided_per_month = () => Number(n.value);
+      more.extra_price = () => toPaise(ex.value);
+    } else if (id === "byok_scale") {
+      const instr = el("textarea", { maxlength: "1000", rows: "3" }); instr.value = p.instructions;
+      body.push(field("Instructions shown to clinicians", instr),
+        el("p", { class: "notice" }, icon("key"), el("span", { text: "Keys are checked with Anthropic, stored encrypted and never shown — not even here. A failed key never falls back to the platform key. Own-key reports use no credits." })));
+      more.instructions = () => instr.value;
+    }
+    extra = () => ({ badge: badge.value.trim(), sell_month: sellM.box.checked, sell_year: sellY.box.checked,
+                     price_month: toPaise(pm.value), was_month: toPaise(wm.value),
+                     price_year: toPaise(py.value), was_year: toPaise(wy.value),
+                     ...Object.fromEntries(Object.entries(more).map(([k, f]) => [k, f()])) });
   }
   const listed = id !== "print";       // the single print is offered on the page, not in the plans list
   if (listed) body.push(field("Order in the app", order));
@@ -232,14 +257,18 @@ function planCard(id, p, form) {
 
 async function savePricing(form, errors, confirmDisable) {
   errors.replaceChildren();
-  const config = { ...pricing.config, enabled: form.enabled(), rollover: form.rollover(), plans: {} };
-  for (const id of ["per_report", "sub_30", "sub_50", "byok", "print"]) config.plans[id] = form[id]();
+  const config = { ...pricing.config, enabled: form.enabled(), month_days: form.month_days(), year_days: form.year_days(),
+                   plans: {} };
+  delete config.rollover;
+  for (const id of CARDS) config.plans[id] = form[id]();
   const bad = [];
   const money = (v, where) => { if (Number.isNaN(v)) bad.push(where + ": enter an amount in rupees, like 199 or 199.50"); };
   money(config.plans.per_report.prices.guided, "Per report · guided");
   money(config.plans.per_report.prices.direct, "Per report · direct");
-  money(config.plans.sub_30.price, PLAN.sub_30); money(config.plans.sub_50.price, PLAN.sub_50);
-  money(config.plans.byok.fee, "Own API key · fee");
+  for (const id of TIERS) {
+    for (const k of ["price_month", "was_month", "price_year", "was_year"]) money(config.plans[id][k], PLAN[id] + " · " + k.replace("_", " "));
+  }
+  money(config.plans.scale.extra_price, "Scale · extra report");
   money(config.plans.print.price, PLAN.print);
   if (bad.length) { errors.replaceChildren(el("ul", {}, ...bad.map((b) => el("li", { text: b })))); return; }
   try {
@@ -299,7 +328,10 @@ async function openSub(u) {
     const reload = () => { openSub(u); loadSubs(); };
     const ents = d.entitlements.map((e) => el("div", { class: "ent" },
       el("div", { class: "head" }, el("b", { text: PLAN[e.plan] + (e.report_type ? " · " + e.report_type : "") }), pill(STATE, e.state)),
-      el("div", { class: "meta", text: (e.plan === "byok" ? "Access to own-key reports" : e.credits_used + " of " + e.credits_total + " used · " + e.remaining + " left") +
+      el("div", { class: "meta", text: (TIERS.includes(e.plan) && e.period !== "allowance"
+          ? "Plan · " + (PERIOD[e.period] || e.period || "")
+          : e.plan === "print" || e.plan === "byok" ? "No credits"
+          : (e.period === "allowance" ? "This month's reports · " : "") + e.credits_used + " of " + e.credits_total + " used · " + e.remaining + " left") +
         " · " + day(e.starts_at) + " → " + (e.expires_at ? day(e.expires_at) : "no end") + (e.note ? " · " + e.note : "") }),
       el("div", { class: "actions" },
         e.expires_at ? el("button", { type: "button", class: "btn ghost small", text: "Extend…", onclick: () => extendDialog(e, reload) }) : null,
@@ -318,7 +350,7 @@ async function openSub(u) {
         (k.last_error ? " · last problem: " + k.last_error : "") : "Not connected." }),
       el("h3", { text: "Payments" }),
       table(["Date", "Plan", "Amount", "Status", "Razorpay payment"], d.orders.map((o) => [when(o.created_at),
-        PLAN[o.plan] + (o.report_type ? " · " + o.report_type : ""), rupees(o.amount, o.currency),
+        PLAN[o.plan] + (o.period ? " · " + PERIOD[o.period] : "") + (o.report_type ? " · " + o.report_type : ""), rupees(o.amount, o.currency),
         el("span", {}, pill(PAY, o.status), o.refund_status ? el("span", { class: "pill grey", text: REFUND[o.refund_status] }) : null),
         el("span", { class: "mono small", text: o.provider_payment_id || "—" })])) || el("p", { class: "muted small", text: "No payments." }),
       el("h3", { text: "Credit history" }),
@@ -339,14 +371,15 @@ function auditDetail(d) {
 }
 
 function grantDialog(u, done) {
-  const plan = el("select", {}, el("option", { value: "sub_30", text: PLAN.sub_30 }), el("option", { value: "sub_50", text: PLAN.sub_50 }),
-    el("option", { value: "manual", text: "Report credits (choose how many)" }), el("option", { value: "byok", text: "Own-key access (no fee)" }));
-  const credits = el("input", { type: "number", min: "1", max: "10000", placeholder: "From the plan" });
-  const days = el("input", { type: "number", min: "1", max: "366", placeholder: "From the plan" });
-  const reason = reasonInput("e.g. Beta tester, complimentary month");
+  const plan = el("select", {}, ...TIERS.map((t) => el("option", { value: t, text: PLAN[t] })),
+    el("option", { value: "manual", text: "Report credits only (choose how many)" }));
+  plan.value = "scale";
+  const credits = el("input", { type: "number", min: "1", max: "10000", placeholder: "Only for report credits" });
+  const days = el("input", { type: "number", min: "1", max: "400", placeholder: "Empty = a month" });
+  const reason = reasonInput("e.g. Google Play reviewer, beta tester");
   formDialog({ title: "Give a plan to " + (u.full_name || u.email), ok: "Give plan",
-    body: [field("Plan", plan), el("div", { class: "form-grid" }, field("Credits", credits), field("Days", days)),
-           el("p", { class: "muted small", text: "No payment is taken. Leave credits and days empty to use the plan's own." }),
+    body: [field("Plan", plan), el("div", { class: "form-grid" }, field("Days", days), field("Credits", credits)),
+           el("p", { class: "muted small", text: "No payment is taken. A plan lasts the days you give (empty = a month); Scale also gets its AI-Guided reports for each month. Report credits work for guided and quick consults; empty days = no end." }),
            field("Reason", reason)],
     onSubmit: async () => {
       const r = needReason(reason);
