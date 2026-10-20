@@ -5,8 +5,7 @@ Fill these in Play Console → your app → **Policy and programs → App conten
 ## Before you submit: three things to sort out
 1. **Payments policy (most important).** The app sells digital content (Learn, Practice, BYOK Scale and Scale plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
 2. **Account deletion.** Done: **Account → Delete account** in the app (also on the "We're verifying you"
-   screen), and a web page at `https://<server>/delete-account` (for example
-   `https://app.yourcounselor.in/delete-account` once the domain works). Enter that URL in Play Console →
+   screen), and a web page at `https://app.yourcounselor.in/delete-account`. Enter that URL in Play Console →
    App content → **Data deletion**. Run migration 011 first (docs/DEPLOY.md).
 3. **Reviewer sign-in.** Done in the app: a fixed 6-digit code for one reviewer email only. Set up the account as in App access below.
 
