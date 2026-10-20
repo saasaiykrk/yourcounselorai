@@ -33,8 +33,8 @@ String formatMoney(int paise, [String currency = 'INR']) {
 }
 
 String reportTypeLabel(String? t) => switch (t) {
-  'guided' => 'Guided report',
-  'direct' => 'Direct report',
+  'guided' => 'AI-Guided report',
+  'direct' => 'Quick consult report',
   _ => 'Any report',
 };
 
@@ -47,37 +47,45 @@ class PlanOffer {
     this.description = '',
     this.features = const [],
     this.prices = const {},
-    this.price,
-    this.reports,
-    this.durationDays,
-    this.fee,
-    this.feeDays,
+    this.badge = '',
+    this.periods = const [],
+    this.priceMonth = 0,
+    this.priceYear = 0,
+    this.wasMonth = 0,
+    this.wasYear = 0,
+    this.includes = const {},
+    this.table = const {},
+    this.trialDays = 0,
+    this.guidedPerMonth = 0,
+    this.extraPrice = 0,
     this.instructions = '',
-    this.consumesCredits = false,
-    this.reportTypes = const [],
   });
 
   factory PlanOffer.fromJson(Map<String, dynamic> j) => PlanOffer(
     id: j['id'] as String,
-    kind: j['kind'] as String? ?? 'subscription',
+    kind: j['kind'] as String? ?? 'tier',
     name: j['name'] as String? ?? '',
     description: j['description'] as String? ?? '',
     features: _strings(j['features']),
     prices: {for (final e in ((j['prices'] as Map?) ?? const {}).entries) '${e.key}': _int(e.value)},
-    price: (j['price'] as num?)?.toInt(),
-    reports: (j['reports'] as num?)?.toInt(),
-    durationDays: (j['duration_days'] as num?)?.toInt(),
-    fee: (j['fee'] as num?)?.toInt(),
-    feeDays: (j['fee_days'] as num?)?.toInt(),
+    badge: j['badge'] as String? ?? '',
+    periods: _strings(j['periods']),
+    priceMonth: _int(j['price_month']),
+    priceYear: _int(j['price_year']),
+    wasMonth: _int(j['was_month']),
+    wasYear: _int(j['was_year']),
+    includes: _strings(j['includes']).toSet(),
+    table: {for (final e in ((j['table'] as Map?) ?? const {}).entries) '${e.key}': e.value as String?},
+    trialDays: _int(j['trial_days']),
+    guidedPerMonth: _int(j['guided_per_month']),
+    extraPrice: _int(j['extra_price']),
     instructions: j['instructions'] as String? ?? '',
-    consumesCredits: j['consumes_credits'] == true,
-    reportTypes: _strings(j['report_types']),
   );
 
-  /// per_report · sub_30 · sub_50 · byok
+  /// per_report · learn · practice · byok_scale · scale
   final String id;
 
-  /// per_report · subscription · byok
+  /// per_report · tier (a plan bought by the month or the year)
   final String kind;
   final String name;
   final String description;
@@ -86,17 +94,41 @@ class PlanOffer {
   /// per_report: {"guided": paise, "direct": paise}.
   final Map<String, int> prices;
 
-  /// Subscriptions: price, reports included, days valid.
-  final int? price;
-  final int? reports;
-  final int? durationDays;
+  /// A plan: "Launch offer" or empty; month · year on sale; prices; struck-through old prices (0 = none).
+  final String badge;
+  final List<String> periods;
+  final int priceMonth;
+  final int priceYear;
+  final int wasMonth;
+  final int wasYear;
 
-  /// Own key: platform access fee (0 = free) and the days it covers.
-  final int? fee;
-  final int? feeDays;
+  /// What the plan unlocks: library · pdf · booking · appointments · guided_own_key · guided_included.
+  final Set<String> includes;
+
+  /// The comparison table: row key → "Included" / other text, or null for "Not included".
+  final Map<String, String?> table;
+
+  /// Learn: free days for new clinicians. Scale: AI-Guided reports a month and the extra report price.
+  final int trialDays;
+  final int guidedPerMonth;
+  final int extraPrice;
+
+  /// BYOK Scale: how to create a key.
   final String instructions;
-  final bool consumesCredits;
-  final List<String> reportTypes;
+
+  bool get isTier => kind == 'tier';
+
+  int price(String period) => period == 'year' ? priceYear : priceMonth;
+
+  int was(String period) => period == 'year' ? wasYear : wasMonth;
+}
+
+/// One row of the plans table, in order (key matches [PlanOffer.table]).
+class PlanRow {
+  const PlanRow(this.key, this.label);
+
+  final String key;
+  final String label;
 }
 
 class BillingPlans {
@@ -104,6 +136,7 @@ class BillingPlans {
     required this.enabled,
     this.currency = 'INR',
     this.plans = const [],
+    this.rows = const [],
     this.paymentsAvailable = false,
   });
 
@@ -111,16 +144,64 @@ class BillingPlans {
     enabled: j['enabled'] == true,
     currency: j['currency'] as String? ?? 'INR',
     plans: [for (final p in (j['plans'] as List? ?? const [])) PlanOffer.fromJson(p as Map<String, dynamic>)],
+    rows: [for (final r in (j['rows'] as List? ?? const [])) PlanRow('${(r as Map)['key']}', '${r['label']}')],
     paymentsAvailable: j['payments_available'] == true,
   );
 
-  /// Pricing is switched on; while off, every report is free.
+  /// Pricing is switched on; while off, everything is free and unlocked.
   final bool enabled;
   final String currency;
   final List<PlanOffer> plans;
+  final List<PlanRow> rows;
 
   /// The server can take payments now.
   final bool paymentsAvailable;
+
+  List<PlanOffer> get tiers => plans.where((p) => p.isTier).toList();
+
+  PlanOffer? get perReport => plans.where((p) => p.kind == 'per_report').firstOrNull;
+}
+
+/// The plan the clinician is on now (the highest one running).
+class CurrentPlan {
+  const CurrentPlan({required this.id, required this.name, this.period, this.trial = false, this.expiresAt});
+
+  static CurrentPlan? fromJson(Object? j) => j is Map<String, dynamic>
+      ? CurrentPlan(
+          id: j['id'] as String,
+          name: j['name'] as String? ?? '',
+          period: j['period'] as String?,
+          trial: j['trial'] == true,
+          expiresAt: _date(j['expires_at']),
+        )
+      : null;
+
+  final String id;
+  final String name;
+
+  /// month · year · trial · admin
+  final String? period;
+  final bool trial;
+  final DateTime? expiresAt;
+}
+
+/// On Scale: this month's AI-Guided reports.
+class ScaleStatus {
+  const ScaleStatus({this.guidedLeft = 0, this.perMonth = 0, this.extraPrice = 0, this.resetsAt});
+
+  static ScaleStatus? fromJson(Object? j) => j is Map<String, dynamic>
+      ? ScaleStatus(
+          guidedLeft: _int(j['guided_left']),
+          perMonth: _int(j['per_month']),
+          extraPrice: _int(j['extra_price']),
+          resetsAt: _date(j['resets_at']),
+        )
+      : null;
+
+  final int guidedLeft;
+  final int perMonth;
+  final int extraPrice;
+  final DateTime? resetsAt;
 }
 
 /// A plan or credit the clinician holds.
@@ -135,6 +216,7 @@ class Entitlement {
     this.remaining = 0,
     this.startsAt,
     this.expiresAt,
+    this.period,
   });
 
   factory Entitlement.fromJson(Map<String, dynamic> j) => Entitlement(
@@ -147,10 +229,14 @@ class Entitlement {
     remaining: _int(j['remaining']),
     startsAt: _date(j['starts_at']),
     expiresAt: _date(j['expires_at']),
+    period: j['period'] as String?,
   );
 
   final String id;
   final String plan;
+
+  /// A plan: month · year · trial · admin.
+  final String? period;
 
   /// active · scheduled · exhausted · expired · cancelled
   final String state;
@@ -165,32 +251,31 @@ class Entitlement {
 class OwnKeyStatus {
   const OwnKeyStatus({
     this.available = false,
+    this.included = false,
     this.connected = false,
     this.status,
     this.last4,
     this.lastError,
-    this.fee = 0,
-    this.feePaidUntil,
-    this.consumesCredits = false,
-    this.reportTypes = const [],
+    this.instructions = '',
   });
 
   factory OwnKeyStatus.fromJson(Map<String, dynamic>? j) => j == null
       ? const OwnKeyStatus()
       : OwnKeyStatus(
           available: j['available'] == true,
+          included: j['included'] == true,
           connected: j['connected'] == true,
           status: j['status'] as String?,
           last4: j['last4'] as String?,
           lastError: j['last_error'] as String?,
-          fee: _int(j['fee']),
-          feePaidUntil: _date(j['fee_paid_until']),
-          consumesCredits: j['consumes_credits'] == true,
-          reportTypes: _strings(j['report_types']),
+          instructions: j['instructions'] as String? ?? '',
         );
 
-  /// The admin offers "Use My Anthropic API Key".
+  /// The admin sells BYOK Scale.
   final bool available;
+
+  /// The clinician is on BYOK Scale: AI-Guided reports with their own key.
+  final bool included;
   final bool connected;
 
   /// valid · invalid
@@ -199,14 +284,9 @@ class OwnKeyStatus {
   /// The only part of the key the app ever sees.
   final String? last4;
   final String? lastError;
-  final int fee;
-  final DateTime? feePaidUntil;
-  final bool consumesCredits;
-  final List<String> reportTypes;
+  final String instructions;
 
-  bool get usable => available && connected && status == 'valid';
-
-  bool get feeDue => fee > 0 && (feePaidUntil == null || feePaidUntil!.isBefore(DateTime.now()));
+  bool get usable => available && included && connected && status == 'valid';
 }
 
 class BillingNotice {
@@ -215,7 +295,7 @@ class BillingNotice {
   factory BillingNotice.fromJson(Map<String, dynamic> j) =>
       BillingNotice(j['kind'] as String? ?? '', j['message'] as String? ?? '');
 
-  /// expiring · exhausted · pending_payment · byok_invalid
+  /// expiring · no_plan · exhausted · pending_payment · byok_invalid
   final String kind;
   final String message;
 }
@@ -233,6 +313,9 @@ class BillingStatus {
     this.perReport = const [],
     this.ownKey = const OwnKeyStatus(),
     this.notices = const [],
+    this.plan,
+    this.features = const {},
+    this.scale,
   });
 
   factory BillingStatus.fromJson(Map<String, dynamic> j) {
@@ -252,6 +335,9 @@ class BillingStatus {
       ],
       ownKey: OwnKeyStatus.fromJson(j['byok'] as Map<String, dynamic>?),
       notices: [for (final n in (j['notices'] as List? ?? const [])) BillingNotice.fromJson(n as Map<String, dynamic>)],
+      plan: CurrentPlan.fromJson(j['plan']),
+      features: _strings(j['features']).toSet(),
+      scale: ScaleStatus.fromJson(j['scale']),
     );
   }
 
@@ -262,7 +348,7 @@ class BillingStatus {
   /// Single-report prices, if sold singly.
   final Map<String, int>? prices;
 
-  /// Credits usable for either report type (subscriptions, admin grants).
+  /// Credits usable for either report type (admin grants).
   final int anyCredits;
 
   /// Everything usable for a guided / direct report (includes [anyCredits]).
@@ -273,8 +359,14 @@ class BillingStatus {
   final OwnKeyStatus ownKey;
   final List<BillingNotice> notices;
 
-  Entitlement? get activeSubscription =>
-      subscriptions.where((e) => e.state == 'active' && e.plan != 'manual').firstOrNull;
+  /// The plan the clinician is on now, or null (none, or pricing off).
+  final CurrentPlan? plan;
+
+  /// What the plans running now unlock (everything while pricing is off).
+  final Set<String> features;
+
+  /// On Scale: this month's AI-Guided reports.
+  final ScaleStatus? scale;
 }
 
 /// What Razorpay's checkout needs. Holds no secret: only the public key id.
@@ -313,6 +405,7 @@ class BillingOrder {
     required this.amount,
     this.currency = 'INR',
     this.reportType,
+    this.period,
     this.failureReason,
     this.refundStatus,
     this.refundedAmount = 0,
@@ -327,6 +420,7 @@ class BillingOrder {
     amount: _int(j['amount']),
     currency: j['currency'] as String? ?? 'INR',
     reportType: j['report_type'] as String?,
+    period: j['period'] as String?,
     failureReason: j['failure_reason'] as String?,
     refundStatus: j['refund_status'] as String?,
     refundedAmount: _int(j['refunded_amount']),
@@ -342,6 +436,9 @@ class BillingOrder {
   final int amount;
   final String currency;
   final String? reportType;
+
+  /// A plan: month · year.
+  final String? period;
   final String? failureReason;
   final String? refundStatus;
   final int refundedAmount;

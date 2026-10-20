@@ -41,22 +41,34 @@ final class Conflict extends ApiException {
   final String? detail;
 }
 
-/// 402 payment_required: pricing is on and there is no credit for this report (or, for [plan]
-/// "byok", the own-key access fee is not paid). Nothing was generated.
+/// 402 payment_required: pricing is on and there is no credit for this report. Nothing was generated.
 final class PaymentRequired extends ApiException {
   const PaymentRequired({required this.message, this.reportType, this.plan, this.price, this.currency = 'INR'});
 
   final String message;
 
-  /// guided · direct (null for the own-key fee).
+  /// guided · direct.
   final String? reportType;
 
-  /// "byok" when the own-key access fee is due; otherwise null.
+  /// What one more report is bought as: "scale_extra" (on Scale) or "per_report".
   final String? plan;
 
-  /// The per-report price in paise, from the server's pricing, or null if not sold singly.
+  /// That report's price in paise, from the server's pricing, or null if not sold singly.
   final int? price;
   final String currency;
+}
+
+/// 402 plan_required: the clinician's plan doesn't include [feature] (library, pdf, booking,
+/// appointments, guided, guided_own_key). The app offers the plans; nothing was charged.
+final class PlanRequired extends ApiException {
+  const PlanRequired({required this.feature, required this.message, this.plan, this.price});
+
+  final String feature;
+  final String message;
+
+  /// For "guided": a single guided report on sale instead ("per_report" or "scale_extra"), and its price.
+  final String? plan;
+  final int? price;
 }
 
 /// 424 byok_failed: the clinician's own Anthropic key could not be used. The platform key is never

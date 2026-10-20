@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:your_counselor/core/api/api_client.dart';
+import 'package:your_counselor/core/api/api_exceptions.dart';
 import 'package:your_counselor/core/api/calendar_models.dart';
 import 'package:your_counselor/core/calendar/calendar_repository.dart';
 import 'package:your_counselor/core/providers.dart';
@@ -83,6 +84,13 @@ Future<PreviewCalendarRepository> _pump(
   return r;
 }
 
+/// A clinician on Learn (or with no plan): the server refuses the calendar.
+class _NoAppointmentsPlan extends PreviewCalendarRepository {
+  @override
+  Future<CalendarHome> home() async =>
+      throw const PlanRequired(feature: 'appointments', message: 'Appointments are in Practice, BYOK Scale and Scale.');
+}
+
 /// Scrolls the page's list until [f] is built and on screen.
 Future<void> _reach(WidgetTester tester, Finder f) async {
   await tester.scrollUntilVisible(f, 200, scrollable: find.byType(Scrollable).first);
@@ -90,6 +98,15 @@ Future<void> _reach(WidgetTester tester, Finder f) async {
 }
 
 void main() {
+  testWidgets('a plan without appointments shows which plans have them, and nothing to set up', (tester) async {
+    await _pump(tester, repo: _NoAppointmentsPlan());
+    expect(find.text('Appointments and your booking page'), findsOneWidget);
+    expect(find.text('Appointments are in Practice, BYOK Scale and Scale.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('calendar-see-plans')), findsOneWidget);
+    expect(find.byTooltip('Booking settings'), findsNothing);
+    expect(find.text('Add'), findsNothing);
+  });
+
   group('models and API', () {
     test('times are the consultant’s wall-clock times, never shifted by the phone’s timezone', () {
       final a = Appointment.fromJson(_appt);

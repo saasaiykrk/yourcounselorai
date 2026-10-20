@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_models.dart';
+import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import 'report_pdf.dart';
@@ -11,6 +13,7 @@ import 'report_pdf.dart';
 /// the download in the audit log, then build the PDF on the phone and hand it to
 /// the system "Save as PDF / Print" screen. Nothing is exported if [record] fails.
 /// [onBusy] is told when work starts (after the confirmation) and ends.
+/// A clinician's own download needs a plan with PDF downloads (Practice, BYOK Scale, Scale).
 Future<void> downloadReportPdf(
   BuildContext context,
   WidgetRef ref,
@@ -18,6 +21,33 @@ Future<void> downloadReportPdf(
   Future<void> Function()? record,
   void Function(bool busy)? onBusy,
 }) async {
+  Me? me;
+  if (record == null) {
+    try {
+      me = await ref.read(meProvider.future);
+    } catch (_) {
+      me = null; // offline: the PDF is built on the phone; nothing to check against
+    }
+    if (!context.mounted) return;
+  }
+  if (me?.has('pdf') == false) {
+    final see = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('PDF downloads'),
+        content: const Text(
+          'Downloading reports as PDF with your name is part of Practice, BYOK Scale and Scale.',
+          style: AppText.smallMuted,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('See plans')),
+        ],
+      ),
+    );
+    if (see == true && context.mounted) context.push('/pricing');
+    return;
+  }
   final go = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(

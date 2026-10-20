@@ -2,8 +2,8 @@
 Billing endpoints and the check that runs before every report.
 
 Clinician (signed in):
-  GET    /v1/billing/plans                 → the plans on sale (from the admin's configuration)
-  GET    /v1/billing/me                    → credits, subscriptions, BYOK status, notices
+  GET    /v1/billing/plans                 → the plans on sale and the comparison table (admin's configuration)
+  GET    /v1/billing/me                    → current plan, what it unlocks, credits, BYOK status, notices
   POST   /v1/billing/orders                → start a purchase: server-priced Razorpay order
   POST   /v1/billing/orders/{id}/verify    → checkout finished: signature + Razorpay's own record
   POST   /v1/billing/orders/{id}/cancel    → checkout closed without paying
@@ -24,6 +24,8 @@ Admin (is_admin; every change audited):
 
 Before a report: authorize() → the report runs (with the clinician's own key when they chose it)
 → settle() spends the held credit if the report was delivered, gives it back otherwise.
+What a plan unlocks (library, PDF, booking page, appointments, AI-Guided Case Taking): features().
+Pricing off = everything unlocked and free, as before plans existed.
 """
 from __future__ import annotations
 
@@ -51,9 +53,10 @@ class Funding:
 
 
 class OrderIn(BaseModel):
-    plan: str = Field(pattern="^(per_report|sub_30|sub_50|byok|print)$")
+    plan: str = Field(pattern="^(per_report|learn|practice|byok_scale|scale|scale_extra|print)$")
     report_type: str | None = Field(default=None, pattern="^(guided|direct)$")
     item: str | None = Field(default=None, pattern="^[a-z0-9-]{1,80}$")     # single print: the page
+    period: str | None = Field(default=None, pattern="^(month|year)$")     # a plan: monthly or yearly
 
 
 class VerifyPaymentIn(BaseModel):
@@ -72,7 +75,7 @@ class PricingIn(BaseModel):
 
 
 class GrantIn(BaseModel):
-    plan: str = Field(pattern="^(sub_30|sub_50|byok|manual)$")
+    plan: str = Field(pattern="^(learn|practice|byok_scale|scale|manual)$")
     credits: int | None = Field(default=None, ge=1, le=billing.MAX_REPORTS)
     days: int | None = Field(default=None, ge=1, le=billing.MAX_DAYS)
     reason: str = Field(min_length=3, max_length=300)
@@ -104,8 +107,10 @@ def _iso(d):
 
 
 def _ent_view(e: dict) -> dict:
-    return {"id": str(e["id"]), "plan": e["plan"], "report_type": e["report_type"], "state": e["state"],
-            "credits_total": e["credits_total"], "credits_used": e["credits_used"], "remaining": e["remaining"],
+    return {"id": str(e["id"]), "plan": e["plan"], "report_type": e["report_type"], "state": e.get("state", "active"),
+            "period": e.get("period"),
+            "credits_total": e["credits_total"], "credits_used": e["credits_used"],
+            "remaining": e.get("remaining", e["credits_total"] - e["credits_used"] - e.get("credits_reserved", 0)),
             "starts_at": _iso(e["starts_at"]), "expires_at": _iso(e["expires_at"]),
             "order_id": str(e["order_id"]) if e.get("order_id") else None, "note": e.get("note")}
 
@@ -144,6 +149,29 @@ class BillingService:
     def enabled(self) -> bool:
         return self.config()[1]["enabled"]
 
+    # --- what the clinician's plan unlocks ------------------------------------------------
+    def features(self, cid) -> frozenset:
+        """Pricing off (or no database): everything. Otherwise what the running plans unlock; the
+        first check of a verified clinician starts Learn's free months."""
+        _, cfg = self.config()
+        if not (self.store_on() and cfg["enabled"]):
+            return billing.ALL_FEATURES
+        return frozenset(self.store.plan_features(cid, cfg)["features"])
+
+    def need(self, cid, feature: str) -> None:
+        if feature not in self.features(cid):
+            raise HTTPException(402, plan_required(feature))
+
+    def guided_access(self, c: dict) -> None:
+        """Before a guided consultation starts: a plan with AI-Guided Case Taking, or a guided report
+        bought on its own (per report, or a Scale extra)."""
+        f = self.features(c["id"])
+        if f & {"guided_own_key", "guided_included"} or not self.enabled():
+            return
+        if self.store.balance(c["id"])["guided"] > 0:
+            return
+        raise HTTPException(402, plan_required("guided", self._report_price(c, self.config()[1], "guided")))
+
     # --- the check before every report ---------------------------------------------------
     def authorize(self, c: dict, report_type: str, request_key: str, use_own_key: bool) -> Funding:
         _, cfg = self.config()
@@ -154,15 +182,23 @@ class BillingService:
         self._reserve(c, cfg, report_type, request_key)
         return Funding("credit", report_type, request_key, reserved=True)
 
+    def _report_price(self, c, cfg, report_type) -> dict:
+        """What one more report of this type costs this clinician: a Scale extra, or per report."""
+        if report_type == "guided" and cfg["plans"]["scale"]["enabled"] and self.store.scale_active(c["id"]):
+            return {"plan": "scale_extra", "price": cfg["plans"]["scale"]["extra_price"]}
+        p = cfg["plans"]["per_report"]
+        return {"plan": "per_report", "price": p["prices"][report_type] if p["enabled"] else None}
+
     def _reserve(self, c, cfg, report_type, request_key):
         try:
             self.store.reserve(c["id"], report_type, request_key)
         except billing.NoCredit:
-            p = cfg["plans"]["per_report"]
-            raise HTTPException(402, {"error": "payment_required", "report_type": report_type,
-                                      "message": "You have no report credits left. Buy a report or a plan to continue.",
-                                      "price": p["prices"][report_type] if p["enabled"] else None,
-                                      "currency": cfg["currency"]})
+            offer = self._report_price(c, cfg, report_type)
+            message = ("You have used this month's AI-Guided reports. Buy an extra report to continue."
+                       if offer["plan"] == "scale_extra" else
+                       "You have no report credits left. Buy a report or a plan to continue.")
+            raise HTTPException(402, {"error": "payment_required", "report_type": report_type, "message": message,
+                                      "plan": offer["plan"], "price": offer["price"], "currency": cfg["currency"]})
         except billing.AlreadyCharged:
             raise HTTPException(409, {"error": "already_charged",
                                       "message": "This report was already generated. Open it from History."})
@@ -170,16 +206,14 @@ class BillingService:
             raise HTTPException(409, {"error": "busy", "detail": "this report is already being written"})
 
     def _authorize_byok(self, c, cfg, report_type, request_key) -> Funding:
-        p = cfg["plans"]["byok"]
-        if not (cfg["enabled"] and p["enabled"] and p[report_type]):
+        p = cfg["plans"]["byok_scale"]
+        if not (cfg["enabled"] and p["enabled"]) or report_type != "guided":
             raise HTTPException(409, {"error": "byok_unavailable",
-                                      "message": "Using your own Anthropic key is not available for this report."})
+                                      "message": "Your own AI key is for AI-Guided Case Taking on BYOK Scale."})
         if self.vault is None:
             raise HTTPException(503, {"error": "byok_unavailable", "message": "Not available right now."})
-        if p["fee"] > 0 and not self.store.byok_access(c["id"]):
-            raise HTTPException(402, {"error": "payment_required", "plan": "byok", "price": p["fee"],
-                                      "currency": cfg["currency"],
-                                      "message": "Using your own key needs the platform access fee."})
+        if "guided_own_key" not in self.features(c["id"]):
+            raise HTTPException(402, plan_required("guided_own_key"))
         cred = self.store.byok_get(c["id"])
         if not cred:
             raise HTTPException(424, {"error": "byok_failed", "code": "not_configured",
@@ -191,11 +225,7 @@ class BillingService:
         if key is None:
             raise HTTPException(424, {"error": "byok_failed", "code": "not_configured",
                                       "message": byok.ByokError.MESSAGES["not_configured"]})
-        reserved = False
-        if p["consumes_credits"]:
-            self._reserve(c, cfg, report_type, request_key)
-            reserved = True
-        return Funding("byok", report_type, request_key, reserved=reserved, api_key=key)
+        return Funding("byok", report_type, request_key, api_key=key)
 
     def open_key(self, c: dict, cred: dict) -> str | None:
         """The clinician's own key, or None if it can't be read (encryption key lost or rotated away).
@@ -240,6 +270,24 @@ class BillingService:
                                    "retry": err.code in ("rate_limited", "provider_error", "insufficient_balance")})
 
 
+PLAN_MESSAGES = {
+    "library": "The practice library is part of every plan. Choose a plan to keep reading.",
+    "pdf": "PDF downloads with your name are in Practice, BYOK Scale and Scale.",
+    "booking": "Your booking page is in Practice, BYOK Scale and Scale.",
+    "appointments": "Appointments are in Practice, BYOK Scale and Scale.",
+    "guided": "AI-Guided Case Taking is in BYOK Scale and Scale, or buy a single guided report.",
+    "guided_own_key": "Using your own AI key is part of BYOK Scale.",
+}
+
+
+def plan_required(feature: str, offer: dict | None = None) -> dict:
+    """The 402 body when the clinician's plan doesn't include something: the app opens Plans."""
+    out = {"error": "plan_required", "feature": feature, "message": PLAN_MESSAGES[feature]}
+    if offer and offer.get("price") is not None:
+        out.update(plan=offer["plan"], price=offer["price"], report_type="guided")
+    return out
+
+
 def install(app: FastAPI, svc: BillingService, current_user, verified_clinician, admin) -> None:
 
     def _need_store():
@@ -258,35 +306,59 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         out = {"enabled": cfg["enabled"], "currency": cfg["currency"], "prices": cfg["plans"]["per_report"]["prices"]
                if cfg["plans"]["per_report"]["enabled"] else None}
         if not svc.store_on():
-            return {**out, "balance": {"any": 0, "guided": 0, "direct": 0}, "subscriptions": [], "per_report": [],
+            return {**out, "balance": {"any": 0, "guided": 0, "direct": 0}, "plan": None,
+                    "features": sorted(billing.ALL_FEATURES), "scale": None, "subscriptions": [], "per_report": [],
                     "byok": {"available": False}, "notices": []}
+        pf = svc.store.plan_features(c["id"], cfg) if cfg["enabled"] else {"features": billing.ALL_FEATURES,
+                                                                              "plans": []}
         ents = svc.store.entitlements(c["id"])
         now = datetime.now(timezone.utc)
         live = [e for e in ents if e["state"] in ("active", "scheduled")]
         balance = svc.store.balance(c["id"])
-        subs = [_ent_view(e) for e in ents if e["plan"] in ("sub_30", "sub_50", "manual")][:10]
-        per = [_ent_view(e) for e in live if e["plan"] == "per_report"]
-        p = cfg["plans"]["byok"]
+        rank = {t: i for i, t in enumerate(billing.TIERS)}
+        running = sorted(pf["plans"], key=lambda e: (rank[e["plan"]], e["expires_at"]), reverse=True)
+        current = running[0] if running else None
+        plan = None
+        if current:
+            until = max(e["expires_at"] for e in ents if e["plan"] == current["plan"] and e["state"] in
+                        ("active", "scheduled") and e.get("period") not in ("allowance", None))
+            plan = {"id": current["plan"], "name": cfg["plans"][current["plan"]]["name"], "period": current["period"],
+                    "trial": current["period"] == "trial", "expires_at": _iso(until)}
+        allowance = [e for e in live if e["plan"] == "scale" and e.get("period") == "allowance" and e["state"] == "active"]
+        scale = None
+        if any(e["plan"] == "scale" for e in pf["plans"]):
+            scale = {"guided_left": sum(e["remaining"] for e in allowance),
+                     "resets_at": _iso(min((e["expires_at"] for e in allowance), default=None)),
+                     "per_month": cfg["plans"]["scale"]["guided_per_month"],
+                     "extra_price": cfg["plans"]["scale"]["extra_price"]}
+        subs = [_ent_view(e) for e in ents if e["plan"] in billing.TIERS + ("manual",)
+                and e.get("period") != "allowance"][:10]
+        per = [_ent_view(e) for e in live if e["plan"] in ("per_report", "scale_extra")]
+        p = cfg["plans"]["byok_scale"]
         cred = svc.store.byok_get(c["id"])
-        access = [e for e in live if e["plan"] == "byok"]
         b = {"available": bool(cfg["enabled"] and p["enabled"] and svc.vault is not None),
+             "included": "guided_own_key" in pf["features"],
              "connected": bool(cred), "status": cred["status"] if cred else None,
              "last4": cred["last4"] if cred else None, "last_error": cred["last_error"] if cred else None,
-             "fee": p["fee"], "fee_paid_until": _iso(max(e["expires_at"] for e in access)) if access else None,
-             "consumes_credits": p["consumes_credits"], "report_types": [t for t in billing.REPORT_TYPES if p[t]]}
+             "report_types": ["guided"], "instructions": p["instructions"]}
         notices = []
-        for e in live:
-            if e["plan"] in ("sub_30", "sub_50") and e["expires_at"] and e["expires_at"] - now < timedelta(days=3):
-                notices.append({"kind": "expiring", "message": f"Your plan ends on {e['expires_at']:%d %b %Y}."})
-        if cfg["enabled"] and any(e["plan"] in ("sub_30", "sub_50") for e in ents) and balance["any"] == 0 \
-                and not any(e["plan"] == "per_report" for e in live):
-            notices.append({"kind": "exhausted", "message": "You have used all your report credits."})
+        if plan and plan["expires_at"]:
+            ends = datetime.fromisoformat(plan["expires_at"])
+            if ends - now < timedelta(days=7 if plan["trial"] else 3):
+                notices.append({"kind": "expiring", "message": (
+                    f"Your free months end on {ends:%d %b %Y}. Choose a plan to keep the library." if plan["trial"]
+                    else f"Your {plan['name']} plan ends on {ends:%d %b %Y}.")})
+        elif cfg["enabled"]:
+            notices.append({"kind": "no_plan", "message": "Choose a plan to use the practice library and more."})
+        if scale and scale["guided_left"] == 0 and balance["guided"] == 0:
+            notices.append({"kind": "exhausted", "message": "You have used this month's AI-Guided reports."})
         pending = [o for o in svc.store.orders(c["id"], 20) if o["status"] == "pending"]
         if pending:
             notices.append({"kind": "pending_payment", "message": "A payment is still being confirmed by the bank."})
         if cred and cred["status"] == "invalid":
             notices.append({"kind": "byok_invalid", "message": byok.ByokError.MESSAGES["invalid_key"]})
-        return {**out, "balance": balance, "subscriptions": subs, "per_report": per, "byok": b, "notices": notices}
+        return {**out, "balance": balance, "plan": plan, "features": sorted(pf["features"]), "scale": scale,
+                "subscriptions": subs, "per_report": per, "byok": b, "notices": notices}
 
     @app.post("/v1/billing/orders")
     def billing_order(body: OrderIn, c: dict = Depends(verified_clinician)):
@@ -295,11 +367,13 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         if body.plan == "print":
             if body.item not in svc.print_items:
                 raise HTTPException(409, {"error": "not_purchasable", "message": "unknown page"})
-            if svc.store.has_subscription(c["id"]):
+            if "pdf" in svc.features(c["id"]):
                 raise HTTPException(409, {"error": "already_active",
-                                          "message": "Your subscription already includes printing."})
+                                          "message": "Your plan already includes PDF downloads."})
+        if body.plan == "scale_extra" and not svc.store.scale_active(c["id"]):
+            raise HTTPException(409, {"error": "not_purchasable", "message": "Extra reports are for the Scale plan."})
         try:
-            price = billing.price_for(cfg, body.plan, body.report_type, item=body.item)
+            price = billing.price_for(cfg, body.plan, body.report_type, item=body.item, period=body.period)
         except billing.NotPurchasable as e:
             raise HTTPException(409, {"error": "not_purchasable", "message": e.detail})
         if price.amount == 0:
@@ -322,11 +396,13 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
             svc.store.mark_order(o["id"], "failed", reason=f"could not create the Razorpay order ({e})"[:300])
             raise HTTPException(502, {"error": "payments_unreachable", "message": "Couldn't reach the payment service. Try again."})
         svc.store.set_provider_order(o["id"], ro["id"])
-        plan = cfg["plans"][price.plan]
+        plan = cfg["plans"]["scale" if price.plan == "scale_extra" else price.plan]
         return {"order": _order_view(svc.store.get_order(o["id"])),
                 "checkout": {"key": svc.cfg.razorpay_key_id, "order_id": ro["id"], "amount": price.amount,
                              "currency": price.currency, "name": "YourCounselor",
-                             "description": plan["name"] + (f" · {price.report_type}" if price.report_type else "")
+                             "description": (plan["name"] if price.plan != "scale_extra" else "Extra AI-Guided report")
+                             + (f" · {'monthly' if price.period == 'month' else 'yearly'}" if price.period else "")
+                             + (f" · {price.report_type}" if price.report_type and price.plan == "per_report" else "")
                              + (f" · {svc.print_items[price.item]}"[:250] if price.item else "")}}
 
     def _finish(order: dict, payment: dict, cfg: dict) -> dict:
@@ -400,7 +476,7 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
     def _byok_ready():
         _need_store()
         _, cfg = svc.config()
-        if svc.vault is None or not (cfg["enabled"] and cfg["plans"]["byok"]["enabled"]):
+        if svc.vault is None or not (cfg["enabled"] and cfg["plans"]["byok_scale"]["enabled"]):
             raise HTTPException(409, {"error": "byok_unavailable",
                                       "message": "Using your own Anthropic key is not available."})
 
@@ -523,7 +599,7 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
                                       "message": "These plans have active users. Their current plans keep working; "
                                                  "new purchases stop. Confirm to save."})
         if new["enabled"] and not svc.cfg.razorpay_configured and any(
-                new["plans"][p]["enabled"] for p in ("per_report", "sub_30", "sub_50")):
+                new["plans"][p]["enabled"] for p in ("per_report",) + billing.TIERS):
             raise HTTPException(409, {"error": "payments_unavailable",
                                       "message": "Razorpay keys are not set on the server yet."})
         version = svc.store.save_config(new, a["id"], changes)
@@ -531,7 +607,7 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
         return {"version": version, "changes": changes}
 
     @app.get("/v1/admin/billing/users")
-    def admin_billing_users(plan: str | None = Query(None, pattern="^(sub_30|sub_50|byok|manual)$"),
+    def admin_billing_users(plan: str | None = Query(None, pattern="^(learn|practice|byok_scale|scale|manual)$"),
                             state: str | None = Query(None, pattern="^(active|expired|exhausted|cancelled|none|scheduled)$"),
                             q: str | None = Query(None, max_length=100),
                             payment: str | None = Query(None, pattern="^(created|pending|paid|failed|cancelled)$"),
@@ -589,7 +665,8 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
 
     @app.get("/v1/admin/payments")
     def admin_payments(status: str | None = Query(None, pattern="^(created|pending|paid|failed|cancelled|refunded)$"),
-                       plan: str | None = Query(None, pattern="^(per_report|sub_30|sub_50|byok|print)$"),
+                       plan: str | None = Query(None, pattern=
+                                                "^(per_report|learn|practice|byok_scale|scale|scale_extra|print|sub_30|sub_50|byok)$"),
                        q: str | None = Query(None, max_length=100),
                        since: datetime | None = None, until: datetime | None = None, a: dict = Depends(admin)):
         _need_store()

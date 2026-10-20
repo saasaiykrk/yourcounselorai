@@ -1,7 +1,7 @@
 // Plans, payments and the clinician's own key in the app:
-// - errors from the server (402 no credit, 424 own key failed) reach the right screen;
+// - errors from the server (402 no credit or not in the plan, 424 own key failed) reach the right screen;
 // - a purchase is "done" only when the SERVER says the order is paid — never on the checkout's word;
-// - plans and prices on screen come from the server, not from the app;
+// - plans, prices and what each includes come from the server, not from the app;
 // - the own key is sent once, never shown again, and a failure never switches to the platform key.
 import 'dart:async';
 
@@ -22,7 +22,7 @@ import 'package:your_counselor/main.dart';
 import 'package:your_counselor/router.dart';
 
 BillingOrder anOrder(String status, {String? reason}) =>
-    BillingOrder(id: 'o1', plan: 'sub_30', status: status, amount: 199900, failureReason: reason);
+    BillingOrder(id: 'o1', plan: 'scale', status: status, amount: 1999900, failureReason: reason);
 
 const checkout = CheckoutDetails(
   key: 'rzp_test_x',
@@ -52,7 +52,7 @@ class FakeGateway implements PaymentGateway {
 
 class FakeBilling implements BillingRepository {
   FakeBilling({
-    this.start = const OrderStart(BillingOrder(id: 'o1', plan: 'sub_30', status: 'created', amount: 199900), checkout),
+    this.start = const OrderStart(BillingOrder(id: 'o1', plan: 'scale', status: 'created', amount: 1999900), checkout),
     this.verifyResult,
     this.verifyError,
     List<BillingOrder>? polls,
@@ -71,8 +71,8 @@ class FakeBilling implements BillingRepository {
   String? createdPlan;
 
   @override
-  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async {
-    createdPlan = '$plan:${reportType ?? ''}${item == null ? '' : ':$item'}';
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item, String? period}) async {
+    createdPlan = '$plan:${reportType ?? ''}${item == null ? '' : ':$item'}${period == null ? '' : ':$period'}';
     return start;
   }
 
@@ -105,13 +105,7 @@ class FakeBilling implements BillingRepository {
     savedKeys.add(apiKey);
     statusValue = const BillingStatus(
       enabled: true,
-      ownKey: OwnKeyStatus(
-        available: true,
-        connected: true,
-        status: 'valid',
-        last4: 'AbCd',
-        reportTypes: ['guided', 'direct'],
-      ),
+      ownKey: OwnKeyStatus(available: true, included: true, connected: true, status: 'valid', last4: 'AbCd'),
     );
     return const OwnKeyCheck(connected: true, status: 'valid', last4: 'AbCd');
   }
@@ -163,6 +157,22 @@ void main() {
       expect(
         e,
         isA<PaymentRequired>().having((p) => p.price, 'price', 19900).having((p) => p.reportType, 'type', 'guided'),
+      );
+    });
+
+    test('402 plan_required → PlanRequired, naming what the plan lacks', () {
+      final e = mapStatus(402, {
+        'detail': {
+          'error': 'plan_required',
+          'feature': 'guided',
+          'message': 'AI-Guided Case Taking is in BYOK Scale and Scale.',
+          'plan': 'per_report',
+          'price': 19900,
+        },
+      });
+      expect(
+        e,
+        isA<PlanRequired>().having((p) => p.feature, 'feature', 'guided').having((p) => p.price, 'price', 19900),
       );
     });
 
@@ -223,53 +233,56 @@ void main() {
   group('purchase', () {
     test('done only when the server confirms the payment', () async {
       final repo = FakeBilling(verifyResult: anOrder('paid'));
-      final out = await flow(repo, FakeGateway(paid)).buy(plan: 'sub_30');
+      final out = await flow(repo, FakeGateway(paid)).buy(plan: 'scale', period: 'year');
       expect(out, isA<PurchaseDone>());
-      expect(repo.createdPlan, 'sub_30:');
+      expect(repo.createdPlan, 'scale::year');
     });
 
     test('the checkout saying "success" is not enough: a refused signature is a failure', () async {
       final repo = FakeBilling(
         verifyError: const BillingRefused(code: 'invalid_signature', message: 'This payment could not be verified.'),
       );
-      final out = await flow(repo, FakeGateway(paid)).buy(plan: 'sub_30');
+      final out = await flow(repo, FakeGateway(paid)).buy(plan: 'scale', period: 'year');
       expect(out, isA<PurchaseFailed>().having((f) => f.message, 'message', 'This payment could not be verified.'));
     });
 
     test('a payment still confirming is polled, then shown as pending — never as paid', () async {
       final later = FakeBilling(verifyResult: anOrder('pending'), polls: [anOrder('pending'), anOrder('paid')]);
-      expect(await flow(later, FakeGateway(paid)).buy(plan: 'sub_30'), isA<PurchaseDone>());
+      expect(await flow(later, FakeGateway(paid)).buy(plan: 'scale', period: 'year'), isA<PurchaseDone>());
       final slow = FakeBilling(verifyResult: anOrder('pending'));
-      expect(await flow(slow, FakeGateway(paid)).buy(plan: 'sub_30'), isA<PurchasePending>());
+      expect(await flow(slow, FakeGateway(paid)).buy(plan: 'scale', period: 'year'), isA<PurchasePending>());
       final failed = FakeBilling(verifyResult: anOrder('failed', reason: 'card declined'));
-      expect(await flow(failed, FakeGateway(paid)).buy(plan: 'sub_30'), isA<PurchaseFailed>());
+      expect(await flow(failed, FakeGateway(paid)).buy(plan: 'scale', period: 'year'), isA<PurchaseFailed>());
     });
 
     test('server unreachable after checkout → pending (the server still hears from Razorpay)', () async {
       final repo = FakeBilling(verifyError: const NetworkProblem());
-      expect(await flow(repo, FakeGateway(paid)).buy(plan: 'sub_30'), isA<PurchasePending>());
+      expect(await flow(repo, FakeGateway(paid)).buy(plan: 'scale', period: 'year'), isA<PurchasePending>());
     });
 
     test('closing the checkout cancels the order', () async {
       final repo = FakeBilling();
-      expect(await flow(repo, FakeGateway(const CheckoutCancelled())).buy(plan: 'sub_30'), isA<PurchaseCancelled>());
+      expect(
+        await flow(repo, FakeGateway(const CheckoutCancelled())).buy(plan: 'scale', period: 'year'),
+        isA<PurchaseCancelled>(),
+      );
       expect(repo.cancelled, ['o1']);
     });
 
     test('where payments cannot run, nothing is opened and the order is cancelled', () async {
       final repo = FakeBilling();
       final gw = FakeGateway(paid, supported: false);
-      expect(await flow(repo, gw).buy(plan: 'sub_30'), isA<PurchaseFailed>());
+      expect(await flow(repo, gw).buy(plan: 'scale', period: 'year'), isA<PurchaseFailed>());
       expect(gw.opened, 0);
       expect(repo.cancelled, ['o1']);
     });
 
     test('a free plan granted by the server opens no checkout', () async {
       final repo = FakeBilling(
-        start: const OrderStart(BillingOrder(id: 'o2', plan: 'sub_30', status: 'paid', amount: 0), null),
+        start: const OrderStart(BillingOrder(id: 'o2', plan: 'learn', status: 'paid', amount: 0), null),
       );
       final gw = FakeGateway(paid);
-      expect(await flow(repo, gw).buy(plan: 'sub_30'), isA<PurchaseDone>());
+      expect(await flow(repo, gw).buy(plan: 'scale', period: 'year'), isA<PurchaseDone>());
       expect(gw.opened, 0);
     });
   });
@@ -286,28 +299,89 @@ void main() {
           prices: {'guided': 24900, 'direct': 9900},
         ),
         const PlanOffer(
-          id: 'sub_50',
-          kind: 'subscription',
-          name: 'Clinic 50',
-          price: 349900,
-          reports: 50,
-          durationDays: 30,
+          id: 'learn',
+          kind: 'tier',
+          name: 'Learn',
+          badge: 'Launch offer',
+          periods: ['month', 'year'],
+          priceMonth: 59900,
+          priceYear: 499900,
+          trialDays: 90,
+          table: {'library': 'Included', 'pdf': null, 'guided': null},
         ),
+        const PlanOffer(
+          id: 'scale',
+          kind: 'tier',
+          name: 'Scale',
+          badge: 'Launch offer',
+          periods: ['month', 'year'],
+          priceMonth: 299900,
+          priceYear: 1999900,
+          wasYear: 2999900,
+          guidedPerMonth: 10,
+          extraPrice: 12900,
+          table: {'library': 'Included', 'pdf': 'Included', 'guided': '10 per month · extra ₹129 each'},
+        ),
+      ],
+      rows: const [
+        PlanRow('library', 'Full practice library'),
+        PlanRow('pdf', 'PDF downloads with your name'),
+        PlanRow('guided', 'AI-Guided Case Taking'),
       ],
     );
 
-    testWidgets('plans and prices come from the server', (tester) async {
+    testWidgets('plans, prices and what each includes come from the server', (tester) async {
+      final repo = FakeBilling(plansValue: plans, statusValue: const BillingStatus(enabled: true));
+      await tester.pumpWidget(app(repo, '/pricing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Scale'), findsOneWidget);
+      expect(find.text('Launch offer'), findsNWidgets(2));
+      expect(find.textContaining('₹19,999'), findsWidgets);
+      expect(find.textContaining('₹29,999'), findsOneWidget, reason: 'the old price, struck through');
+      expect(find.textContaining('or ₹2,999/month'), findsOneWidget);
+      expect(find.textContaining('for 3 months, then ₹599/month or ₹4,999/year'), findsOneWidget);
+      expect(find.textContaining('10 per month · extra ₹129 each'), findsOneWidget);
+      expect(find.textContaining('Not included'), findsNWidgets(2), reason: "Learn's PDF and AI-Guided rows");
+      expect(find.text('Monthly · 30 reports'), findsNothing, reason: 'a plan the server does not list is not shown');
+      await tester.tap(find.text('Monthly'));
+      await tester.pumpAndSettle();
+      final choose = find.byKey(const ValueKey('choose-scale'));
+      await tester.ensureVisible(choose);
+      await tester.pumpAndSettle();
+      expect(find.text('Choose Scale'), findsOneWidget);
+      expect(find.textContaining('₹2,999'), findsWidgets);
+      await tester.tap(choose);
+      await tester.pumpAndSettle();
+      expect(repo.createdPlan, 'scale::month', reason: 'the period chosen is the one bought');
+      await tester.ensureVisible(find.text('AI-Guided report · ₹249'));
+      expect(find.text('AI-Guided report · ₹249'), findsOneWidget);
+    });
+
+    testWidgets('the current plan, this month\'s Scale reports and the extra report', (tester) async {
       final repo = FakeBilling(
         plansValue: plans,
-        statusValue: const BillingStatus(enabled: true, guidedCredits: 3, directCredits: 3),
+        statusValue: const BillingStatus(
+          enabled: true,
+          guidedCredits: 4,
+          plan: CurrentPlan(id: 'scale', name: 'Scale', period: 'month'),
+          scale: ScaleStatus(guidedLeft: 4, perMonth: 10, extraPrice: 12900),
+          features: {'library', 'pdf', 'guided_included'},
+        ),
       );
       await tester.pumpWidget(app(repo, '/pricing'));
       await tester.pumpAndSettle();
-      expect(find.text('Clinic 50'), findsOneWidget);
-      expect(find.text('Buy for ₹3,499'), findsOneWidget);
-      expect(find.text('Guided report · ₹249'), findsOneWidget);
-      expect(find.text('Monthly · 30 reports'), findsNothing, reason: 'a plan the server does not list is not shown');
-      expect(find.text('3'), findsNWidgets(2));
+      expect(find.textContaining('4 of 10 AI-Guided reports left this month'), findsOneWidget);
+      expect(find.text('Your plan'), findsWidgets);
+      final extra = find.byKey(const ValueKey('buy-extra'));
+      await tester.scrollUntilVisible(
+        extra,
+        200,
+        scrollable: find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(extra);
+      await tester.pumpAndSettle();
+      expect(repo.createdPlan, 'scale_extra:');
     });
 
     testWidgets('pricing off: reports are free, nothing to buy', (tester) async {
@@ -317,17 +391,14 @@ void main() {
       );
       await tester.pumpWidget(app(repo, '/pricing'));
       await tester.pumpAndSettle();
-      expect(find.text('Reports are free right now'), findsOneWidget);
-      expect(find.textContaining('Buy for'), findsNothing);
+      expect(find.text('Everything is free right now'), findsOneWidget);
+      expect(find.textContaining('Choose '), findsNothing);
     });
 
     testWidgets('own key: sent once, field cleared, only the last 4 shown, switch turns it on', (tester) async {
       final repo = FakeBilling(
         plansValue: plans,
-        statusValue: const BillingStatus(
-          enabled: true,
-          ownKey: OwnKeyStatus(available: true, reportTypes: ['guided', 'direct']),
-        ),
+        statusValue: const BillingStatus(enabled: true, ownKey: OwnKeyStatus(available: true, included: true)),
       );
       final container = ProviderContainer(
         overrides: [
@@ -356,6 +427,17 @@ void main() {
       await tester.tap(find.byType(Switch));
       await tester.pumpAndSettle();
       expect(container.read(useOwnKeyProvider), isTrue);
+    });
+
+    testWidgets('own key without BYOK Scale: the screen says which plan includes it', (tester) async {
+      final repo = FakeBilling(
+        plansValue: plans,
+        statusValue: const BillingStatus(enabled: true, ownKey: OwnKeyStatus(available: true)),
+      );
+      await tester.pumpWidget(app(repo, '/pricing/own-key'));
+      await tester.pumpAndSettle();
+      expect(find.text('Choose BYOK Scale to use your key'), findsOneWidget);
+      expect(find.textContaining('Using your own key is part of BYOK Scale'), findsOneWidget);
     });
 
     testWidgets('own key failed: "write without my key" is the clinician\'s choice, not automatic', (tester) async {

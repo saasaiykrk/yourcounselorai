@@ -258,11 +258,13 @@ PAGE_HEADERS = {
 
 @dataclass(frozen=True)
 class PrintAccess:
-    """Who may print which page. everything: pricing is off, or a running subscription. pages: single
-    prints still running, {slug: ends at}. offer: a single print for sale ({price, currency, hours}), or None."""
+    """Who may read and print which page. library: the clinician's plan includes the practice library
+    (or pricing is off). everything: printing every page (pricing off, or a plan with PDF downloads).
+    pages: single prints still running, {slug: ends at}. offer: a single print for sale, or None."""
     everything: bool = False
     pages: dict = field(default_factory=dict)
     offer: dict | None = None
+    library: bool = True
 
     def allows(self, slug: str) -> bool:
         return self.everything or slug in self.pages
@@ -283,14 +285,14 @@ class EducationService:
         return self._src[page.file]
 
     def print_access(self, user_id: str) -> PrintAccess:
-        """Fails closed: no lookup, or any error, means no printing (and nothing on offer)."""
+        """Fails closed: no lookup means no printing; any error also locks the library."""
         if self.access is None:
             return PrintAccess()
         try:
             a = self.access(user_id)
-            return a if isinstance(a, PrintAccess) else PrintAccess()
+            return a if isinstance(a, PrintAccess) else PrintAccess(library=False)
         except Exception:
-            return PrintAccess()
+            return PrintAccess(library=False)
 
     def url(self, base: str, page: Page, token: str) -> str:
         path = f"/learn/file/{page.file}" if page.kind == "handout" else f"/learn/{page.slug}"
@@ -311,10 +313,12 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
         access = svc.print_access(user["id"])
         until = lambda p: access.pages[p.slug].isoformat() if p.slug in access.pages else None  # noqa: E731
         return {"pages": [{"slug": p.slug, "title": p.title, "summary": p.summary, "kind": p.kind, "section": p.section,
-                           "url": svc.url(base, p, token), "can_print": access.allows(p.slug),
+                           "url": svc.url(base, p, token) if access.library else None, "locked": not access.library,
+                           "can_print": access.library and access.allows(p.slug),
                            "print_until": None if access.everything else until(p)} for p in svc.catalog],
-                "link_hours": svc.signer.hours, "can_print": access.everything,
-                "print_offer": None if access.everything else access.offer}
+                "link_hours": svc.signer.hours, "can_print": access.library and access.everything,
+                "library": access.library, "library_message": None if access.library else LOCKED_LIBRARY,
+                "print_offer": None if access.everything or not access.library else access.offer}
 
     @app.get("/learn/file/{name}")
     def education_file(name: str, t: str = ""):
@@ -322,9 +326,11 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
         if page is None:
             raise HTTPException(404, "not found")
         try:
-            signed(t)
+            user_id = signed(t)
         except HTTPException:
             return _expired()
+        if not svc.print_access(user_id).library:
+            return _locked()
         return FileResponse(WEB / page.file, media_type="application/pdf",
                             headers={**{k: v for k, v in PAGE_HEADERS.items() if k != "Content-Security-Policy"},
                                      "Content-Disposition": f'inline; filename="{page.file}"'})
@@ -338,9 +344,12 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
             user_id = signed(t)
         except HTTPException:
             return _expired()
+        access = svc.print_access(user_id)
+        if not access.library:
+            return _locked()
         base = base_url(request)
         links = {p.file: svc.url(base, p, t) for p in svc.catalog}
-        config, can_print = None, svc.print_access(user_id).allows(page.slug)
+        config, can_print = None, access.allows(page.slug)
         if page.reader:
             viewer = svc.viewer_lookup(user_id) or {}
             readers = [p for p in svc.catalog if p.reader]
@@ -351,6 +360,17 @@ def install(app: FastAPI, svc: EducationService, current_user, base_url) -> None
                       "modules": [{"slug": p.slug, "title": p.title} for p in readers],
                       "links": {p.slug: svc.url(base, p, t) for p in readers}}
         return HTMLResponse(render(page, svc.source(page), links, config, can_print), headers=PAGE_HEADERS)
+
+
+LOCKED_LIBRARY = "The practice library is part of every plan. Choose a plan in the app to keep reading."
+
+
+def _locked() -> HTMLResponse:
+    body = ("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Choose a plan · YourCounselor</title><body style=\"font:16px/1.5 system-ui,sans-serif;max-width:520px;"
+            "margin:15vh auto;padding:0 20px;color:#1E1030\"><h1 style='color:#3F0079'>Choose a plan to keep reading</h1>"
+            f"<p>{htmllib.escape(LOCKED_LIBRARY)}</p></body>")
+    return HTMLResponse(body, status_code=402, headers={"Cache-Control": "no-store"})
 
 
 def _expired() -> HTMLResponse:

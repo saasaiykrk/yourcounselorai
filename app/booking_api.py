@@ -207,7 +207,26 @@ def _slugify(name: str) -> str:
     return (s or "consultant")[:40].strip("-")
 
 
-def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
+def install(app: FastAPI, svc: BookingService, verified_clinician, features=None) -> None:
+    """features(clinician id) → what their plan unlocks (main.py: billing). None: everything."""
+
+    def unlocked(cid) -> frozenset | set:
+        if features is None:
+            return {"appointments", "booking"}
+        try:
+            return features(cid)
+        except Exception:      # noqa: BLE001 - fail closed: no plan check, no calendar
+            return set()
+
+    def plan_required(feature: str):
+        from .billing_api import plan_required as body
+        return HTTPException(402, body(feature))
+
+    def consultant(c: dict = Depends(verified_clinician)) -> dict:
+        """Appointments in the app are part of Practice, BYOK Scale and Scale."""
+        if "appointments" not in unlocked(c["id"]):
+            raise plan_required("appointments")
+        return c
 
     def need_store():
         if not svc.store_on():
@@ -230,7 +249,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
 
     # --- consultant -------------------------------------------------------------------------------
     @app.get("/v1/calendar")
-    def calendar_home(request: Request, c: dict = Depends(verified_clinician)):
+    def calendar_home(request: Request, c: dict = Depends(consultant)):
         need_store()
         s = svc.store.get_settings(c["id"])
         if s:
@@ -252,12 +271,14 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
                 "timezones": TIMEZONES}
 
     @app.put("/v1/calendar/settings")
-    def calendar_settings(body: SettingsIn, request: Request, c: dict = Depends(verified_clinician)):
+    def calendar_settings(body: SettingsIn, request: Request, c: dict = Depends(consultant)):
         need_store()
         try:
             s = booking.validate_settings(body.model_dump())
         except booking.BookingError as e:
             raise problems(e)
+        if s["enabled"] and "booking" not in unlocked(c["id"]):
+            raise plan_required("booking")
         if s["enabled"] and svc.sealer is None:
             raise HTTPException(503, {"error": "booking_unavailable",
                                       "message": "Online booking is not switched on for this server yet."})
@@ -270,7 +291,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         return {"settings": s, "booking_url": f"{svc.base_url(request)}/book/{s['slug']}"}
 
     @app.put("/v1/calendar/availability")
-    def calendar_availability(body: AvailabilityIn, c: dict = Depends(verified_clinician)):
+    def calendar_availability(body: AvailabilityIn, c: dict = Depends(consultant)):
         need_store()
         try:
             ws = booking.validate_windows([w.model_dump() for w in body.windows])
@@ -280,7 +301,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
         return {"windows": [{"weekday": w, "start": f"{a:%H:%M}", "end": f"{b:%H:%M}"} for w, a, b in ws]}
 
     @app.post("/v1/calendar/time-off")
-    def calendar_time_off(body: TimeOffIn, c: dict = Depends(verified_clinician)):
+    def calendar_time_off(body: TimeOffIn, c: dict = Depends(consultant)):
         need_store()
         tz_name = (svc.store.get_settings(c["id"]) or booking.DEFAULT_SETTINGS)["timezone"]
         try:
@@ -304,14 +325,14 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
                 "conflicts": len(clash)}     # existing appointments stay; the consultant decides about them
 
     @app.delete("/v1/calendar/time-off/{off_id}")
-    def calendar_time_off_delete(off_id: int, c: dict = Depends(verified_clinician)):
+    def calendar_time_off_delete(off_id: int, c: dict = Depends(consultant)):
         need_store()
         if not svc.store.delete_time_off(c["id"], off_id):
             raise HTTPException(404, "not found")
         return {"deleted": True}
 
     @app.get("/v1/calendar/appointments")
-    def calendar_appointments(start: date, end: date, c: dict = Depends(verified_clinician)):
+    def calendar_appointments(start: date, end: date, c: dict = Depends(consultant)):
         need_store()
         if end < start or (end - start).days > 62:
             raise HTTPException(422, {"error": "invalid", "message": "Choose up to 62 days."})
@@ -323,7 +344,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
 
     @app.get("/v1/calendar/slots")
     def calendar_slots(start: date, days: int = Query(7, ge=1, le=31), ignore: uuid.UUID | None = None,
-                       c: dict = Depends(verified_clinician)):
+                       c: dict = Depends(consultant)):
         need_store()
         s = settings_of(c)
         slots = svc.store.free_slots(c["id"], s, start, days, honour_notice=False, ignore=str(ignore) if ignore else None)
@@ -333,7 +354,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
 
     @app.post("/v1/calendar/appointments")
     def calendar_add(body: ConsultantBookingIn, request: Request, bg: BackgroundTasks,
-                     c: dict = Depends(verified_clinician)):
+                     c: dict = Depends(consultant)):
         need_store()
         s = settings_of(c)
         try:
@@ -361,7 +382,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
 
     @app.post("/v1/calendar/appointments/{appt_id}/reschedule")
     def calendar_reschedule(appt_id: uuid.UUID, body: RescheduleIn, request: Request, bg: BackgroundTasks,
-                            c: dict = Depends(verified_clinician)):
+                            c: dict = Depends(consultant)):
         need_store()
         s = settings_of(c)
         try:
@@ -382,7 +403,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
 
     @app.post("/v1/calendar/appointments/{appt_id}/{action}")
     def calendar_action(appt_id: uuid.UUID, action: str, request: Request, bg: BackgroundTasks,
-                        c: dict = Depends(verified_clinician)):
+                        c: dict = Depends(consultant)):
         need_store()
         if action not in ("confirm", "reject", "cancel", "complete"):
             raise HTTPException(404, "not found")
@@ -399,7 +420,8 @@ def install(app: FastAPI, svc: BookingService, verified_clinician) -> None:
     def public_settings(slug: str) -> dict:
         need_store()
         s = svc.store.public_settings(slug.lower()) if booking.SLUG_RE.match(slug.lower()) else None
-        if not s or svc.sealer is None:
+        if not s or svc.sealer is None or "booking" not in unlocked(s["clinician_id"]):
+            # A plan without the booking page reads as no page: clients see nothing about plans.
             raise HTTPException(404, {"error": "not_found", "message": "This booking page does not exist."})
         return s
 

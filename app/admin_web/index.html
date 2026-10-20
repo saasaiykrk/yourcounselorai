@@ -180,7 +180,7 @@
         <header class="page-head">
           <div>
             <h1>Pricing Plans</h1>
-            <p class="muted">What clinicians pay for reports. Changes apply to new purchases at once; plans already bought keep working.</p>
+            <p class="muted">The plans clinicians buy, what each unlocks, and single reports and prints. Changes apply to new purchases at once; plans already bought keep working.</p>
           </div>
           <button type="button" class="btn ghost" id="refresh-pricing"><span class="ico" data-icon="refresh"></span>Refresh</button>
         </header>
@@ -213,9 +213,9 @@
             <input id="subs-q" type="search" placeholder="Search name or email" aria-label="Search clinicians">
           </label>
           <select id="subs-plan" aria-label="Plan">
-            <option value="">All plans</option><option value="sub_30">Monthly · 30</option>
-            <option value="sub_50">Monthly · 50</option><option value="byok">Own API key</option>
-            <option value="manual">Given by admin</option>
+            <option value="">All plans</option><option value="learn">Learn</option>
+            <option value="practice">Practice</option><option value="byok_scale">BYOK Scale</option>
+            <option value="scale">Scale</option><option value="manual">Credits given by admin</option>
           </select>
           <select id="subs-state" aria-label="Status">
             <option value="">Any status</option><option value="active">Active</option><option value="scheduled">Starts later</option>
@@ -254,8 +254,9 @@
             <button type="button" data-value="refunded" aria-pressed="false">Refunds</button>
           </div>
           <select id="pay-plan" aria-label="Plan">
-            <option value="">All plans</option><option value="per_report">Per report</option><option value="sub_30">Monthly · 30</option>
-            <option value="sub_50">Monthly · 50</option><option value="byok">Own-key access fee</option>
+            <option value="">All plans</option><option value="learn">Learn</option><option value="practice">Practice</option>
+            <option value="byok_scale">BYOK Scale</option><option value="scale">Scale</option>
+            <option value="scale_extra">Scale · extra report</option><option value="per_report">Per report</option>
             <option value="print">Single print</option>
           </select>
           <label class="search"><span class="ico" data-icon="search"></span>
