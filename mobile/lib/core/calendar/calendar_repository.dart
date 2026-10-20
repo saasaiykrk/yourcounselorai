@@ -19,7 +19,10 @@ abstract interface class CalendarRepository {
 
   Future<List<FreeDay>> freeSlots(DateTime start, {int days, String? ignore});
 
-  Future<Appointment> add({required DateTime start, String? firstName, String? email});
+  Future<Appointment> add({required DateTime start, String? firstName, String? email, String? tag});
+
+  /// [tag]: first_session · follow_up · online, or null for none.
+  Future<Appointment> setTag(String id, String? tag);
 
   Future<Appointment> reschedule(String id, {required DateTime start, bool outsideHours});
 
@@ -59,8 +62,11 @@ class ApiCalendarRepository implements CalendarRepository {
       _api.freeSlots(start, days: days, ignore: ignore);
 
   @override
-  Future<Appointment> add({required DateTime start, String? firstName, String? email}) =>
-      _api.addAppointment(startsLocal: wallString(start), firstName: firstName, email: email);
+  Future<Appointment> add({required DateTime start, String? firstName, String? email, String? tag}) =>
+      _api.addAppointment(startsLocal: wallString(start), firstName: firstName, email: email, tag: tag);
+
+  @override
+  Future<Appointment> setTag(String id, String? tag) => _api.setAppointmentTag(id, tag);
 
   @override
   Future<Appointment> reschedule(String id, {required DateTime start, bool outsideHours = false}) =>
@@ -77,20 +83,27 @@ class PreviewCalendarRepository implements CalendarRepository {
     final t = dayOf(_now);
     DateTime at(int days, int h, [int m = 0]) => t.add(Duration(days: days, hours: h, minutes: m));
     var n = 0;
-    Appointment a(DateTime s, AppointmentStatus st, {String? name, String? email, String source = 'public'}) =>
-        Appointment(
-          id: 'preview-${n++}',
-          start: s,
-          end: s.add(Duration(minutes: _settings.slotMinutes)),
-          status: st,
-          source: source,
-          clientName: name,
-          clientEmail: email,
-        );
+    Appointment a(
+      DateTime s,
+      AppointmentStatus st, {
+      String? name,
+      String? email,
+      String source = 'public',
+      String? tag,
+    }) => Appointment(
+      id: 'preview-${n++}',
+      start: s,
+      end: s.add(Duration(minutes: _settings.slotMinutes)),
+      status: st,
+      source: source,
+      clientName: name,
+      clientEmail: email,
+      tag: tag,
+    );
     _appts.addAll([
-      a(at(0, 10), AppointmentStatus.confirmed, name: 'Meera', email: 'meera@example.com'),
-      a(at(0, 15, 30), AppointmentStatus.pending, name: 'Arjun', email: 'arjun@example.com'),
-      a(at(1, 11), AppointmentStatus.confirmed, name: 'Kavya', email: 'kavya@example.com'),
+      a(at(0, 10), AppointmentStatus.confirmed, name: 'Meera', email: 'meera@example.com', tag: 'first_session'),
+      a(at(0, 15, 30), AppointmentStatus.pending, name: 'Arjun', email: 'arjun@example.com', tag: 'online'),
+      a(at(1, 11), AppointmentStatus.confirmed, name: 'Kavya', email: 'kavya@example.com', tag: 'follow_up'),
       a(at(2, 16), AppointmentStatus.pending, name: 'Rahul', email: 'rahul@example.com'),
       a(at(3, 12), AppointmentStatus.confirmed, source: 'consultant'),
       a(at(-1, 10), AppointmentStatus.completed, name: 'Sana', email: 'sana@example.com'),
@@ -213,7 +226,7 @@ class PreviewCalendarRepository implements CalendarRepository {
   Never _taken() => throw const BillingRefused(code: 'slot_taken', message: 'That time is not free.', status: 409);
 
   @override
-  Future<Appointment> add({required DateTime start, String? firstName, String? email}) async {
+  Future<Appointment> add({required DateTime start, String? firstName, String? email, String? tag}) async {
     if (start.isBefore(_now) || _clash(start)) _taken();
     final a = Appointment(
       id: 'preview-${_appts.length + 100}',
@@ -223,9 +236,17 @@ class PreviewCalendarRepository implements CalendarRepository {
       source: 'consultant',
       clientName: firstName,
       clientEmail: email,
+      tag: tag,
     );
     _appts.add(a);
     return a;
+  }
+
+  @override
+  Future<Appointment> setTag(String id, String? tag) async {
+    final i = _appts.indexWhere((a) => a.id == id);
+    if (i < 0) throw const NotFound();
+    return _appts[i] = _appts[i].copyWith(tag: tag);
   }
 
   @override
@@ -246,6 +267,7 @@ class PreviewCalendarRepository implements CalendarRepository {
       clientName: old.clientName,
       clientEmail: old.clientEmail,
       rescheduledFrom: id,
+      tag: old.tag,
     );
     _appts[i] = old.copyWith(status: AppointmentStatus.rescheduled);
     _appts.add(moved);

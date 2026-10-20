@@ -325,15 +325,25 @@ class ApiClient {
   ];
 
   /// [startsLocal]: a wall time in the consultant's timezone, "2026-10-13T18:00".
-  Future<Appointment> addAppointment({required String startsLocal, String? firstName, String? email}) async =>
-      Appointment.fromJson(
-        (await _send(
-              'POST',
-              '/v1/calendar/appointments',
-              body: {'starts_local': startsLocal, 'first_name': ?firstName, 'email': ?email},
-            ))['appointment']
-            as Map<String, dynamic>,
-      );
+  Future<Appointment> addAppointment({
+    required String startsLocal,
+    String? firstName,
+    String? email,
+    String? tag,
+  }) async => Appointment.fromJson(
+    (await _send(
+          'POST',
+          '/v1/calendar/appointments',
+          body: {'starts_local': startsLocal, 'first_name': ?firstName, 'email': ?email, 'tag': ?tag},
+        ))['appointment']
+        as Map<String, dynamic>,
+  );
+
+  /// First Session · Follow-up · Online, or null to clear it.
+  Future<Appointment> setAppointmentTag(String id, String? tag) async => Appointment.fromJson(
+    (await _send('PUT', '/v1/calendar/appointments/${Uri.encodeComponent(id)}/tag', body: {'tag': tag}))['appointment']
+        as Map<String, dynamic>,
+  );
 
   Future<Appointment> rescheduleAppointment(
     String id, {

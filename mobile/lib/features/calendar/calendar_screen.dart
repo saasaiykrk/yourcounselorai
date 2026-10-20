@@ -484,7 +484,10 @@ class AppointmentTile extends StatelessWidget {
                           color: faded ? AppColors.muted : AppColors.ink,
                         ),
                       ),
-                      Text(a.source == 'public' ? 'Booked online' : 'Added by you', style: AppText.caption),
+                      Text(
+                        [?a.tagLabel, a.source == 'public' ? 'Booked by the client' : 'Added by you'].join(' · '),
+                        style: AppText.caption,
+                      ),
                     ],
                   ),
                 ),
