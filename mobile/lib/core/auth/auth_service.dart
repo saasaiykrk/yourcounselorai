@@ -14,6 +14,11 @@ abstract interface class AuthService {
   /// Signs in with the emailed code. Throws [AuthFailure] if it is wrong or expired.
   Future<void> verifyCode(String email, String code);
 
+  /// The store reviewer's account only ([AppConfig.reviewEmail]). Reviewers can't receive the emailed
+  /// code, so that one account has a fixed 6-digit code: it is the account's password in Supabase
+  /// (never in the app). Same screens as everyone else. Throws [AuthFailure] if it is wrong.
+  Future<void> signInWithReviewCode(String email, String code);
+
   /// Bearer token for the backend, or null when signed out.
   Future<String?> accessToken();
 
@@ -50,6 +55,9 @@ class DevAuthService implements AuthService {
   }
 
   @override
+  Future<void> signInWithReviewCode(String email, String code) => verifyCode(email, code);
+
+  @override
   Future<String?> accessToken() async => _signedIn ? _token : null;
 
   @override
@@ -78,6 +86,18 @@ class SupabaseAuthService implements AuthService {
     try {
       await _auth.verifyOTP(email: email, token: code, type: sb.OtpType.email);
     } on sb.AuthException catch (e) {
+      throw AuthFailure(friendlyAuthError(e, sendingCode: false));
+    }
+  }
+
+  @override
+  Future<void> signInWithReviewCode(String email, String code) async {
+    try {
+      await _auth.signInWithPassword(email: email, password: code);
+    } on sb.AuthException catch (e) {
+      if (e.code == 'invalid_credentials' || e.message.toLowerCase().contains('invalid login')) {
+        throw const AuthFailure('That code is wrong or has expired. Try again or resend it.');
+      }
       throw AuthFailure(friendlyAuthError(e, sendingCode: false));
     }
   }

@@ -5,13 +5,30 @@ Fill these in Play Console → your app → **Policy and programs → App conten
 ## Before you submit: three things to sort out
 1. **Payments policy (most important).** The app sells digital content (report plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
 2. **Account deletion.** Play requires a way to delete an account from inside the app **and** a web link for it. The app has no "Delete account" button yet; today the privacy pages say to email the safety address. A web form or a page with that email address can serve as the link for now. The in-app button still needs building.
-3. **Reviewer sign-in.** Sign-in is by a 6-digit code sent by email, and the app only opens for verified clinicians. Google's reviewers need a working login (see App access below). The usual way is a reviewer account with a fixed code, which needs a small change in the app and backend.
+3. **Reviewer sign-in.** Done in the app: a fixed 6-digit code for one reviewer email only. Set up the account as in App access below.
 
-## App access
-- **All or some functionality is restricted** → *Some functionality is restricted*. Add instructions:
-  > YourCounselor is for registered mental-health professionals. Sign in with the reviewer email below; enter the code shown below when asked. The account is already verified.
-  > Email: [reviewer email] · Code: [fixed reviewer code]
-- Without a reviewer account, review will fail at sign-in.
+## App access (reviewer sign-in)
+Google's reviewers can't receive the emailed code, so one account has a **fixed 6-digit code** instead. The
+reviewer uses the same screens as everyone else (email → code). For **playreview@yourcounselor.in** only
+(`REVIEW_EMAIL` in `mobile/config/live.json`) no email is sent, and the code is checked against that account's
+password in Supabase. Every other email still gets a new emailed code. The code is never in the app or in git.
+
+Set it up once:
+1. **Supabase** → Authentication → Users → **Add user** → *Create new user*: email `playreview@yourcounselor.in`,
+   password: **the fixed 6-digit code you choose** (for example a random 6-digit number), tick **Auto Confirm User**.
+2. **On your phone** (new app build): Sign in → that email → **Send code** → type the 6-digit code → Verify. Fill in
+   the registration (name "Google Play Reviewer", role Psychologist, registration body RCI, number "PLAY-REVIEW").
+3. **/admin → Registrations**: verify the account (level **L2**).
+4. **/admin → Subscriptions & Users** → the reviewer → **Grant**: report credits (e.g. 20 for 90 days), so reviews
+   can run consults and print handouts even while charging is on.
+5. **Play Console → App content → App access** → *All or some functionality is restricted* → add instructions:
+   > YourCounselor is for registered mental-health professionals. Enter the email below and tap Send code (no email
+   > is sent to this account), then enter the code below. The account is verified and has report credits.
+   > Email: playreview@yourcounselor.in · Code: [your 6-digit code]
+
+To change the code, change the password in Supabase (and in Play Console). To end reviewer access, delete the
+user in Supabase or deactivate the account in /admin. Keep the account's credits small: anyone who learns the
+email and code can sign in as the reviewer.
 
 ## Ads
 - **Does your app contain ads?** No.
