@@ -19,13 +19,26 @@ String _when(DateTime? d) {
   return '${d.day} ${m[d.month - 1]} ${d.year}';
 }
 
-String _planName(String plan, String? type) => switch (plan) {
-  'per_report' => '${reportTypeLabel(type)} (single)',
-  'sub_30' => 'Monthly · 30 reports',
-  'sub_50' => 'Monthly · 50 reports',
-  'byok' => 'Own-key access fee',
-  _ => plan,
-};
+String _planName(String plan, String? type, String? period) {
+  final per = switch (period) {
+    'month' => ' · monthly',
+    'year' => ' · yearly',
+    _ => '',
+  };
+  return switch (plan) {
+    'per_report' => '${reportTypeLabel(type)} (single)',
+    'learn' => 'Learn$per',
+    'practice' => 'Practice$per',
+    'byok_scale' => 'BYOK Scale$per',
+    'scale' => 'Scale$per',
+    'scale_extra' => 'Extra AI-Guided report',
+    'print' => 'Single print',
+    'sub_30' => 'Monthly · 30 reports',
+    'sub_50' => 'Monthly · 50 reports',
+    'byok' => 'Own-key access fee',
+    _ => plan,
+  };
+}
 
 /// Payments and credit movements, newest first.
 class BillingHistoryScreen extends ConsumerWidget {
@@ -147,7 +160,7 @@ class _OrderTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_planName(o.plan, o.reportType), style: AppText.label),
+                Text(_planName(o.plan, o.reportType, o.period), style: AppText.label),
                 const SizedBox(height: 2),
                 Text(
                   [

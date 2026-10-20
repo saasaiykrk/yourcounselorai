@@ -1,4 +1,4 @@
-"""Pricing, payments and "use my own key" over HTTP, against a real Postgres (migration 006) and a
+"""Plans, payments and "use my own key" over HTTP, against a real Postgres (migrations 006-012) and a
 fake Razorpay server (httpx MockTransport). The app runs in DEV_MODE with its fake keyless model;
 only the billing store is the real database. Skipped without TEST_DATABASE_URL.
 
@@ -9,7 +9,8 @@ What must hold:
 - a webhook delivered twice grants once;
 - the clinician's own key is never returned, never stored in clear, and a failure with it never
   falls back to the platform key;
-- only admins change prices, and switching off a plan that people use needs a confirmation."""
+- only admins change prices, and switching off a plan that people use needs a confirmation;
+- each plan unlocks only what it includes (library, PDF, booking page, appointments, AI-Guided)."""
 import base64
 import copy
 import hashlib
@@ -166,8 +167,10 @@ class BillingApiTests(unittest.TestCase):
     def consult(self, **extra):
         return self.client.post("/v1/consult", json={"text": CASE, "deid_attested": True, "mode": "B", **extra})
 
-    def buy(self, plan, report_type=None):
-        r = self.client.post("/v1/billing/orders", json={"plan": plan, "report_type": report_type})
+    def buy(self, plan, report_type=None, period=None):
+        if plan in billing.TIERS and period is None:
+            period = "month"
+        r = self.client.post("/v1/billing/orders", json={"plan": plan, "report_type": report_type, "period": period})
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()
 
@@ -250,13 +253,23 @@ class BillingApiTests(unittest.TestCase):
         self.assertEqual(r.status_code, 422)
         self.assertEqual(self.balance()["any"], 1)
 
+    def start_guided(self):
+        return self.client.post("/v1/consultations", json={"text": CASE, "deid_attested": True})
+
+    def guided_report(self, **extra):
+        v = self.start_guided()
+        self.assertEqual(v.status_code, 200, v.text)
+        return self.client.post(f"/v1/consultations/{v.json()['id']}/report", json={"force": True, **extra})
+
     def test_guided_report_spends_one_guided_credit_once(self):
         self.configure({"enabled": True})
-        v = self.client.post("/v1/consultations", json={"text": CASE, "deid_attested": True}).json()
-        r = self.client.post(f"/v1/consultations/{v['id']}/report", json={"force": True})
-        self.assertEqual(r.status_code, 402)
+        r = self.start_guided()
+        self.assertEqual(r.status_code, 402, "Learn's free months don't include AI-Guided Case Taking")
+        self.assertEqual((r.json()["detail"]["error"], r.json()["detail"]["feature"]), ("plan_required", "guided"))
+        self.assertEqual(r.json()["detail"]["price"], 19900, "a single guided report is offered")
         o = self.buy("per_report", "guided")
         self.verify(o, self.rzp.pay(o["checkout"]["order_id"]))
+        v = self.start_guided().json()
         r = self.client.post(f"/v1/consultations/{v['id']}/report", json={"force": True})
         self.assertEqual(r.json()["reply"]["status"], "delivered", r.text)
         again = self.client.post(f"/v1/consultations/{v['id']}/report", json={"force": True})
@@ -267,73 +280,75 @@ class BillingApiTests(unittest.TestCase):
     # --- payment verification ---------------------------------------------------------------
     def test_bad_signature_or_unpaid_or_wrong_amount_grants_nothing(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_30")
+        o = self.buy("scale")
         pid = self.rzp.pay(o["checkout"]["order_id"])
         r = self.verify(o, pid, signature="0" * 64)
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["detail"]["error"], "invalid_signature")
-        o2 = self.buy("sub_30")
+        o2 = self.buy("scale")
         r = self.verify(o2, self.rzp.pay(o2["checkout"]["order_id"], status="authorized"))
         self.assertEqual(r.json()["order"]["status"], "pending", "authorised but not captured is not paid")
-        o3 = self.buy("sub_30")
+        o3 = self.buy("scale", period="year")
         r = self.verify(o3, self.rzp.pay(o3["checkout"]["order_id"], amount=100))
         self.assertEqual(r.status_code, 400)
-        o4 = self.buy("sub_30")
+        o4 = self.buy("practice")
         r = self.verify(o4, self.rzp.pay(o4["checkout"]["order_id"], status="failed"))
         self.assertEqual(r.json()["order"]["status"], "failed")
-        self.assertEqual(self.balance()["any"], 0)
+        self.assertEqual(self.balance()["guided"], 0)
+        self.assertEqual(billing_db.plan_features(self.cid, main.BILLING.config()[1])["features"], {"library"},
+                         "only the free months")
         mine = {x["status"] for x in self.client.get("/v1/billing/orders").json()["orders"]}
         self.assertNotIn("paid", mine)
 
     def test_signature_from_another_order_is_refused(self):
         self.configure({"enabled": True})
-        a, b = self.buy("per_report", "guided"), self.buy("sub_50")
+        a, b = self.buy("per_report", "guided"), self.buy("scale", period="year")
         pid = self.rzp.pay(a["checkout"]["order_id"])                    # paid ₹199 …
-        r = self.client.post(f"/v1/billing/orders/{b['order']['id']}/verify",   # … claimed for the ₹2,999 plan
+        r = self.client.post(f"/v1/billing/orders/{b['order']['id']}/verify",   # … claimed for the ₹19,999 plan
                              json={"razorpay_order_id": a["checkout"]["order_id"], "razorpay_payment_id": pid,
                                    "razorpay_signature": sign(a["checkout"]["order_id"], pid)})
         self.assertEqual(r.status_code, 400)
-        self.assertEqual(self.balance()["any"], 0)
+        self.assertEqual(self.balance()["guided"], 0)
 
     def test_payment_the_app_never_reported_is_found_by_polling(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_50")
+        o = self.buy("scale")
         self.rzp.pay(o["checkout"]["order_id"])
         r = self.client.get(f"/v1/billing/orders/{o['order']['id']}")
         self.assertEqual(r.json()["order"]["status"], "paid")
-        self.assertEqual(self.balance()["any"], 50)
+        self.assertEqual(self.balance()["guided"], 10)
 
     def test_webhook_is_signed_and_applied_once(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_30")
+        o = self.buy("scale")
         pid = self.rzp.pay(o["checkout"]["order_id"])
         entity = dict(self.rzp.payments[pid])
         self.assertEqual(self.webhook("payment.captured", "payment", entity, secret="wrong").status_code, 400)
-        self.assertEqual(self.balance()["any"], 0)
+        self.assertEqual(self.balance()["guided"], 0)
         r = self.webhook("payment.captured", "payment", entity, event_id="evt_same_" + pid)
         self.assertEqual(r.json(), {"ok": True})
         r = self.webhook("payment.captured", "payment", entity, event_id="evt_same_" + pid)
         self.assertTrue(r.json()["duplicate"])
         self.webhook("order.paid", "payment", entity)                   # a second event for the same payment
         self.verify(o, pid)                                              # and the app's own report
-        self.assertEqual(self.balance()["any"], 30)
+        self.assertEqual(self.balance()["guided"], 10)
 
     def test_failed_webhook_and_cancel_leave_no_credit(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_30")
+        o = self.buy("scale")
         pid = self.rzp.pay(o["checkout"]["order_id"], status="failed")
         self.webhook("payment.failed", "payment", dict(self.rzp.payments[pid], error_description="declined"))
         self.assertEqual(billing_db.get_order(o["order"]["id"])["status"], "failed")
-        o2 = self.buy("sub_30")
+        o2 = self.buy("scale")
         self.assertTrue(self.client.post(f"/v1/billing/orders/{o2['order']['id']}/cancel").json()["cancelled"])
-        self.assertEqual(self.balance()["any"], 0)
+        self.assertEqual(self.balance()["guided"], 0)
 
     def test_razorpay_refusing_the_order_records_its_reason(self):
         # Seen live: every purchase failed with only "could not create the Razorpay order" — no way to
         # tell wrong keys from an outage. Razorpay's own reason is kept (never the keys).
         self.configure({"enabled": True})
         main.BILLING.razorpay = Razorpay("rzp_test_x", "wrong-secret", transport=httpx.MockTransport(self.rzp.handler))
-        r = self.client.post("/v1/billing/orders", json={"plan": "sub_30"})
+        r = self.client.post("/v1/billing/orders", json={"plan": "scale", "period": "month"})
         self.assertEqual(r.status_code, 502)
         o = billing_db.orders(self.cid)[0]
         self.assertEqual(o["status"], "failed")
@@ -343,14 +358,19 @@ class BillingApiTests(unittest.TestCase):
 
     def test_disabled_plan_cannot_be_bought_and_prices_are_server_side(self):
         c = billing.validate({"enabled": True})
-        c["plans"]["sub_50"]["enabled"] = False
+        c["plans"]["practice"]["enabled"] = False
         self.configure(c)
-        r = self.client.post("/v1/billing/orders", json={"plan": "sub_50"})
+        r = self.client.post("/v1/billing/orders", json={"plan": "practice", "period": "year"})
         self.assertEqual(r.status_code, 409)
-        r = self.client.post("/v1/billing/orders", json={"plan": "sub_30", "amount": 1})
-        self.assertEqual(r.json()["order"]["amount"], 199900, "an amount sent by the app is ignored")
+        r = self.client.post("/v1/billing/orders", json={"plan": "scale", "period": "year", "amount": 1})
+        self.assertEqual(r.json()["order"]["amount"], 1999900, "an amount sent by the app is ignored")
+        self.assertEqual(r.json()["order"]["period"], "year")
+        self.assertIn("Scale · yearly", r.json()["checkout"]["description"])
+        for bad in ({"plan": "scale"}, {"plan": "scale", "period": "week"}, {"plan": "sub_30"}, {"plan": "byok"}):
+            self.assertIn(self.client.post("/v1/billing/orders", json=bad).status_code, (409, 422), bad)
         plans = self.client.get("/v1/billing/plans").json()
-        self.assertEqual([p["id"] for p in plans["plans"]], ["per_report", "sub_30"])
+        self.assertEqual([p["id"] for p in plans["plans"]], ["learn", "byok_scale", "scale", "per_report"])
+        self.assertEqual(plans["rows"][4]["label"], "AI-Guided Case Taking")
 
     # --- single print (education pages) -------------------------------------------------------
     def paid(self, order):
@@ -382,7 +402,7 @@ class BillingApiTests(unittest.TestCase):
         self.assertEqual(edu["print_offer"], {"price": 4900, "currency": "INR", "hours": 24, "name": "Print one page"})
         self.assertIn("var CAN_PRINT = false;", self.page(edu, "cbt"))
         for bad in ({"plan": "print"}, {"plan": "print", "item": "no-such-page"}, {"plan": "print", "item": "../x"},
-                    {"plan": "sub_30", "item": "cbt"}):
+                    {"plan": "scale", "period": "month", "item": "cbt"}):
             self.assertIn(self.client.post("/v1/billing/orders", json=bad).status_code, (409, 422), bad)
         o = self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt", "amount": 1}).json()
         self.assertEqual((o["order"]["amount"], o["order"]["item"]), (4900, "cbt"), "the price is the server's")
@@ -400,9 +420,9 @@ class BillingApiTests(unittest.TestCase):
                   self.cid)
         self.assertFalse({p["slug"]: p for p in self.education()["pages"]}["cbt"]["can_print"], "ends after 24 hours")
 
-    def test_a_subscription_prints_every_page_and_is_not_sold_a_single_print(self):
+    def test_a_plan_with_pdf_prints_every_page_and_is_not_sold_a_single_print(self):
         self.configure({"enabled": True})
-        self.paid(self.buy("sub_30"))
+        self.paid(self.buy("practice"))
         edu = self.education()
         self.assertTrue(edu["can_print"])
         self.assertIsNone(edu["print_offer"])
@@ -422,9 +442,71 @@ class BillingApiTests(unittest.TestCase):
         self.assertIsNone(self.education()["print_offer"])
         self.assertEqual(self.client.post("/v1/billing/orders", json={"plan": "print", "item": "cbt"}).status_code, 409)
 
-    # --- own Anthropic key -----------------------------------------------------------------------
-    def byok_on(self, **plan):
-        self.configure({"enabled": True, "plans": {"byok": {"enabled": True, **plan}}})
+    # --- the library and what each plan unlocks -------------------------------------------------
+    def test_learn_reads_the_library_but_after_the_free_months_it_locks(self):
+        self.configure({"enabled": True})
+        edu = self.education()
+        self.assertTrue(edu["library"], "the free months start at the first visit")
+        self.assertFalse(edu["can_print"], "Learn has no PDF downloads")
+        self.assertIn("var CAN_PRINT = false;", self.page(edu, "cbt"))
+        _sql_exec("update entitlements set expires_at = now() - interval '1 minute' where clinician_id=%s", self.cid)
+        edu = self.education()
+        self.assertFalse(edu["library"])
+        self.assertTrue(all(p["locked"] and p["url"] is None for p in edu["pages"]))
+        self.assertIsNone(edu["print_offer"], "no single print without the library")
+        token = main.EDUCATION.signer.token(self.cid)
+        r = self.client.get(f"/learn/cbt?t={token}")
+        self.assertEqual(r.status_code, 402)
+        self.assertIn("Choose a plan", r.text)
+        self.paid(self.buy("learn", period="year"))
+        self.assertTrue(self.education()["library"])
+
+    def test_billing_me_shows_the_plan_and_what_it_unlocks(self):
+        self.configure({"enabled": True})
+        me = self.client.get("/v1/billing/me").json()
+        self.assertEqual((me["plan"]["id"], me["plan"]["trial"]), ("learn", True))
+        self.assertEqual(me["features"], ["library"])
+        self.paid(self.buy("scale"))
+        me = self.client.get("/v1/billing/me").json()
+        self.assertEqual((me["plan"]["id"], me["plan"]["period"], me["plan"]["trial"]), ("scale", "month", False))
+        self.assertEqual(me["scale"], {**me["scale"], "guided_left": 10, "per_month": 10, "extra_price": 12900})
+        self.assertIn("guided_included", me["features"])
+        self.assertEqual(self.client.get("/v1/me").json()["features"]["unlocked"], me["features"])
+
+    def test_calendar_and_booking_page_need_practice_or_above(self):
+        self.configure({"enabled": True})
+        r = self.client.get("/v1/calendar")
+        self.assertEqual((r.status_code, r.json()["detail"]["feature"]), (402, "appointments"))
+        self.paid(self.buy("practice"))
+        self.assertNotEqual(self.client.get("/v1/calendar").status_code, 402)
+
+    def test_scale_reports_then_extras_at_scales_price(self):
+        self.configure({"enabled": True})
+        r = self.client.post("/v1/billing/orders", json={"plan": "scale_extra"})
+        self.assertEqual(r.status_code, 409, "extras are for Scale only")
+        self.paid(self.buy("scale"))
+        _sql_exec("update entitlements set credits_used = 10 where clinician_id=%s and period='allowance'", self.cid)
+        r = self.guided_report()
+        self.assertEqual(r.status_code, 402)
+        self.assertEqual((r.json()["detail"]["plan"], r.json()["detail"]["price"]), ("scale_extra", 12900))
+        o = self.buy("scale_extra")
+        self.assertEqual(o["order"]["amount"], 12900)
+        self.paid(o)
+        self.assertEqual(self.guided_report().json()["reply"]["status"], "delivered")
+        self.assertEqual(self.balance()["guided"], 0)
+
+    def test_a_quick_consult_is_always_bought_per_report(self):
+        self.configure({"enabled": True})
+        self.paid(self.buy("scale"))
+        r = self.consult()
+        self.assertEqual(r.status_code, 402, "Scale's reports are AI-Guided only")
+        self.assertEqual((r.json()["detail"]["plan"], r.json()["detail"]["price"]), ("per_report", 9900))
+
+    # --- own Anthropic key (BYOK Scale) ------------------------------------------------------------
+    def byok_on(self, plan=True):
+        self.configure({"enabled": True})
+        if plan:
+            billing_db.admin_grant(self.cid, "byok_scale", self.admin_id, "test", main.BILLING.config()[1], None, 30)
 
     def save_key(self, outcome=None):
         orig = byok.check_key
@@ -459,15 +541,14 @@ class BillingApiTests(unittest.TestCase):
     def test_own_key_report_uses_only_that_key_and_spends_no_credit(self):
         self.byok_on()
         self.save_key()
-        main.PIPELINE = Pipeline(main.SKILL, PlatformMustNotRun(), main.ICD)
         self.own.append(OwnKeyModel(OWN_KEY))
-        r = self.consult(use_own_key=True)
-        self.assertEqual(r.json()["status"], "delivered", r.text)
-        self.assertEqual(self.own[-1].calls, 1)
-        self.assertEqual([x["kind"] for x in billing_db.ledger(self.cid)], [], "BYOK spends no credit by default")
+        r = self.guided_report(use_own_key=True)
+        self.assertEqual(r.json()["reply"]["status"], "delivered", r.text)
+        self.assertGreaterEqual(self.own[-1].calls, 1)
+        self.assertEqual([x["kind"] for x in billing_db.ledger(self.cid)], [], "BYOK Scale spends no credit")
         with psycopg.connect(URL) as c:
             used = c.execute("select report_type, outcome from byok_usage where clinician_id=%s", (self.cid,)).fetchall()
-        self.assertEqual(used, [("direct", "ok")], "admins see usage counts, never the key")
+        self.assertEqual(used, [("guided", "ok")], "admins see usage counts, never the key")
         self.assertIn("ok", {u["outcome"] for u in billing_db.byok_stats(1)["usage"]})
 
     def test_own_key_failure_never_falls_back_to_the_platform_key(self):
@@ -477,26 +558,25 @@ class BillingApiTests(unittest.TestCase):
         for exc, code, retry in ((anthropic_error(anthropic.RateLimitError, 429), "rate_limited", True),
                                  (anthropic_error(anthropic.AuthenticationError, 401), "invalid_key", False)):
             self.own.append(OwnKeyModel(OWN_KEY, fail=exc))
-            r = self.consult(use_own_key=True)
+            r = self.guided_report(use_own_key=True)
             self.assertEqual(r.status_code, 424, r.text)
             self.assertEqual((r.json()["detail"]["code"], r.json()["detail"]["retry"]), (code, retry))
             self.assertNotIn(OWN_KEY, r.text)
         self.assertEqual(billing_db.byok_get(self.cid)["status"], "invalid")
-        r = self.consult(use_own_key=True)
+        r = self.guided_report(use_own_key=True)
         self.assertEqual(r.json()["detail"]["code"], "invalid_key", "a key known to be bad is not tried again")
 
-    def test_own_key_with_platform_fee_and_credits(self):
-        self.byok_on(fee=9900, consumes_credits=True)
+    def test_own_key_needs_byok_scale_and_is_for_guided_reports_only(self):
+        self.byok_on(plan=False)
         self.save_key()
-        r = self.consult(use_own_key=True)
-        self.assertEqual((r.status_code, r.json()["detail"]["plan"]), (402, "byok"))
-        o = self.buy("byok")
-        self.verify(o, self.rzp.pay(o["checkout"]["order_id"]))
-        self.assertEqual(self.consult(use_own_key=True).status_code, 402, "this setup also needs a credit")
-        billing_db.admin_adjust(self.cid, 1, self.admin_id, "test")
+        billing_db.admin_adjust(self.cid, 1, self.admin_id, "so the consultation can start")
+        r = self.guided_report(use_own_key=True)
+        self.assertEqual((r.status_code, r.json()["detail"]["feature"]), (402, "guided_own_key"))
+        self.paid(self.buy("byok_scale"))
         self.own.append(OwnKeyModel(OWN_KEY))
-        self.assertEqual(self.consult(use_own_key=True).json()["status"], "delivered")
-        self.assertEqual(self.balance()["any"], 0)
+        self.assertEqual(self.guided_report(use_own_key=True).json()["reply"]["status"], "delivered")
+        self.assertEqual(self.balance()["any"], 1, "no credit spent")
+        self.assertEqual(self.consult(use_own_key=True).status_code, 409, "a quick consult is bought per report")
 
     def test_encryption_key_rotation_keeps_saved_keys_working(self):
         old = base64.b64encode(os.urandom(32)).decode()
@@ -505,14 +585,14 @@ class BillingApiTests(unittest.TestCase):
         self.save_key()
         main.BILLING.vault = byok.Vault.from_secrets(base64.b64encode(os.urandom(32)).decode(), old, 2)
         self.own.append(OwnKeyModel(OWN_KEY))
-        self.assertEqual(self.consult(use_own_key=True).json()["status"], "delivered")
+        self.assertEqual(self.guided_report(use_own_key=True).json()["reply"]["status"], "delivered")
         self.assertEqual(billing_db.byok_get(self.cid)["key_version"], 2, "sealed again under the new key")
         main.BILLING.vault = byok.Vault.from_secrets(base64.b64encode(os.urandom(32)).decode(), "", 3)
-        r = self.consult(use_own_key=True)                              # the encryption key was lost
+        r = self.guided_report(use_own_key=True)                        # the encryption key was lost
         self.assertEqual((r.status_code, r.json()["detail"]["code"]), (424, "not_configured"))
 
     def test_own_key_not_offered_when_switched_off(self):
-        self.configure({"enabled": True})
+        self.configure({"enabled": True, "plans": {"byok_scale": {"enabled": False}}})
         self.assertEqual(self.save_key().status_code, 409)
         self.assertEqual(self.consult(use_own_key=True).status_code, 409)
 
@@ -524,31 +604,31 @@ class BillingApiTests(unittest.TestCase):
 
     def test_pricing_change_is_validated_confirmed_and_audited(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_30")
+        o = self.buy("scale")
         self.verify(o, self.rzp.pay(o["checkout"]["order_id"]))
         self.who = self.admin_id
         cfg = self.client.get("/v1/admin/pricing").json()["config"]
         bad = copy.deepcopy(cfg)
-        bad["plans"]["sub_30"]["price"] = -5
+        bad["plans"]["scale"]["price_year"] = -5
         r = self.client.put("/v1/admin/pricing", json={"config": bad})
         self.assertEqual(r.status_code, 422)
         off = copy.deepcopy(cfg)
-        off["plans"]["sub_30"]["enabled"] = False
+        off["plans"]["scale"]["enabled"] = False
         r = self.client.put("/v1/admin/pricing", json={"config": off})
         self.assertEqual(r.status_code, 409)
-        self.assertGreaterEqual(r.json()["detail"]["affected"]["sub_30"], 1)
+        self.assertGreaterEqual(r.json()["detail"]["affected"]["scale"], 1)
         r = self.client.put("/v1/admin/pricing", json={"config": off, "confirm_disable": True})
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["changes"], {"plans.sub_30.enabled": [True, False]})
+        self.assertEqual(r.json()["changes"], {"plans.scale.enabled": [True, False]})
         with psycopg.connect(URL) as c:
             row = c.execute("select actor_id, detail from admin_audit where action='pricing_config' "
                             "order by created_at desc limit 1").fetchone()
-        self.assertEqual((str(row[0]), row[1]["changes"]), (self.admin_id, {"plans.sub_30.enabled": [True, False]}))
+        self.assertEqual((str(row[0]), row[1]["changes"]), (self.admin_id, {"plans.scale.enabled": [True, False]}))
         hist = self.client.get("/v1/admin/pricing/history").json()["history"]
-        self.assertEqual(hist[0]["detail"]["changes"], {"plans.sub_30.enabled": [True, False]})
+        self.assertEqual(hist[0]["detail"]["changes"], {"plans.scale.enabled": [True, False]})
         self.assertTrue(hist[0]["actor_email"].endswith("@test"))
         self.who = self.cid
-        self.assertEqual(self.balance()["any"], 30, "people already on the plan keep it")
+        self.assertEqual(self.balance()["guided"], 10, "people already on the plan keep it")
 
     def test_paid_plans_need_razorpay_keys(self):
         main.BILLING.cfg.razorpay_configured = False
@@ -558,20 +638,26 @@ class BillingApiTests(unittest.TestCase):
 
     def test_admin_adjust_needs_a_reason_and_refund_goes_through_razorpay(self):
         self.configure({"enabled": True})
-        o = self.buy("sub_30")
+        o = self.buy("scale")
         self.verify(o, self.rzp.pay(o["checkout"]["order_id"]))
         self.who = self.admin_id
         r = self.client.post(f"/v1/admin/billing/users/{self.cid}/adjust", json={"delta": 3, "reason": ""})
         self.assertEqual(r.status_code, 422)
         r = self.client.post(f"/v1/admin/billing/users/{self.cid}/adjust", json={"delta": 3, "reason": "goodwill"})
-        self.assertEqual(r.json()["balance"]["any"], 33)
+        self.assertEqual(r.json()["balance"]["guided"], 13)
         r = self.client.post(f"/v1/admin/payments/{o['order']['id']}/refund", json={"reason": "asked to cancel"})
         self.assertEqual(r.status_code, 200, r.text)
         self.assertEqual(r.json()["order"]["refund_status"], "refunded")
         self.assertEqual(len(self.rzp.refunds), 1)
         again = self.client.post(f"/v1/admin/payments/{o['order']['id']}/refund", json={"reason": "again"})
         self.assertEqual(again.status_code, 422, "nothing left to refund")
-        self.assertEqual(billing_db.balance(self.cid)["any"], 3, "the refunded plan's credits are withdrawn")
+        self.assertEqual(billing_db.balance(self.cid)["guided"], 3, "the refunded plan's reports are withdrawn")
+        r = self.client.post(f"/v1/admin/billing/users/{self.cid}/grant",
+                             json={"plan": "scale", "days": 90, "reason": "Play reviewer"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(billing_db.balance(self.cid)["guided"], 13, "a granted Scale brings this month's reports")
+        self.assertEqual(self.client.post(f"/v1/admin/billing/users/{self.cid}/grant",
+                                          json={"plan": "sub_30", "reason": "old plan"}).status_code, 422)
 
 
 if __name__ == "__main__":

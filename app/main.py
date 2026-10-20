@@ -355,9 +355,13 @@ def healthz(request: Request, format: str | None = Query(None, pattern="^(json|h
 def me(user: dict = Depends(current_user)):
     features = {"consultation": CFG.consultation_enabled, "billing": BILLING.enabled()}
     if CFG.dev_mode and user["id"] == "dev-clinician":
-        return {**_DEV_CLINICIAN, "features": features}
+        return {**_DEV_CLINICIAN, "features": {**features, "unlocked": sorted(BILLING.features(user["id"]))}}
     row = db.get_clinician(user["id"])
-    return {**row, "features": features} if row else {"id": user["id"], "verification_status": "none"}
+    if not row:
+        return {"id": user["id"], "verification_status": "none"}
+    # What the clinician's plan unlocks (library, pdf, booking, appointments, guided_own_key, guided_included).
+    unlocked = sorted(BILLING.features(user["id"])) if row["verification_status"] == "verified" else []
+    return {**row, "features": {**features, "unlocked": unlocked}}
 
 
 @app.post("/v1/profile")
@@ -587,6 +591,7 @@ def consultation_start(body: ConsultationStartIn, c: dict = Depends(verified_cli
         raise HTTPException(422, "de-identification attestation required")
     if not CFG.dev_mode and db.turns_today(c["id"]) + db.consultations_today(c["id"]) >= CFG.daily_turn_limit:
         raise HTTPException(429, "daily limit reached")
+    BILLING.guided_access(c)          # a plan with AI-Guided Case Taking, or a guided report bought on its own
     try:
         state = CONSULT.start(body.text, snapshot=body.snapshot)
     except DeidRejected as e:
@@ -741,7 +746,7 @@ def _booking_store():
 
 
 BOOKING = booking_api.BookingService(CFG, None if CFG.dev_mode else _booking_store(), lambda: not CFG.dev_mode)
-booking_api.install(app, BOOKING, verified_clinician)
+booking_api.install(app, BOOKING, verified_clinician, BILLING.features)
 
 
 # --- Education (free teaching pages for every signed-in user; app/education.py) ---
@@ -757,12 +762,16 @@ def _education_viewer(user_id: str) -> dict | None:
 # Links are signed with a key derived from a server secret, so every Cloud Run instance accepts them.
 _EDU_SECRET = (CFG.byok_encryption_key or CFG.database_url or CFG.anthropic_api_key or "dev-only").encode()
 def _print_access(user_id: str) -> education.PrintAccess:
-    """Who may print education pages. While pricing is off: everyone (nothing is charged). Otherwise a
-    running subscription unlocks every page, and a single print unlocks its page until it ends."""
+    """Who may read and print education pages. While pricing is off: everyone (nothing is charged).
+    Otherwise every plan has the library; a plan with PDF downloads prints every page, and a single
+    print unlocks its page until it ends."""
     _, cfg = BILLING.config()
     if not cfg["enabled"]:
         return education.PrintAccess(everything=True)
-    if BILLING.store.has_subscription(user_id):
+    features = BILLING.features(user_id)
+    if "library" not in features:
+        return education.PrintAccess(library=False)
+    if "pdf" in features:
         return education.PrintAccess(everything=True)
     p = cfg["plans"]["print"]
     offer = ({"price": p["price"], "currency": cfg["currency"], "hours": p["hours"], "name": p["name"]}

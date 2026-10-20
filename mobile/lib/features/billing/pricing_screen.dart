@@ -17,7 +17,7 @@ String _day(DateTime? d) {
   return '${d.day} ${m[d.month - 1]} ${d.year}';
 }
 
-/// Plans & credits. Every plan, price and feature shown here comes from the server (the admin's
+/// Plans & credits. Every plan, price and table cell shown here comes from the server (the admin's
 /// pricing); nothing is hardcoded. A purchase counts only once the server has confirmed it.
 class PricingScreen extends ConsumerStatefulWidget {
   const PricingScreen({super.key});
@@ -27,16 +27,18 @@ class PricingScreen extends ConsumerStatefulWidget {
 }
 
 class _PricingScreenState extends ConsumerState<PricingScreen> {
-  String? _busy; // which button is working: "<plan>:<type>"
+  String? _busy; // which button is working: "<plan>:<type or period>"
+  String _period = 'year';
 
-  Future<void> _buy(PlanOffer plan, {String? reportType}) async {
+  Future<void> _buy(String plan, {String? reportType, String? period}) async {
     if (_busy != null) return;
-    setState(() => _busy = '${plan.id}:${reportType ?? ''}');
+    setState(() => _busy = '$plan:${reportType ?? period ?? ''}');
     final flow = PurchaseFlow(ref.read(billingRepositoryProvider), ref.read(paymentGatewayProvider));
-    final outcome = await flow.buy(plan: plan.id, reportType: reportType);
+    final outcome = await flow.buy(plan: plan, reportType: reportType, period: period);
     if (!mounted) return;
     setState(() => _busy = null);
     ref.invalidate(billingStatusProvider);
+    ref.invalidate(meProvider);
     final messenger = ScaffoldMessenger.of(context);
     switch (outcome) {
       case PurchaseDone():
@@ -46,7 +48,7 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
       case PurchasePending():
         await _tell(
           'Waiting for the bank',
-          'Your payment is still being confirmed. Your credits appear here as soon as Razorpay confirms it. '
+          'Your payment is still being confirmed. Your plan appears here as soon as Razorpay confirms it. '
               "You won't be charged twice.",
         );
       case PurchaseFailed(:final message):
@@ -85,12 +87,15 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
   }
 
   Widget _body(BillingPlans p, BillingStatus? s) {
+    final tiers = p.tiers;
+    final periods = {for (final t in tiers) ...t.periods};
+    final period = periods.contains(_period) || periods.isEmpty ? _period : periods.first;
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
         if (!p.enabled) ...[
           const PageHeading(
-            'Reports are free right now',
+            'Everything is free right now',
             message: 'There is nothing to buy. Plans appear here if that changes.',
           ),
         ] else ...[
@@ -107,22 +112,54 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
               text: 'Payments are not available right now. Please try again later.',
             ),
           ],
-          const SizedBox(height: 22),
-          const Text('Plans', style: AppText.sectionTitle),
-          const SizedBox(height: 10),
-          for (final plan in p.plans) ...[
-            _PlanCard(
-              plan: plan,
+          if (tiers.isNotEmpty) ...[
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                const Expanded(child: Text('Plans', style: AppText.sectionTitle)),
+                if (periods.length > 1)
+                  SegmentedButton<String>(
+                    key: const ValueKey('period'),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: 'year', label: Text('Yearly')),
+                      ButtonSegment(value: 'month', label: Text('Monthly')),
+                    ],
+                    selected: {period},
+                    onSelectionChanged: (v) => setState(() => _period = v.first),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text('Prices in ₹. Paid in advance; renew any time.', style: AppText.caption),
+            const SizedBox(height: 12),
+            for (final plan in tiers) ...[
+              TierCard(
+                plan: plan,
+                period: plan.periods.contains(period) ? period : plan.periods.firstOrNull ?? period,
+                rows: p.rows,
+                currency: p.currency,
+                status: s,
+                canPay: p.paymentsAvailable,
+                busy: _busy,
+                onBuy: (per) => _buy(plan.id, period: per),
+                onExtra: () => _buy('scale_extra'),
+              ),
+              const SizedBox(height: 12),
+            ],
+          ],
+          if (p.perReport case final per?) ...[
+            const SizedBox(height: 10),
+            _PerReportCard(
+              plan: per,
               currency: p.currency,
-              status: s,
               canPay: p.paymentsAvailable,
               busy: _busy,
-              onBuy: (type) => _buy(plan, reportType: type),
+              onBuy: (type) => _buy(per.id, reportType: type),
             ),
-            const SizedBox(height: 12),
           ],
         ],
-        const SizedBox(height: 4),
+        const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: () => context.push('/pricing/history'),
           icon: const Icon(Icons.receipt_long_outlined),
@@ -155,7 +192,15 @@ class _LoadError extends StatelessWidget {
   );
 }
 
-/// The clinician's credits and current plan.
+String _periodWord(String? p) => switch (p) {
+  'year' => 'yearly',
+  'month' => 'monthly',
+  'trial' => 'free months',
+  'admin' => 'given by the team',
+  _ => '',
+};
+
+/// The clinician's plan now, this month's Scale reports, and credits bought on their own.
 class CreditsCard extends StatelessWidget {
   const CreditsCard({super.key, required this.status});
 
@@ -163,31 +208,47 @@ class CreditsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sub = status.activeSubscription;
+    final plan = status.plan;
     final key = status.ownKey;
+    final scale = status.scale;
     return AppCard(
       color: AppColors.lavender,
       borderColor: AppColors.lavender,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Your credits', style: AppText.label),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _Count(label: 'Guided reports', value: status.guidedCredits),
-              ),
-              Expanded(
-                child: _Count(label: 'Direct reports', value: status.directCredits),
-              ),
-            ],
+          const Text('Your plan', style: AppText.label),
+          const SizedBox(height: 6),
+          Text(
+            plan == null ? 'No plan yet' : plan.name,
+            style: AppText.screenTitle.copyWith(fontSize: 22, color: AppColors.deepPurple),
           ),
-          if (sub != null) ...[
-            const SizedBox(height: 12),
+          if (plan != null)
             Text(
-              '${sub.remaining} of ${sub.creditsTotal} plan reports left · ends ${_day(sub.expiresAt)}',
+              plan.trial
+                  ? 'Free until ${_day(plan.expiresAt)}'
+                  : '${_periodWord(plan.period)} · until ${_day(plan.expiresAt)}'.trim(),
               style: AppText.smallMuted,
+            ),
+          if (scale != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              '${scale.guidedLeft} of ${scale.perMonth} AI-Guided reports left this month'
+              '${scale.resetsAt == null ? '' : ' · new ones on ${_day(scale.resetsAt)}'}',
+              style: AppText.small,
+            ),
+          ],
+          if (status.guidedCredits - (scale?.guidedLeft ?? 0) > 0 || status.directCredits > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _Count(label: 'Guided reports', value: status.guidedCredits - (scale?.guidedLeft ?? 0)),
+                ),
+                Expanded(
+                  child: _Count(label: 'Quick reports', value: status.directCredits),
+                ),
+              ],
             ),
           ],
           if (key.connected) ...[
@@ -225,51 +286,46 @@ class _Count extends StatelessWidget {
   );
 }
 
-class _PlanCard extends StatelessWidget {
-  const _PlanCard({
+/// One plan: badge, price for the chosen period (old price struck through, the other period
+/// below), what it includes row by row, and its button.
+class TierCard extends StatelessWidget {
+  const TierCard({
+    super.key,
     required this.plan,
+    required this.period,
+    required this.rows,
     required this.currency,
     required this.status,
     required this.canPay,
     required this.busy,
     required this.onBuy,
+    required this.onExtra,
   });
 
   final PlanOffer plan;
+  final String period;
+  final List<PlanRow> rows;
   final String currency;
   final BillingStatus? status;
   final bool canPay;
   final String? busy;
-  final void Function(String? reportType) onBuy;
-
-  Widget _button(String label, String? type, {bool primary = true}) {
-    final working = busy == '${plan.id}:${type ?? ''}';
-    final child = working
-        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))
-        : Text(label);
-    final onPressed = busy == null && canPay ? () => onBuy(type) : null;
-    return primary
-        ? FilledButton(onPressed: onPressed, child: child)
-        : OutlinedButton(onPressed: onPressed, child: child);
-  }
+  final void Function(String period) onBuy;
+  final VoidCallback onExtra;
 
   @override
   Widget build(BuildContext context) {
-    final current = status?.activeSubscription?.plan == plan.id;
-    final (headline, detail) = switch (plan.kind) {
-      'per_report' => (
-        'From ${formatMoney(plan.prices.values.fold<int>(1 << 30, (a, b) => a < b ? a : b), currency)}',
-        'per report',
-      ),
-      'subscription' => (formatMoney(plan.price ?? 0, currency), '${plan.reports} reports · ${plan.durationDays} days'),
-      _ => (
-        (plan.fee ?? 0) == 0 ? 'No platform fee' : formatMoney(plan.fee!, currency),
-        (plan.fee ?? 0) == 0
-            ? 'Anthropic bills you directly'
-            : 'for ${plan.feeDays} days · Anthropic bills you directly',
-      ),
-    };
+    final current = status?.plan?.id == plan.id;
+    final trial = current && status!.plan!.trial;
+    final other = period == 'year' ? 'month' : 'year';
+    final price = plan.price(period), was = plan.was(period);
+    final working = busy == '${plan.id}:$period';
+    final freeFirst = plan.trialDays > 0;
+    final months = (plan.trialDays / 30).round();
+    final freeWords = months >= 1 ? '$months month${months == 1 ? '' : 's'}' : '${plan.trialDays} days';
+    final highlight = plan.id == 'scale';
     return AppCard(
+      key: ValueKey('tier-${plan.id}'),
+      color: highlight ? AppColors.lavender : AppColors.surface,
       borderColor: current ? AppColors.royalPurple : AppColors.line,
       borderWidth: current ? 1.5 : 1,
       child: Column(
@@ -277,62 +333,180 @@ class _PlanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(plan.name, style: AppText.sectionTitle)),
-              if (current) const StatusPill('Your plan', icon: Icons.check_rounded),
+              if (plan.badge.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  decoration: BoxDecoration(color: AppColors.berry, borderRadius: BorderRadius.circular(999)),
+                  child: Text(
+                    plan.badge,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              const Spacer(),
+              if (current) StatusPill(trial ? 'Free now' : 'Your plan', icon: Icons.check_rounded),
             ],
           ),
-          const SizedBox(height: 6),
-          Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: headline,
-                  style: AppText.screenTitle.copyWith(fontSize: 24, color: AppColors.deepPurple),
-                ),
-                TextSpan(text: '  $detail', style: AppText.smallMuted),
-              ],
+          const SizedBox(height: 8),
+          Text(plan.name, style: AppText.sectionTitle.copyWith(color: AppColors.deepPurple)),
+          const SizedBox(height: 4),
+          if (freeFirst) ...[
+            Text('Free', style: AppText.screenTitle.copyWith(fontSize: 28, color: AppColors.deepPurple)),
+            Text(
+              'for $freeWords, then ${formatMoney(plan.priceMonth, currency)}/month or '
+              '${formatMoney(plan.priceYear, currency)}/year',
+              style: AppText.smallMuted,
             ),
-          ),
-          if (plan.description.isNotEmpty) ...[const SizedBox(height: 6), Text(plan.description, style: AppText.small)],
-          for (final f in plan.features)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          ] else ...[
+            Text.rich(
+              TextSpan(
                 children: [
-                  const Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.doneInk),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(f, style: AppText.small)),
+                  TextSpan(
+                    text: formatMoney(price, currency),
+                    style: AppText.screenTitle.copyWith(fontSize: 28, color: AppColors.deepPurple),
+                  ),
+                  TextSpan(text: '/$period', style: AppText.smallMuted),
                 ],
               ),
             ),
+            Text.rich(
+              TextSpan(
+                style: AppText.smallMuted,
+                children: [
+                  if (was > 0)
+                    TextSpan(
+                      text: formatMoney(was, currency),
+                      style: const TextStyle(decoration: TextDecoration.lineThrough),
+                    ),
+                  if (was > 0 && plan.periods.contains(other)) const TextSpan(text: ' · '),
+                  if (plan.periods.contains(other))
+                    TextSpan(text: 'or ${formatMoney(plan.price(other), currency)}/$other'),
+                ],
+              ),
+            ),
+          ],
+          if (plan.description.isNotEmpty) ...[const SizedBox(height: 6), Text(plan.description, style: AppText.small)],
+          const SizedBox(height: 10),
+          for (final r in rows) _Row(label: r.label, value: plan.table[r.key]),
+          for (final f in plan.features)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text('• $f', style: AppText.small),
+            ),
           const SizedBox(height: 14),
-          if (plan.kind == 'per_report')
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final t in const ['guided', 'direct'])
-                  if (plan.prices[t] != null)
-                    _button('${reportTypeLabel(t)} · ${formatMoney(plan.prices[t]!, currency)}', t),
-              ],
-            )
-          else if (plan.kind == 'subscription')
-            _button(
-              current
-                  ? 'Renew for ${formatMoney(plan.price ?? 0, currency)}'
-                  : 'Buy for ${formatMoney(plan.price ?? 0, currency)}',
-              null,
-            )
-          else
+          FilledButton(
+            key: ValueKey('choose-${plan.id}'),
+            onPressed: busy == null && canPay ? () => onBuy(period) : null,
+            child: working
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))
+                : Text(
+                    current && !trial
+                        ? 'Renew ${plan.name}'
+                        : trial
+                        ? 'Keep ${plan.name} after the free months'
+                        : freeFirst
+                        ? 'Choose ${plan.name} · ${formatMoney(price, currency)}/$period'
+                        : 'Choose ${plan.name}',
+                  ),
+          ),
+          if (plan.id == 'scale' && current) ...[
+            const SizedBox(height: 8),
+            OutlinedButton(
+              key: const ValueKey('buy-extra'),
+              onPressed: busy == null && canPay ? onExtra : null,
+              child: Text('Buy an extra AI-Guided report · ${formatMoney(plan.extraPrice, currency)}'),
+            ),
+          ],
+          if (plan.id == 'byok_scale' && (status?.ownKey.included ?? false)) ...[
+            const SizedBox(height: 8),
             OutlinedButton(
               onPressed: () => GoRouter.of(context).push('/pricing/own-key'),
               child: Text(status?.ownKey.connected == true ? 'Manage my key' : 'Set up my key'),
             ),
+          ],
         ],
       ),
     );
   }
+}
+
+class _Row extends StatelessWidget {
+  const _Row({required this.label, required this.value});
+
+  final String label;
+  final String? value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          value == null ? Icons.remove_rounded : Icons.check_circle_rounded,
+          size: 18,
+          color: value == null ? AppColors.muted : AppColors.doneInk,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: label, style: AppText.small),
+                if (value != null && value != 'Included')
+                  TextSpan(
+                    text: ' · $value',
+                    style: AppText.small.copyWith(color: AppColors.doneInk, fontWeight: FontWeight.w700),
+                  ),
+                if (value == null) const TextSpan(text: ' · Not included', style: AppText.smallMuted),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _PerReportCard extends StatelessWidget {
+  const _PerReportCard({
+    required this.plan,
+    required this.currency,
+    required this.canPay,
+    required this.busy,
+    required this.onBuy,
+  });
+
+  final PlanOffer plan;
+  final String currency;
+  final bool canPay;
+  final String? busy;
+  final void Function(String reportType) onBuy;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(plan.name, style: AppText.sectionTitle),
+        if (plan.description.isNotEmpty) ...[const SizedBox(height: 6), Text(plan.description, style: AppText.small)],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final (t, label) in const [('guided', 'AI-Guided report'), ('direct', 'Quick consult')])
+              if (plan.prices[t] != null)
+                OutlinedButton(
+                  onPressed: busy == null && canPay ? () => onBuy(t) : null,
+                  child: busy == '${plan.id}:$t'
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))
+                      : Text('$label · ${formatMoney(plan.prices[t]!, currency)}'),
+                ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 /// A one-line summary on the consult screen: credits left, or that the clinician's own key is in use.
@@ -345,13 +519,13 @@ class CreditsStrip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(billingStatusProvider).value;
     if (s == null || !s.enabled) return const SizedBox.shrink();
-    final ownKey = ref.watch(useOwnKeyProvider) && s.ownKey.usable;
+    final ownKey = reportType == 'guided' && ref.watch(useOwnKeyProvider) && s.ownKey.usable;
     final left = reportType == 'guided' ? s.guidedCredits : s.directCredits;
     final text = ownKey
         ? 'Writing with your own Anthropic key (…${s.ownKey.last4})'
         : left == 0
-        ? 'No ${reportType == 'guided' ? 'guided' : 'direct'} report credits left'
-        : '$left ${reportType == 'guided' ? 'guided' : 'direct'} report credit${left == 1 ? '' : 's'} left';
+        ? 'No ${reportType == 'guided' ? 'AI-Guided' : 'quick consult'} report credits left'
+        : '$left ${reportType == 'guided' ? 'AI-Guided' : 'quick consult'} report credit${left == 1 ? '' : 's'} left';
     return Semantics(
       button: true,
       label: '$text. Open plans and credits.',
@@ -409,14 +583,24 @@ class NoCreditScreen extends ConsumerWidget {
           ),
         ],
       ),
-      PaymentRequired(:final message, :final plan) => StatusPage(
-        icon: Icons.confirmation_number_outlined,
+      PlanRequired(:final message) => StatusPage(
+        icon: Icons.lock_outline_rounded,
         tone: Tone.brand,
-        title: plan == 'byok' ? 'Access fee needed' : 'No report credits left',
+        title: 'Not in your plan',
         message: message,
         actions: [
           FilledButton(onPressed: () => context.pushReplacement('/pricing'), child: const Text('See plans')),
-          if (plan != 'byok' && ownKey?.usable == true)
+          TextButton(onPressed: () => context.go('/consult'), child: const Text('Back to my case')),
+        ],
+      ),
+      PaymentRequired(:final message, :final reportType) => StatusPage(
+        icon: Icons.confirmation_number_outlined,
+        tone: Tone.brand,
+        title: 'No report credits left',
+        message: message,
+        actions: [
+          FilledButton(onPressed: () => context.pushReplacement('/pricing'), child: const Text('See plans')),
+          if (reportType == 'guided' && ownKey?.usable == true)
             OutlinedButton(
               onPressed: () {
                 ref.read(useOwnKeyProvider.notifier).set(true);

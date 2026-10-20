@@ -74,7 +74,7 @@ class ConsultController extends Notifier<ConsultState> {
               redactionCounts: redactionCounts,
               conversationId: _conversationId,
               requestId: requestId,
-              useOwnKey: ref.read(useOwnKeyProvider),
+              useOwnKey: false, // the own key (BYOK Scale) is for AI-Guided reports; a quick consult is per report
             ),
           );
       ref.invalidate(billingStatusProvider); // a credit may have been used

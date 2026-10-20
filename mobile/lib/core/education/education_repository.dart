@@ -76,20 +76,33 @@ class PrintOffer {
 
 /// The cards, and what this clinician may print.
 class EducationCatalog {
-  const EducationCatalog({required this.pages, this.canPrint = false, this.printOffer});
+  const EducationCatalog({
+    required this.pages,
+    this.canPrint = false,
+    this.printOffer,
+    this.library = true,
+    this.libraryMessage,
+  });
 
   factory EducationCatalog.fromJson(Map<String, dynamic> j) => EducationCatalog(
     pages: [for (final p in (j['pages'] as List? ?? const [])) EducationPage.fromJson(p as Map<String, dynamic>)],
     canPrint: j['can_print'] == true,
     printOffer: PrintOffer.fromJson(j['print_offer']),
+    library: j['library'] != false,
+    libraryMessage: j['library_message'] as String?,
   );
 
   final List<EducationPage> pages;
 
-  /// Every page prints: pricing is off, or a running subscription. The server decides; this explains it.
+  /// Every page prints: pricing is off, or a plan with PDF downloads. The server decides; this explains it.
   final bool canPrint;
 
-  /// A single print for sale (null: printing comes only with a subscription right now).
+  /// The clinician's plan includes the library. False: the cards show, but the pages are locked
+  /// (no links are sent) until they choose a plan.
+  final bool library;
+  final String? libraryMessage;
+
+  /// A single print for sale (null: printing comes only with a plan right now).
   final PrintOffer? printOffer;
 }
 
