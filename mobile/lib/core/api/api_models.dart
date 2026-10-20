@@ -15,6 +15,7 @@ class Me {
     this.gender,
     this.age,
     this.registrationNumber,
+    this.unlocked,
   });
 
   factory Me.fromJson(Map<String, dynamic> json) => Me(
@@ -29,6 +30,9 @@ class Me {
     gender: json['gender'] as String?,
     age: (json['age_at_registration'] as num?)?.toInt(),
     registrationNumber: json['registration_number'] as String?,
+    unlocked: (json['features'] as Map?)?['unlocked'] is List
+        ? {for (final f in (json['features'] as Map)['unlocked'] as List) '$f'}
+        : null,
   );
 
   /// none (no profile yet) · pending · verified · rejected
@@ -56,6 +60,16 @@ class Me {
   final String? gender;
   final int? age;
   final String? registrationNumber;
+
+  /// What the clinician's plan unlocks (library, pdf, booking, appointments, guided_own_key,
+  /// guided_included). Null: the server didn't say (an older server) — nothing is locked in the app;
+  /// the server still checks every request.
+  final Set<String>? unlocked;
+
+  bool has(String feature) => unlocked == null || unlocked!.contains(feature);
+
+  /// AI-Guided Case Taking is part of the plan (BYOK Scale or Scale).
+  bool get guidedIncluded => has('guided_own_key') || has('guided_included');
 
   bool get needsProfile => verificationStatus == 'none';
   bool get isVerified => verificationStatus == 'verified' && level != null;

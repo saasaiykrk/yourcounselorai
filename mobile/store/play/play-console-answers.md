@@ -3,7 +3,7 @@
 Fill these in Play Console → your app → **Policy and programs → App content** (and the store listing pages). Each answer describes what the app does today; check it again if the app changes.
 
 ## Before you submit: three things to sort out
-1. **Payments policy (most important).** The app sells digital content (report plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
+1. **Payments policy (most important).** The app sells digital content (Learn, Practice, BYOK Scale and Scale plans, single reports, single prints of Knowledge pages) through Razorpay. Google Play normally requires Google Play Billing for digital content. In India, Google allows other payment systems only through its **user choice / alternative billing programme**, which has its own sign-up, fees and on-screen rules. Before the first release, check the current Payments policy in Play Console and either enrol in that programme or switch these purchases to Google Play Billing. Otherwise the app may be rejected.
 2. **Account deletion.** Done: **Account → Delete account** in the app (also on the "We're verifying you"
    screen), and a web page at `https://<server>/delete-account` (for example
    `https://app.yourcounselor.in/delete-account` once the domain works). Enter that URL in Play Console →
@@ -22,11 +22,12 @@ Set it up once:
 2. **On your phone** (new app build): Sign in → that email → **Send code** → type the 6-digit code → Verify. Fill in
    the registration (name "Google Play Reviewer", role Psychologist, registration body RCI, number "PLAY-REVIEW").
 3. **/admin → Registrations**: verify the account (level **L2**).
-4. **/admin → Subscriptions & Users** → the reviewer → **Grant**: report credits (e.g. 20 for 90 days), so reviews
-   can run consults and print handouts even while charging is on.
+4. **/admin → Subscriptions & Users** → the reviewer → **Give a plan…** → **Scale** for 90 days (it brings 10
+   AI-Guided reports a month), plus **Adjust credits** +5 for quick consults, so reviews can use every part of
+   the app even while charging is on.
 5. **Play Console → App content → App access** → *All or some functionality is restricted* → add instructions:
    > YourCounselor is for registered mental-health professionals. Enter the email below and tap Send code (no email
-   > is sent to this account), then enter the code below. The account is verified and has report credits.
+   > is sent to this account), then enter the code below. The account is verified and on the Scale plan.
    > Email: playreview@yourcounselor.in · Code: [your 6-digit code]
 
 To change the code, change the password in Supabase (and in Play Console). To end reviewer access, delete the

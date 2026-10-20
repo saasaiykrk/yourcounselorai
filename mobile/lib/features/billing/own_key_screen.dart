@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_exceptions.dart';
-import '../../core/api/billing_models.dart';
-import '../../core/billing/purchase.dart';
 import '../../core/providers.dart';
 import '../../core/security/screen_protection.dart';
 import '../../core/theme/app_colors.dart';
@@ -84,7 +83,7 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove your key?'),
-        content: const Text('It is deleted from our server. Reports then use your plan credits.'),
+        content: const Text('It is deleted from our server. AI-Guided reports then need report credits.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
@@ -98,23 +97,10 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
     });
   }
 
-  Future<void> _payFee() => _run(() async {
-    final outcome = await PurchaseFlow(
-      ref.read(billingRepositoryProvider),
-      ref.read(paymentGatewayProvider),
-    ).buy(plan: 'byok');
-    _error = switch (outcome) {
-      PurchaseDone() => null,
-      PurchaseCancelled() => null,
-      PurchasePending() => 'Your payment is still being confirmed. This screen updates once it is.',
-      PurchaseFailed(:final message) => message,
-    };
-  });
-
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(billingStatusProvider);
-    final plan = ref.watch(billingPlansProvider).value?.plans.where((p) => p.kind == 'byok').firstOrNull;
+    final plan = ref.watch(billingPlansProvider).value?.plans.where((p) => p.id == 'byok_scale').firstOrNull;
     final use = ref.watch(useOwnKeyProvider);
     return ProtectedScreen(
       child: Scaffold(
@@ -134,15 +120,22 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
               );
             }
             final showForm = !k.connected || _replacing;
+            final instructions = plan?.instructions.isNotEmpty == true ? plan!.instructions : k.instructions;
             return PageBody(
               gap: 14,
               children: [
-                PageHeading(
-                  plan?.name ?? 'Use My Anthropic API Key',
-                  message: 'Reports are written with your key, and Anthropic bills you for that use directly.',
+                const PageHeading(
+                  'Your Anthropic API key',
+                  message:
+                      'AI-Guided reports are written with your key, and Anthropic bills you for that use directly.',
                 ),
-                if (plan != null && plan.instructions.isNotEmpty) Text(plan.instructions, style: AppText.small),
-                _Facts(status: k, currency: s.currency, feeDays: plan?.feeDays),
+                if (instructions.isNotEmpty) Text(instructions, style: AppText.small),
+                _Facts(included: k.included, planName: plan?.name ?? 'BYOK Scale'),
+                if (!k.included)
+                  FilledButton(
+                    onPressed: () => context.push('/pricing'),
+                    child: Text('Choose ${plan?.name ?? 'BYOK Scale'} to use your key'),
+                  ),
                 if (k.connected)
                   AppCard(
                     child: Column(
@@ -166,11 +159,9 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
                           type: MaterialType.transparency,
                           child: SwitchListTile(
                             contentPadding: EdgeInsets.zero,
-                            value: use && k.usable && !k.feeDue,
-                            onChanged: k.usable && !k.feeDue
-                                ? (v) => ref.read(useOwnKeyProvider.notifier).set(v)
-                                : null,
-                            title: const Text('Write my reports with this key'),
+                            value: use && k.usable,
+                            onChanged: k.usable ? (v) => ref.read(useOwnKeyProvider.notifier).set(v) : null,
+                            title: const Text('Write my AI-Guided reports with this key'),
                             subtitle: const Text('If it fails, nothing is written with the platform key instead.'),
                           ),
                         ),
@@ -191,11 +182,6 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
                         ),
                       ],
                     ),
-                  ),
-                if (k.feeDue)
-                  FilledButton(
-                    onPressed: _busy ? null : _payFee,
-                    child: Text('Pay the access fee · ${formatMoney(k.fee, s.currency)}'),
                   ),
                 if (showForm) ...[
                   TextField(
@@ -240,24 +226,19 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
 }
 
 class _Facts extends StatelessWidget {
-  const _Facts({required this.status, required this.currency, this.feeDays});
+  const _Facts({required this.included, required this.planName});
 
-  final OwnKeyStatus status;
-  final String currency;
-  final int? feeDays;
+  final bool included;
+  final String planName;
 
   @override
   Widget build(BuildContext context) {
     final lines = [
-      status.fee == 0
-          ? 'No platform fee.'
-          : status.feeDue
-          ? 'Platform access fee: ${formatMoney(status.fee, currency)} for $feeDays days.'
-          : 'Access fee paid until ${_date(status.feePaidUntil)}.',
-      status.consumesCredits
-          ? 'Each report also uses one of your report credits.'
-          : 'Reports with your key use no report credits.',
-      'Available for ${status.reportTypes.length == 2 ? 'guided and direct' : status.reportTypes.join(' and ')} reports.',
+      included
+          ? 'Your plan, $planName, includes reports with your own key.'
+          : 'Using your own key is part of $planName.',
+      'AI-Guided reports with your key are unlimited and use no report credits.',
+      'Quick consults are bought per report.',
     ];
     return AppCard(
       color: AppColors.lavender,
@@ -274,6 +255,4 @@ class _Facts extends StatelessWidget {
       ),
     );
   }
-
-  static String _date(DateTime? d) => d == null ? '' : '${d.day}/${d.month}/${d.year}';
 }

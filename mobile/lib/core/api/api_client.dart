@@ -163,9 +163,14 @@ class ApiClient {
 
   /// Starts a purchase. The server prices it; the app never sends an amount.
   /// [item]: a single print's education page (slug).
-  Future<OrderStart> createOrder({required String plan, String? reportType, String? item}) async => OrderStart.fromJson(
-    await _send('POST', '/v1/billing/orders', body: {'plan': plan, 'report_type': reportType, 'item': ?item}),
-  );
+  Future<OrderStart> createOrder({required String plan, String? reportType, String? item, String? period}) async =>
+      OrderStart.fromJson(
+        await _send(
+          'POST',
+          '/v1/billing/orders',
+          body: {'plan': plan, 'report_type': reportType, 'item': ?item, 'period': ?period},
+        ),
+      );
 
   /// Checkout finished: the server checks the signature AND asks Razorpay before granting anything.
   Future<BillingOrder> verifyPayment(
@@ -405,6 +410,14 @@ ApiException mapStatus(int? status, Object? body) {
       plan: detail['plan'] as String?,
       price: (detail['price'] as num?)?.toInt(),
       currency: detail['currency'] as String? ?? 'INR',
+    );
+  }
+  if (status == 402 && error == 'plan_required') {
+    return PlanRequired(
+      feature: detail['feature'] as String? ?? '',
+      message: message ?? 'Your plan does not include this. See the plans.',
+      plan: detail['plan'] as String?,
+      price: (detail['price'] as num?)?.toInt(),
     );
   }
   if (status == 424 && error == 'byok_failed') {

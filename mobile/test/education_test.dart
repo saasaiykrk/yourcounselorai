@@ -43,11 +43,12 @@ class _Adapter implements HttpClientAdapter {
 }
 
 class _Repo implements EducationRepository {
-  _Repo(this.result, {this.canPrint = true, this.offer});
+  _Repo(this.result, {this.canPrint = true, this.offer, this.library = true});
 
   Object result;
   bool canPrint;
   PrintOffer? offer;
+  bool library;
   int calls = 0;
 
   @override
@@ -55,7 +56,15 @@ class _Repo implements EducationRepository {
     calls++;
     final r = result;
     if (r is Exception) throw r;
-    return EducationCatalog(pages: r as List<EducationPage>, canPrint: canPrint, printOffer: offer);
+    return EducationCatalog(
+      pages: r as List<EducationPage>,
+      canPrint: canPrint,
+      printOffer: offer,
+      library: library,
+      libraryMessage: library
+          ? null
+          : 'The practice library is part of every plan. Choose a plan in the app to keep reading.',
+    );
   }
 }
 
@@ -173,7 +182,10 @@ void main() {
 
   testWidgets('without a subscription: free to read, the single print offered, bought pages marked', (tester) async {
     final opened = await _pump(tester, _Repo(_locked, canPrint: false, offer: _offer));
-    expect(find.textContaining('comes with a subscription, or unlock one module for ₹49 (24 hours)'), findsOneWidget);
+    expect(
+      find.textContaining('comes with Practice, BYOK Scale and Scale, or unlock one module for ₹49 (24 hours)'),
+      findsOneWidget,
+    );
     expect(find.textContaining('Print or save the handouts'), findsNothing);
     expect(find.text('See plans'), findsOneWidget);
     expect(find.textContaining('Print until'), findsOneWidget, reason: 'only the page bought (CBT)');
@@ -182,9 +194,24 @@ void main() {
     expect(opened.single.$2, isFalse, reason: 'the pages stay free to read; this one is not unlocked');
   });
 
+  testWidgets('after the free months with no plan: the cards show, the pages stay closed', (tester) async {
+    final opened = await _pump(tester, _Repo(List.of(_pages), canPrint: false, library: false));
+    expect(find.byKey(const ValueKey('library-locked')), findsOneWidget);
+    expect(find.textContaining('Choose a plan in the app to keep reading'), findsOneWidget);
+    expect(find.text('Cognitive Behavioural Therapy (CBT)'), findsOneWidget);
+    await tester.tap(find.text('Cognitive Behavioural Therapy (CBT)'));
+    await tester.pumpAndSettle();
+    expect(opened, isEmpty, reason: 'a locked page is not opened');
+    expect(EducationCatalog.fromJson(const {'pages': [], 'library': false}).library, isFalse);
+    expect(EducationCatalog.fromJson(const {'pages': []}).library, isTrue, reason: 'an older server: not locked');
+  });
+
   testWidgets('no single print on sale: only the subscription is mentioned', (tester) async {
     await _pump(tester, _Repo(_locked, canPrint: false));
-    expect(find.textContaining('Printing handouts and worksheets as PDF comes with a subscription.'), findsOneWidget);
+    expect(
+      find.textContaining('Printing handouts and worksheets as PDF comes with Practice, BYOK Scale and Scale.'),
+      findsOneWidget,
+    );
     expect(find.textContaining('single page'), findsNothing);
   });
 
@@ -286,7 +313,7 @@ void main() {
       final billing = FakeBilling(verifyResult: anOrder('paid'));
       final gateway = FakeGateway(paid);
       await run(tester, billing, gateway);
-      expect(find.text('Included with every subscription, for every page.'), findsOneWidget);
+      expect(find.text('Included with Practice, BYOK Scale and Scale, for every page.'), findsOneWidget);
       expect(
         find.text('Print or save its handouts and worksheets as PDF, as often as you need, for 24 hours.'),
         findsOneWidget,
@@ -311,7 +338,7 @@ void main() {
       final billing = FakeBilling();
       await run(tester, billing, FakeGateway(paid), offer: null);
       expect(find.textContaining('Buy for'), findsNothing);
-      expect(find.text('See subscriptions'), findsOneWidget);
+      expect(find.text('See plans'), findsOneWidget);
       await tester.tapAt(const Offset(10, 10)); // dismiss
       await tester.pumpAndSettle();
       expect(billing.createdPlan, isNull);

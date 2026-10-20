@@ -708,11 +708,12 @@ class _ErrorCard extends StatelessWidget {
       NotFound() => ('This consultation is no longer available.', false),
       ServerProblem() => ('Something went wrong on our side. Try again.', true),
       PaymentRequired(:final message) => ('$message Your answers are saved.', false),
+      PlanRequired(:final message) => (message, false),
       OwnKeyFailed(:final message, :final retry) => (message, retry),
       BillingRefused(:final message) => (message, false),
     };
     final (fixLabel, fixRoute) = switch (error) {
-      PaymentRequired() => ('See plans', '/pricing'),
+      PaymentRequired() || PlanRequired() => ('See plans', '/pricing'),
       OwnKeyFailed() => ('Manage key', '/pricing/own-key'),
       _ => (null, null),
     };

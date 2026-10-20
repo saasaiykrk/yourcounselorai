@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:your_counselor/core/api/api_models.dart';
 import 'package:your_counselor/core/content/safety_content.dart';
+import 'package:your_counselor/core/providers.dart';
+import 'package:your_counselor/core/repositories.dart';
 import 'package:your_counselor/features/consult/report_pdf.dart';
 import 'package:your_counselor/main.dart';
 import 'package:your_counselor/router.dart';
@@ -130,20 +132,35 @@ Some **bold** text and *italic* text.
   });
 
   group('reply screen', () {
-    Future<List<(Uint8List, String)>> pumpReply(WidgetTester tester) async {
+    Future<List<(Uint8List, String)>> pumpReply(WidgetTester tester, {Set<String>? unlocked}) async {
       final exported = <(Uint8List, String)>[];
       tester.view.physicalSize = const Size(390, 844) * 3;
       tester.view.devicePixelRatio = 3;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [reportPdfExporterProvider.overrideWithValue((bytes, name) async => exported.add((bytes, name)))],
+          overrides: [
+            reportPdfExporterProvider.overrideWithValue((bytes, name) async => exported.add((bytes, name))),
+            if (unlocked != null) profileRepositoryProvider.overrideWithValue(_OnPlan(unlocked)),
+          ],
           child: YourCounselorApp(router: buildRouter(initialLocation: '/reply')),
         ),
       );
       await tester.pumpAndSettle();
       return exported;
     }
+
+    testWidgets('on a plan without PDF downloads: the plans are offered, nothing is exported', (tester) async {
+      final exported = await pumpReply(tester, unlocked: {'library'});
+      await tester.tap(find.byTooltip('Download PDF'));
+      await tester.pumpAndSettle();
+      expect(find.text('PDF downloads'), findsOneWidget);
+      expect(find.textContaining('part of Practice, BYOK Scale and Scale'), findsOneWidget);
+      expect(find.text('Download this report as a PDF?'), findsNothing);
+      await tester.tap(find.text('Not now'));
+      await tester.pumpAndSettle();
+      expect(exported, isEmpty);
+    });
 
     testWidgets('Download PDF asks first, lists the precautions, then exports', (tester) async {
       final exported = await pumpReply(tester);
@@ -166,4 +183,21 @@ Some **bold** text and *italic* text.
       expect(exported.single.$2, startsWith('YourCounselor-report-'));
     });
   });
+}
+
+/// A verified clinician whose plan unlocks only [unlocked].
+class _OnPlan implements ProfileRepository {
+  _OnPlan(this.unlocked);
+
+  final Set<String> unlocked;
+
+  @override
+  Future<Me> me() async => Me(verificationStatus: 'verified', level: 'L2', role: 'psychologist', unlocked: unlocked);
+
+  @override
+  Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
 }
