@@ -63,7 +63,7 @@ Under India's Digital Personal Data Protection Act, 2023, you can:
 - withdraw consent;
 - nominate someone to act for you.
 
-To delete your account, use [in-app path, e.g. Account → Delete account], or email [privacy email]. Clients can cancel a booking using the link in their confirmation, or email us to have their details deleted.
+To delete your account, use **Account → Delete account** in the app, or follow the steps at https://app.yourcounselor.in/delete-account (which also gives an email address if you can no longer open the app). Clients can cancel a booking using the link in their confirmation, or email us to have their details deleted.
 
 ## 7. Children
 YourCounselor is not for anyone under 18. We do not knowingly collect children's data from app users.

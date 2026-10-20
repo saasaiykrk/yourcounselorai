@@ -28,6 +28,36 @@ def ping() -> bool:
         return False
 
 
+def delete_account(cid) -> str:
+    """The clinician deletes their account. Returns "deleted", or "admin" (admins can't delete
+    themselves; another admin removes admin access first).
+
+    Gone: the sign-in (auth.users, with the email), name, gender, age, registration number and level,
+    the clinician's own AI key, and their booking pages, hours, time off and appointments (which hold
+    clients' names and emails). Consults leave the history; the de-identified copy stays for the
+    safety-review retention period, with no name or email attached. Payment records stay (tax law).
+    Running plans are cancelled. Safe to run again."""
+    with _conn() as c, c.transaction():
+        row = c.execute("select is_admin from clinicians where id=%s for update", (str(cid),)).fetchone()
+        if row and row["is_admin"]:
+            return "admin"
+        if row:
+            c.execute("""update clinicians set full_name=null, gender=null, age_at_registration=null,
+                           registration_number=null, level=null, verification_status='deleted',
+                           verification_note=null, deleted_at=coalesce(deleted_at, now())
+                         where id=%s""", (str(cid),))
+            c.execute("update conversations set hidden_at=now() where clinician_id=%s and hidden_at is null",
+                      (str(cid),))
+            for table in ("byok_credentials", "appointments", "time_off", "availability_windows", "booking_settings"):
+                c.execute(f"delete from {table} where clinician_id=%s", (str(cid),))
+            c.execute("update entitlements set status='cancelled' where clinician_id=%s and status='active'",
+                      (str(cid),))
+            c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
+                         values (%s, 'account_deleted', %s, '{}'::jsonb)""", (str(cid), str(cid)))
+        c.execute("delete from auth.users where id=%s", (str(cid),))
+    return "deleted"
+
+
 def get_clinician(cid) -> dict | None:
     with _conn() as c:
         return c.execute("select * from clinicians where id=%s", (str(cid),)).fetchone()

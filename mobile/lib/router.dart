@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/content/legal_content.dart';
 import 'features/account/account_screen.dart';
+import 'features/account/delete_account_screen.dart';
 import 'features/account/edit_profile_screen.dart';
 import 'features/account/info_screen.dart';
 import 'core/api/api_exceptions.dart';
@@ -56,6 +57,7 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         ],
       ),
       GoRoute(path: '/account/profile', builder: (_, _) => const EditProfileScreen()),
+      GoRoute(path: '/account/delete', builder: (_, _) => const DeleteAccountScreen()),
       GoRoute(path: '/calendar/settings', builder: (_, _) => const CalendarSettingsScreen()),
       GoRoute(path: '/calendar/hours', builder: (_, _) => const WorkingHoursScreen()),
       GoRoute(path: '/calendar/time-off', builder: (_, _) => const TimeOffScreen()),

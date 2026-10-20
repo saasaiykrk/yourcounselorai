@@ -58,7 +58,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import ai_admin_api, billing_api, booking_api, byok, db, deid, education, status_page
+from . import account_page, ai_admin_api, billing_api, booking_api, byok, db, deid, education, status_page
 from .ai_settings import AiStore, ModelRouter
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
@@ -330,6 +330,10 @@ class ReportIn(BaseModel):
     use_own_key: bool = False      # generate with the clinician's own Anthropic key (BYOK)
 
 
+class DeleteAccountIn(BaseModel):
+    confirm: str = Field(pattern="^DELETE$")   # the clinician typed DELETE
+
+
 class CleanIn(BaseModel):
     text: str = Field(max_length=12000)
 
@@ -380,6 +384,24 @@ def edit_profile(body: ProfileEditIn, user: dict = Depends(current_user)):
     if result is None:
         raise HTTPException(404, "register first")
     return result
+
+
+@app.post("/v1/account/delete")
+def delete_account(body: DeleteAccountIn, user: dict = Depends(current_user)):
+    """The clinician deletes their own account (db.delete_account says what goes and what stays)."""
+    if CFG.dev_mode and user["id"] == "dev-clinician":
+        return {"deleted": True}            # DEV_MODE: nothing stored, nothing to delete
+    if db.delete_account(user["id"]) == "admin":
+        raise HTTPException(409, {"error": "admin_account",
+                                  "message": "Admin accounts can't be deleted from the app. Ask another admin "
+                                             "to remove admin access first."})
+    return {"deleted": True}
+
+
+@app.get("/delete-account", response_class=HTMLResponse)
+def delete_account_page():
+    """The public web link for account deletion (Google Play asks for one)."""
+    return HTMLResponse(account_page.render(), headers={"Cache-Control": "public, max-age=3600"})
 
 
 _dev_results: dict[tuple[str, str], dict] = {}   # DEV_MODE: replies by (clinician, request_id)
