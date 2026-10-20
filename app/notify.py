@@ -35,6 +35,8 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
     """(to, subject, body) for one queued notice, or None if there is no one to send it to."""
     at = when(n["starts_at"], n["timezone"])
     name = n["display_name"]
+    kind = booking.TAGS.get(n.get("tag") or "")
+    session = f"\nSession: {kind}\n" if kind else ""
     if n["recipient"] == "consultant":
         to = n.get("clinician_email")
         if not to:
@@ -44,7 +46,8 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
             subject = "An appointment was cancelled"
         else:
             body = f"A new appointment {'request ' if n['status'] == 'pending' else ''}for {at}.\n\n" \
-                   "Open YourCounselor → Calendar to see it" + (" and accept or decline it." if n["status"] == "pending" else ".")
+                   "Open YourCounselor → Calendar to see it" + (" and accept or decline it." if n["status"] == "pending" else ".") \
+                   + session.rstrip("\n")
             subject = SUBJECTS["new_booking"]
         return to, subject, body + "\n\n— YourCounselor"
     if not details or not details.get("email"):
@@ -62,7 +65,7 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
     }
     if n["kind"] not in lines:
         return None
-    body = f"{hello}\n\n{lines[n['kind']]}\n"
+    body = f"{hello}\n\n{lines[n['kind']]}\n" + (session if n["kind"] not in ("rejected", "cancelled") else "")
     if manage and n["kind"] in ("requested", "confirmed", "rescheduled", "reminder"):
         body += f"\nTo see or cancel your appointment: {manage}\n"
     if n["kind"] == "rejected":
