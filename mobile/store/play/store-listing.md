@@ -39,10 +39,10 @@ YOUR HISTORY
 Search, label and revisit your past consults. Only you can see them.
 
 KNOWLEDGE LIBRARY
-Free for every user, in sections (Basics, Therapies, Practice, Others, Handouts): therapy modules (CBT, ACT, DBT, Behavioural Activation, Motivational Interviewing, Exposure Therapy and more), a therapy comparison chart, a protocol matrix and glossary, and a case history and MSE practice handout. Pages open inside the app. Print or save each module's client handouts and worksheets as PDF with a subscription, or unlock a single module for 24 hours.
+In every plan, in sections (Basics, Therapies, Practice, Others, Handouts): therapy modules (CBT, ACT, DBT, Behavioural Activation, Motivational Interviewing, Exposure Therapy and more), a therapy comparison chart, a protocol matrix and glossary, and a case history and MSE practice handout. Pages open inside the app. Print or save each module's client handouts and worksheets as PDF with Practice and above, or unlock a single module for 24 hours.
 
 PLANS
-Monthly plans with 30 or 50 reports, single reports, or your own AI provider key. Payments are handled securely by Razorpay.
+Learn (the full library, free for your first 3 months), Practice (adds PDF downloads, your booking page and appointments), BYOK Scale (adds unlimited AI-Guided Case Taking with your own AI key) and Scale (adds 10 AI-Guided reports a month). Monthly or yearly, or buy single reports. Payments are handled securely by Razorpay.
 
 WHO IT IS FOR
 YourCounselor is for registered mental-health professionals only. Every account is checked against professional registration (for example, RCI) before use.

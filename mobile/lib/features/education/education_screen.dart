@@ -63,7 +63,11 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
     super.dispose();
   }
 
-  Future<void> _open(EducationPage p, PrintOffer? offer) async {
+  Future<void> _open(EducationPage p, PrintOffer? offer, {bool locked = false}) async {
+    if (locked) {
+      context.push('/pricing');
+      return;
+    }
     if (p.url.isEmpty) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Preview build: pages open when connected to the server.')));
@@ -123,9 +127,20 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
               children: [
-                if (catalog.canPrint)
+                if (!catalog.library) ...[
+                  InkWell(
+                    key: const ValueKey('library-locked'),
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => context.push('/pricing'),
+                    child: NoticeBanner(
+                      icon: Icons.lock_outline_rounded,
+                      tone: Tone.check,
+                      text: '${catalog.libraryMessage ?? 'Choose a plan to keep reading the library.'} · See plans ›',
+                    ),
+                  ),
+                ] else if (catalog.canPrint)
                   const Text(
-                    'Free for every YourCounselor user. Print or save the handouts and worksheets in each module as PDF.',
+                    'Print or save the handouts and worksheets in each module as PDF.',
                     style: AppText.smallMuted,
                   )
                 else
@@ -133,8 +148,8 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       Text(
-                        'Free to read for every YourCounselor user. Printing handouts and worksheets as PDF comes '
-                        'with a subscription${catalog.printOffer == null ? '' : ', or unlock one module for '
+                        'Printing handouts and worksheets as PDF comes with Practice, BYOK Scale and Scale'
+                        '${catalog.printOffer == null ? '' : ', or unlock one module for '
                                   '${formatMoney(catalog.printOffer!.price, catalog.printOffer!.currency)} '
                                   '(${catalog.printOffer!.hours} hours)'}.',
                         style: AppText.smallMuted,
@@ -148,7 +163,11 @@ class _EducationScreenState extends ConsumerState<EducationScreen> with SingleTi
                     padding: EdgeInsets.symmetric(vertical: 32),
                     child: Text('Nothing here yet.', style: AppText.bodyMuted, textAlign: TextAlign.center),
                   ),
-                for (final p in shown) _PageCard(page: p, onTap: () => _open(p, catalog.printOffer)),
+                for (final p in shown)
+                  _PageCard(
+                    page: p,
+                    onTap: () => _open(p, catalog.printOffer, locked: !catalog.library),
+                  ),
               ],
             );
           },

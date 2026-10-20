@@ -11,7 +11,7 @@ import '../../core/widgets/surfaces.dart';
 
 enum _Choice { buy, plans }
 
-/// A locked "Print / Save as PDF": printing comes with a subscription; or, when the admin sells
+/// A locked "Print / Save as PDF": printing comes with a plan with PDF downloads; or, when the admin sells
 /// it, a single print of this page. Returns true once the SERVER has confirmed the payment
 /// (the page must then be loaded again, so the server unlocks it).
 Future<bool> unlockPrinting(BuildContext context, WidgetRef ref, EducationPage page, PrintOffer? offer) async {
@@ -62,7 +62,7 @@ Future<void> _tell(BuildContext context, String title, String message) => showDi
   ),
 );
 
-/// What unlocks printing: any subscription, or (when on sale) a single print of this page.
+/// What unlocks printing: a plan with PDF downloads, or (when on sale) a single print of this page.
 class PrintOfferSheet extends StatelessWidget {
   const PrintOfferSheet({super.key, this.offer});
 
@@ -86,7 +86,7 @@ class PrintOfferSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 14),
-            const Text('Included with every subscription, for every page.', style: AppText.bodyMuted),
+            const Text('Included with Practice, BYOK Scale and Scale, for every page.', style: AppText.bodyMuted),
             if (o != null) ...[
               const SizedBox(height: 18),
               Text('Just this module', style: AppText.label.copyWith(fontSize: 16)),
@@ -106,7 +106,7 @@ class PrintOfferSheet extends StatelessWidget {
             OutlinedButton(
               style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
               onPressed: () => Navigator.pop(context, _Choice.plans),
-              child: const Text('See subscriptions'),
+              child: const Text('See plans'),
             ),
           ],
         ),

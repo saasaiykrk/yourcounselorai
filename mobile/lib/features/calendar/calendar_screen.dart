@@ -14,6 +14,7 @@ import 'appointment_sheet.dart';
 
 /// What to show for a failed calendar call. Server refusals carry their own plain message.
 String calendarErrorText(Object e) => switch (e) {
+  PlanRequired(:final message) => message,
   BillingRefused(:final message) => message,
   NetworkProblem() => "Couldn't reach Your Counselor. Check your connection.",
   NotFound() => 'This appointment no longer exists.',
@@ -114,11 +115,12 @@ class CalendarScreenState extends ConsumerState<CalendarScreen> {
               onPressed: () => context.push('/calendar/time-off').then((_) => refresh()),
             ),
           ],
-          IconButton(
-            tooltip: 'Booking settings',
-            icon: const Icon(Icons.tune_rounded),
-            onPressed: () => context.push('/calendar/settings').then((_) => refresh()),
-          ),
+          if (home.error is! PlanRequired)
+            IconButton(
+              tooltip: 'Booking settings',
+              icon: const Icon(Icons.tune_rounded),
+              onPressed: () => context.push('/calendar/settings').then((_) => refresh()),
+            ),
         ],
       ),
       floatingActionButton: configured
@@ -130,7 +132,8 @@ class CalendarScreenState extends ConsumerState<CalendarScreen> {
           : null,
       body: home.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _Problem(text: calendarErrorText(e), onRetry: refresh),
+        error: (e, _) =>
+            e is PlanRequired ? _Locked(message: e.message) : _Problem(text: calendarErrorText(e), onRetry: refresh),
         data: (h) {
           if (!h.configured) return _SetUp(home: h);
           if (_today != h.today) {
@@ -675,6 +678,32 @@ class _Empty extends StatelessWidget {
         Text(text, style: AppText.bodyMuted, textAlign: TextAlign.center),
       ],
     ),
+  );
+}
+
+/// The plan doesn't include appointments (Learn, or no plan): say which plans do.
+class _Locked extends StatelessWidget {
+  const _Locked({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.all(24),
+    children: [
+      const SizedBox(height: 24),
+      const Center(child: IconTile(icon: Icons.lock_outline_rounded, size: 56)),
+      const SizedBox(height: 16),
+      const Text('Appointments and your booking page', style: AppText.sectionTitle, textAlign: TextAlign.center),
+      const SizedBox(height: 8),
+      Text(message, style: AppText.bodyMuted, textAlign: TextAlign.center),
+      const SizedBox(height: 18),
+      FilledButton(
+        key: const ValueKey('calendar-see-plans'),
+        onPressed: () => context.push('/pricing'),
+        child: const Text('See plans'),
+      ),
+    ],
   );
 }
 

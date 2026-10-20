@@ -181,6 +181,33 @@ How it is protected:
   old value as `BYOK_ENCRYPTION_KEY_PREVIOUS`, the new one as `BYOK_ENCRYPTION_KEY`, and raise
   `BYOK_KEY_VERSION` by 1. Each saved key is re-encrypted with the new value the next time it is used.
 
+## Plans: Learn, Practice, BYOK Scale, Scale (run migration 012)
+
+1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/012_plan_tiers.sql`
+   (safe to run again). Without it, buying a plan and the free months fail.
+2. **What each plan unlocks** (fixed in `app/billing.py` → `FEATURES`; the admin edits names, prices and periods):
+   | | Learn | Practice | BYOK Scale | Scale |
+   |---|---|---|---|---|
+   | Full practice library (Knowledge) | ✓ | ✓ | ✓ | ✓ |
+   | PDF downloads with your name (handouts, reports) | | ✓ | ✓ | ✓ |
+   | Booking page with your name and number | | ✓ | ✓ | ✓ |
+   | Appointments in the app (Calendar) | | ✓ | ✓ | ✓ |
+   | AI-Guided Case Taking | | | unlimited, own AI key | 10 a month, extra ₹129 each |
+   - Prices (launch defaults): Learn ₹599/month or ₹4,999/year; Practice ₹999 or ₹5,999 (was ₹9,999);
+     BYOK Scale ₹1,999 or ₹14,999 (was ₹19,999); Scale ₹2,999 or ₹19,999 (was ₹29,999).
+   - **Learn's free months** (90 days by default) start by themselves the first time a verified clinician opens
+     the app, once per account.
+   - Plans are **prepaid** for a month (30 days) or a year (365 days); the app reminds them before the end.
+     Paying again early adds the new period after the current one. Scale's yearly plan gets 10 AI-Guided
+     reports every month; unused ones don't carry over.
+   - A **quick consult** is always bought per report. **Pay per report** and **Single print** are unchanged.
+   - The old 30- and 50-report plans and the own-key fee are retired; their past payments stay in Payments.
+3. **Only while charging is on.** With charging off in /admin → Pricing Plans, everything is unlocked and free.
+   When you switch it on, existing clinicians get Learn's free months at their next visit, so the calendar,
+   PDF downloads and AI-Guided Case Taking lock until they choose Practice or above.
+4. **Admins and the Google Play reviewer:** give them a plan in /admin → Subscriptions & Users → the person →
+   **Give a plan…** → Scale (or BYOK Scale), with the days you want (e.g. 90).
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
@@ -313,15 +340,15 @@ every signed-in user, one card per page titled with the page's own title. They s
   happen only through each module's own **Print or save as PDF** buttons, on its client handouts and counsellor
   sheets (the reference pages have none). Who can use them:
   - **Charging off** (/admin → Pricing Plans): everyone. Nothing is charged, so printing is free too.
-  - **A running subscription**: every module. That is a 30- or 50-report plan, the own-key plan, or credits
-    given by an admin, not cancelled and not ended (used-up credits still count). A single report purchase does
-    not count.
+  - **Practice, BYOK Scale or Scale** (running, paid or given by an admin): every module. Learn and a single
+    report purchase don't include printing. With no plan at all (Learn's free months over), the library itself
+    locks until they choose a plan.
   - **A single print**: one module's handouts and sheets, printed or saved as often as needed for 24 hours, ₹49
     by default. Set the price, the hours or switch it off in /admin → Pricing Plans → **Single print (education
     page)**. It is paid through Razorpay like the plans and appears in Payments as "Single print".
 - Unlocked, inside the app a button hands the app the handout exactly as the module would print it, and the app
   opens the phone's print / save-as-PDF dialog. In a browser outside the app, the module's own print window opens.
-- Locked, inside the app a button opens a sheet: **Buy for ₹49** (this module) or **See subscriptions**. After the
+- Locked, inside the app a button opens a sheet: **Buy for ₹49** (this module) or **See plans**. After the
   payment is confirmed the page reloads unlocked and the card shows "Print until …". In a browser outside the app,
   the note appears under the button. If the check fails, printing stays off.
 - The Case History PDF has no buttons of its own: its viewer in the app has the Print / Save as PDF button, under
