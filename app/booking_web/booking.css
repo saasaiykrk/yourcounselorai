@@ -66,6 +66,12 @@ label { display: block; font-weight: 700; font-size: 13px; color: var(--muted); 
 input { width: 100%; font: inherit; padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); }
 input:focus { outline: none; border-color: var(--royal); box-shadow: 0 0 0 3px rgba(106, 17, 186, .15); }
 button:focus-visible, a:focus-visible, .date:focus-visible, .slot:focus-visible { outline: 2px solid var(--royal); outline-offset: 2px; }
+.label { font-weight: 700; font-size: 14px; margin: 16px 0 8px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-btn { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff;
+  color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.tag-btn[aria-checked="true"] { background: var(--royal); border-color: var(--royal); color: #fff; }
+.tag-btn:focus-visible { outline: 3px solid var(--royal); outline-offset: 2px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--ink); font-size: 14px; margin-top: 18px; }
 .check input { width: 20px; height: 20px; flex: none; margin: 2px 0 0; accent-color: var(--royal); }
 .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }

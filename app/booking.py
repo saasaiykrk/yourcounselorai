@@ -33,6 +33,9 @@ SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$")
 RESERVED_SLUGS = {"admin", "api", "book", "manage", "assets", "health", "healthz", "v1", "dev", "static", "help"}
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}$")
 NAME_RE = re.compile(r"^[^\d<>@{}\[\]\\/|=+*#$%^&_~`\"]{1,40}$")
+# What kind of session an appointment is: one tag, or none. The client picks it on the booking page;
+# the consultant can set or change it in the app.
+TAGS = {"first_session": "First Session", "follow_up": "Follow-up", "online": "Online"}
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 DEFAULT_SETTINGS = {"enabled": False, "bio": "", "timezone": "Asia/Kolkata", "slot_minutes": 30,
@@ -204,6 +207,19 @@ def parse_utc(value: str) -> datetime:
     if dt.tzinfo is None:
         raise BookingError("starts_at: include the timezone offset (e.g. Z)")
     return dt.astimezone(UTC).replace(microsecond=0)
+
+
+def validate_tag(tag: str | None) -> str | None:
+    """One of TAGS, or None for no tag ("" counts as none)."""
+    if tag in (None, ""):
+        return None
+    if tag not in TAGS:
+        raise BookingError("tag: First Session, Follow-up or Online")
+    return tag
+
+
+def tag_label(tag: str | None) -> str | None:
+    return TAGS.get(tag) if tag else None
 
 
 def validate_client(first_name: str, email: str) -> tuple[str, str]:

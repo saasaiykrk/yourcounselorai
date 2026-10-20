@@ -9,13 +9,41 @@ import '../../core/widgets/surfaces.dart';
 import 'calendar_screen.dart';
 
 /// Details of one appointment and what can be done with it now. Returns true if it changed.
-Future<bool?> showAppointmentSheet(BuildContext context, Appointment a) => showModalBottomSheet<bool>(
-  context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
-  showDragHandle: true,
-  builder: (_) => AppointmentSheet(appointment: a),
-);
+Future<bool?> showAppointmentSheet(BuildContext context, Appointment a) async {
+  var tagged = false; // a changed tag also means the list should reload
+  final r = await showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (_) => AppointmentSheet(appointment: a, onTagged: () => tagged = true),
+  );
+  return r == true || tagged;
+}
+
+/// First Session · Follow-up · Online: one, or none (tap the chosen one again to clear it).
+class TagChoice extends StatelessWidget {
+  const TagChoice({super.key, required this.value, required this.onChanged, this.enabled = true});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: [
+      for (final MapEntry(:key, value: label) in kAppointmentTags.entries)
+        ChoiceChip(
+          key: ValueKey('tag-$key'),
+          label: Text(label),
+          selected: value == key,
+          onSelected: enabled ? (on) => onChanged(on ? key : null) : null,
+        ),
+    ],
+  );
+}
 
 /// Add an appointment (a free time, or any time the consultant chooses). Returns true if added.
 Future<bool?> showAddAppointmentSheet(BuildContext context, DateTime day) => showModalBottomSheet<bool>(
@@ -27,9 +55,12 @@ Future<bool?> showAddAppointmentSheet(BuildContext context, DateTime day) => sho
 );
 
 class AppointmentSheet extends ConsumerStatefulWidget {
-  const AppointmentSheet({super.key, required this.appointment});
+  const AppointmentSheet({super.key, required this.appointment, this.onTagged});
 
   final Appointment appointment;
+
+  /// Told when the consultant changes the tag (the sheet stays open).
+  final VoidCallback? onTagged;
 
   @override
   ConsumerState<AppointmentSheet> createState() => _AppointmentSheetState();
@@ -39,6 +70,29 @@ class _AppointmentSheetState extends ConsumerState<AppointmentSheet> {
   String? _busy;
   String? _error;
   bool _moving = false;
+  late String? _tag = widget.appointment.tag;
+
+  Future<void> _setTag(String? tag) async {
+    final before = _tag;
+    setState(() {
+      _tag = tag;
+      _busy = 'tag';
+      _error = null;
+    });
+    try {
+      await ref.read(calendarRepositoryProvider).setTag(widget.appointment.id, tag);
+      widget.onTagged?.call();
+      if (mounted) setState(() => _busy = null);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _tag = before;
+          _busy = null;
+          _error = calendarErrorText(e);
+        });
+      }
+    }
+  }
 
   Future<void> _act(String action, {String? confirm}) async {
     if (confirm != null) {
@@ -132,6 +186,10 @@ class _AppointmentSheetState extends ConsumerState<AppointmentSheet> {
                 ],
               ),
             ),
+            const SizedBox(height: 14),
+            const Text('Type of session', style: AppText.label),
+            const SizedBox(height: 8),
+            TagChoice(value: _tag, enabled: !busy, onChanged: _setTag),
             if (_error != null) ...[
               const SizedBox(height: 12),
               NoticeBanner(icon: Icons.error_outline_rounded, tone: Tone.crisis, text: _error!),
@@ -345,6 +403,7 @@ class _AddAppointmentSheetState extends ConsumerState<AddAppointmentSheet> {
   final _email = TextEditingController();
   bool _busy = false;
   String? _error;
+  String? _tag;
 
   @override
   void dispose() {
@@ -366,7 +425,7 @@ class _AddAppointmentSheetState extends ConsumerState<AddAppointmentSheet> {
     try {
       await ref
           .read(calendarRepositoryProvider)
-          .add(start: start, firstName: name.isEmpty ? null : name, email: email.isEmpty ? null : email);
+          .add(start: start, firstName: name.isEmpty ? null : name, email: email.isEmpty ? null : email, tag: _tag);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -407,6 +466,10 @@ class _AddAppointmentSheetState extends ConsumerState<AddAppointmentSheet> {
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(labelText: 'Email (optional)', counterText: ''),
             ),
+            const SizedBox(height: 14),
+            const Text('Type of session (optional)', style: AppText.label),
+            const SizedBox(height: 8),
+            TagChoice(value: _tag, enabled: !_busy, onChanged: (t) => setState(() => _tag = t)),
             if (_error != null) ...[
               const SizedBox(height: 12),
               NoticeBanner(icon: Icons.error_outline_rounded, tone: Tone.crisis, text: _error!),

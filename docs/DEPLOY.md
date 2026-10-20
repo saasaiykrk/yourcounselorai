@@ -213,7 +213,13 @@ How it is protected:
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
 buffer, notice, how far ahead clients can book, and whether requests need their approval. They share a link
 `https://<your Cloud Run URL>/book/<link name>` where clients pick a free time and give **only a first name
-and an email**.
+and an email**, and may pick one tag: **First Session**, **Follow-up** or **Online**. The consultant sees the
+tag on the calendar and can set, change or clear it (Calendar → the appointment → Type of session, or when adding
+one). The tag shows in the booking emails and on the client's own link. It is one tag or none, stored plainly
+(it names the kind of session, not the client).
+
+**Tags need `db/migrations/013_appointment_tags.sql`** (Supabase → SQL Editor, safe to run again) before the
+release that adds them is deployed; without it, every new booking fails.
 
 1. **Database (before deploying this release):** Supabase → SQL Editor → run `db/migrations/007_booking.sql`
    (safe to run again). Without it the server still starts but the Calendar tab shows an error.

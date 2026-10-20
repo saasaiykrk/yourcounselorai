@@ -138,7 +138,7 @@ class BookingApiTests(unittest.TestCase):
         prof = self.client.get(f"/v1/public/booking/{self.slug}")
         self.assertEqual(prof.status_code, 200)
         self.assertEqual(set(prof.json()), {"display_name", "bio", "role", "timezone", "slot_minutes",
-                                            "max_advance_days", "approval"})
+                                            "max_advance_days", "approval", "tags"})
         self.assertEqual(self.slots(), [at(9), at(9, 30), at(10), at(10, 30), at(12), at(12, 30)],
                          "working periods with a break between them")
         page = self.client.get(f"/book/{self.slug}")
@@ -282,6 +282,47 @@ class BookingApiTests(unittest.TestCase):
         r = self.client.post("/v1/calendar/appointments", json={"starts_local": f"{DAY}T20:00"})
         self.assertEqual((r.status_code, r.json()["appointment"]["starts_at"]), (200, at(20)), "a wall time in India")
         self.assertEqual(self.client.post("/v1/calendar/appointments", json={"starts_local": "tomorrow 8pm"}).status_code, 422)
+
+    # --- tags: First Session, Follow-up, Online ----------------------------------------------------------
+    def test_the_client_picks_a_tag_and_the_consultant_can_change_it(self):
+        self.setup_calendar()
+        tags = self.client.get(f"/v1/public/booking/{self.slug}").json()["tags"]
+        self.assertEqual([t["label"] for t in tags], ["First Session", "Follow-up", "Online"])
+        r = self.book(at(9), tag="first_session")
+        self.assertEqual((r.status_code, r.json()["tag_label"]), (200, "First Session"), r.text)
+        self.assertEqual(self.book(at(10), email="b@example.com", tag="gold").status_code, 422, "one of the three only")
+        self.assertEqual(self.book(at(10), email="b@example.com", tag=["online", "follow_up"]).status_code, 422,
+                         "one tag, not several")
+        self.assertIsNone(self.book(at(10), email="c@example.com").json()["tag_label"], "a tag is optional")
+        [a, b] = self.appts()
+        self.assertEqual((a["tag"], a["tag_label"], b["tag"]), ("first_session", "First Session", None))
+        r = self.client.put(f"/v1/calendar/appointments/{a['id']}/tag", json={"tag": "follow_up"})
+        self.assertEqual(r.json()["appointment"]["tag_label"], "Follow-up")
+        self.assertIsNone(self.client.put(f"/v1/calendar/appointments/{a['id']}/tag", json={"tag": None})
+                          .json()["appointment"]["tag"], "cleared")
+        self.assertEqual(self.client.put(f"/v1/calendar/appointments/{a['id']}/tag", json={"tag": "x"}).status_code, 422)
+        r = self.client.post("/v1/calendar/appointments", json={"starts_at": at(18), "tag": "online"})
+        self.assertEqual(r.json()["appointment"]["tag_label"], "Online", "the consultant tags their own entries")
+        with psycopg.connect(URL, autocommit=True) as c:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                c.execute("update appointments set tag='gold' where clinician_id=%s", (self.cid,))
+
+    def test_a_tag_moves_with_a_reschedule_and_shows_on_the_clients_link(self):
+        self.setup_calendar()
+        token = self.book(at(9), tag="online").json()["manage_token"]
+        [a] = self.appts()
+        new = self.client.post(f"/v1/calendar/appointments/{a['id']}/reschedule",
+                               json={"starts_at": at(10, 30)}).json()["appointment"]
+        self.assertEqual(new["tag"], "online")
+        self.assertEqual(self.client.get(f"/v1/public/booking/manage/{token}").json()["tag_label"], "Online")
+
+    def test_the_tag_is_in_the_emails(self):
+        self.setup_calendar()
+        mail = main.BOOKING.mailer = FakeMailer()
+        self.book(at(9), email="meera@example.com", tag="follow_up")
+        bodies = {t: b for t, s, b in mail.sent}
+        self.assertIn("Session: Follow-up", bodies["meera@example.com"])
+        self.assertIn("Session: Follow-up", next(b for t, b in bodies.items() if t.endswith("@consultant.test")))
 
     # --- reschedule and cancel ----------------------------------------------------------------------
     def test_reschedule_moves_without_duplicates_and_the_client_link_follows(self):

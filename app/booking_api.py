@@ -82,6 +82,11 @@ class ConsultantBookingIn(BaseModel):
     starts_local: str | None = Field(default=None, max_length=16)
     first_name: str | None = Field(default=None, max_length=40)
     email: str | None = Field(default=None, max_length=254)
+    tag: str | None = Field(default=None, max_length=20)        # first_session · follow_up · online
+
+
+class TagIn(BaseModel):
+    tag: str | None = Field(default=None, max_length=20)        # None: no tag
 
 
 class RescheduleIn(BaseModel):
@@ -97,6 +102,7 @@ class PublicBookingIn(BaseModel):
     email: str = Field(max_length=254)
     consent: bool
     website: str = Field(default="", max_length=200)   # honeypot: people leave it empty
+    tag: str | None = Field(default=None, max_length=20)   # first_session · follow_up · online
 
 
 def _iso(d):
@@ -156,7 +162,8 @@ class BookingService:
         d = self.details(row)
         return {"id": str(row["id"]), "starts_at": _iso(row["starts_at"]), "ends_at": _iso(row["ends_at"]),
                 "local_start": _local(row["starts_at"], tz_name), "local_end": _local(row["ends_at"], tz_name),
-                "status": row["status"], "source": row["source"],
+                "status": row["status"], "source": row["source"], "tag": row.get("tag"),
+                "tag_label": booking.tag_label(row.get("tag")),
                 "client": {"first_name": d.get("first_name"), "email": d.get("email")} if d else None,
                 "pending_until": _iso(row["pending_until"]), "cancelled_by": row["cancelled_by"],
                 "rescheduled_from": str(row["rescheduled_from"]) if row["rescheduled_from"] else None,
@@ -366,6 +373,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
                                               "message": "Client details can't be stored on this server yet."})
                 first, mail = booking.validate_client(body.first_name or "", body.email or "")
                 details = {"first_name": first, "email": mail}
+            tag = booking.validate_tag(body.tag)
         except booking.BookingError as e:
             raise problems(e)
         aid = str(uuid.uuid4())
@@ -374,11 +382,24 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         try:
             row = svc.store.book(c["id"], s, start, source="consultant", sealer=svc.sealer, details=details,
                                  email_hash=None, manage_hash=booking.token_hash(details["manage_token"]) if details else None,
-                                 status="confirmed", appointment_id=aid, check_hours=False)
+                                 status="confirmed", appointment_id=aid, check_hours=False, tag=tag)
         except svc.store.SlotTaken:
             raise HTTPException(409, {"error": "slot_taken", "message": "That time overlaps another appointment or time off."})
         deliver_later(bg, request)
         return {"appointment": svc.view(row, s["timezone"])}
+
+    @app.put("/v1/calendar/appointments/{appt_id}/tag")
+    def calendar_tag(appt_id: uuid.UUID, body: TagIn, c: dict = Depends(consultant)):
+        need_store()
+        try:
+            tag = booking.validate_tag(body.tag)
+        except booking.BookingError as e:
+            raise problems(e)
+        try:
+            row = svc.store.set_tag(appt_id, c["id"], tag)
+        except LookupError:
+            raise HTTPException(404, "not found")
+        return {"appointment": svc.view(row, tz_of(c))}
 
     @app.post("/v1/calendar/appointments/{appt_id}/reschedule")
     def calendar_reschedule(appt_id: uuid.UUID, body: RescheduleIn, request: Request, bg: BackgroundTasks,
@@ -433,6 +454,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
             raise HTTPException(404, {"error": "not_found", "message": "This link is no longer valid."})
         s = svc.store.get_settings(row["clinician_id"])
         return {"status": row["status"], "starts_at": _iso(row["starts_at"]), "ends_at": _iso(row["ends_at"]),
+                "tag_label": booking.tag_label(row.get("tag")),
                 "timezone": s["timezone"], "display_name": s["display_name"], "slug": s["slug"] if s["enabled"] else None,
                 "can_cancel": row["status"] in booking.ACTIVE and row["starts_at"] > datetime.now(UTC)}
 
@@ -456,7 +478,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         s = public_settings(slug)
         return {"display_name": s["display_name"], "bio": s["bio"], "role": ROLE.get(s["role"], "Consultant"),
                 "timezone": s["timezone"], "slot_minutes": s["slot_minutes"], "max_advance_days": s["max_advance_days"],
-                "approval": s["approval"]}
+                "approval": s["approval"], "tags": [{"id": k, "label": v} for k, v in booking.TAGS.items()]}
 
     @app.get("/v1/public/booking/{slug}/slots")
     def public_slots(slug: str, start: date, days: int = Query(7, ge=1, le=14)):
@@ -479,6 +501,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         try:
             start = booking.parse_utc(body.starts_at)
             first, mail = booking.validate_client(body.first_name, body.email)
+            tag = booking.validate_tag(body.tag)
         except booking.BookingError as e:
             raise problems(e)
         token, manage_hash = booking.new_manage_token()
@@ -487,7 +510,8 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
             row = svc.store.book(s["clinician_id"], s, start, source="public", sealer=svc.sealer,
                                  details={"first_name": first, "email": mail, "manage_token": token},
                                  email_hash=svc.sealer.email_hash(mail), manage_hash=manage_hash,
-                                 status="confirmed" if s["approval"] == "auto" else "pending", appointment_id=aid)
+                                 status="confirmed" if s["approval"] == "auto" else "pending", appointment_id=aid,
+                                 tag=tag)
         except svc.store.SlotTaken:
             raise HTTPException(409, {"error": "slot_taken",
                                       "message": "Sorry, that time was just taken or is no longer available. Please pick another."})
@@ -497,6 +521,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         deliver_later(bg, request)
         return {"status": row["status"], "starts_at": _iso(row["starts_at"]), "ends_at": _iso(row["ends_at"]),
                 "timezone": s["timezone"], "display_name": s["display_name"], "manage_token": token,
+                "tag_label": booking.tag_label(row.get("tag")),
                 "email_sent": svc.mailer is not None}
 
     # --- pages ------------------------------------------------------------------------------------
