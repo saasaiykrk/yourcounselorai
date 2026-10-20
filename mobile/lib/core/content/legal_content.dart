@@ -73,6 +73,7 @@ const kPrivacyDoc = InfoDoc(
       '"Delete" in History hides a consult from you; the de-identified copy is kept for safety review '
           'until the retention period ends.',
       'The beta retention period is 12 months, except for open safety reports.',
+      'Account → Delete account deletes your sign-in and personal details for good.',
     ]),
   ],
 );
@@ -144,7 +145,10 @@ const kDpaDoc = InfoDoc(
           'the appointment for client booking details.',
     ]),
     InfoSection('Your requests', [
-      'To ask about your data, or to have your account and its data removed, email $kSafetyEmail.',
+      'To delete your account, use Account → Delete account in the app. Your sign-in and personal details are '
+          'deleted straight away; payment records stay as tax law requires, and de-identified consults stay '
+          'until the retention period ends.',
+      'To ask about your data, or if you can no longer open the app, email $kSafetyEmail.',
     ]),
   ],
 );

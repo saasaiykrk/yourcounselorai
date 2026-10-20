@@ -75,6 +75,11 @@ class AccountScreen extends ConsumerWidget {
             ),
             child: const Text('Sign out'),
           ),
+          TextButton(
+            onPressed: () => context.push('/account/delete'),
+            style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+            child: const Text('Delete account'),
+          ),
           Column(
             children: [
               const BrandMark(size: 36),

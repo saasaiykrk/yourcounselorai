@@ -37,6 +37,9 @@ class ApiClient {
   Future<ProfileEditResult> editProfile(ProfileEdit profile) async =>
       ProfileEditResult.fromJson(await _send('PATCH', '/v1/profile', body: profile.toJson()));
 
+  /// Account → Delete account. The server deletes the sign-in and personal details for good.
+  Future<void> deleteAccount() => _send('POST', '/v1/account/delete', body: {'confirm': 'DELETE'});
+
   Future<ConsultReply> consult(ConsultRequest request) async =>
       ConsultReply.fromJson(await _send('POST', '/v1/consult', body: request.toJson()));
 
