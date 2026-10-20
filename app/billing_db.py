@@ -17,7 +17,17 @@ from .billing import AlreadyCharged, InProgress, NoCredit  # noqa: F401  (raised
 from .db import _conn
 
 STALE_RESERVATION = timedelta(minutes=20)   # a report that never finished gives its credit back
-CREDIT_PLANS = ("per_report", "sub_30", "sub_50", "manual")
+CREDIT_PLANS = ("per_report", "scale", "scale_extra", "manual", "sub_30", "sub_50")
+# Which credits pay for which report. sub_30/sub_50 are retired plans: any grant still running keeps working.
+_PAYS = {"guided": ("scale", "scale_extra", "manual", "sub_30", "sub_50"), "direct": ("manual", "sub_30", "sub_50")}
+_TIERS_SQL = "('learn','practice','byok_scale','scale')"
+
+
+def _counts_credits(e: dict) -> bool:
+    """Rows that hold credits (and so can run out). A plan's own row (Learn, Practice, ...) holds none:
+    it is the access; Scale's reports are in its monthly allowance rows."""
+    return e["plan"] in ("per_report", "scale_extra", "manual", "sub_30", "sub_50") or (
+        e["plan"] == "scale" and e.get("period") == "allowance")
 
 
 def _now() -> datetime:
@@ -64,13 +74,14 @@ def active_counts() -> dict[str, int]:
         rows = c.execute(
             """select plan, count(distinct clinician_id) n from entitlements
                where status='active' and starts_at <= now() and (expires_at is null or expires_at > now())
-                 and (plan in ('byok','print') or credits_used + credits_reserved < credits_total)
+                 and coalesce(period, '') <> 'allowance'
+                 and (credits_total = 0 or credits_used + credits_reserved < credits_total)
                group by plan""").fetchall()
     return {r["plan"]: r["n"] for r in rows}
 
 
 # --- orders ----------------------------------------------------------------------------
-_ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.item, o.amount, o.currency, o.config_version, o.provider,
+_ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.item, o.period, o.amount, o.currency, o.config_version, o.provider,
                  o.provider_order_id, o.provider_payment_id, o.status, o.failure_reason, o.refund_status,
                  o.refunded_amount, o.created_at, o.paid_at, o.updated_at"""
 
@@ -78,9 +89,10 @@ _ORDER_COLS = """o.id, o.clinician_id, o.plan, o.report_type, o.item, o.amount, 
 def create_order(cid, price: billing.Price, config_version: int) -> dict:
     with _conn() as c:
         return c.execute(
-            f"""insert into billing_orders as o (clinician_id, plan, report_type, item, amount, currency, config_version)
-                values (%s,%s,%s,%s,%s,%s,%s) returning {_ORDER_COLS}""",
-            (str(cid), price.plan, price.report_type, price.item, price.amount, price.currency,
+            f"""insert into billing_orders as o (clinician_id, plan, report_type, item, period, amount, currency,
+                                                 config_version)
+                values (%s,%s,%s,%s,%s,%s,%s,%s) returning {_ORDER_COLS}""",
+            (str(cid), price.plan, price.report_type, price.item, price.period, price.amount, price.currency,
              config_version)).fetchone()
 
 
@@ -143,45 +155,104 @@ def fulfil(order_id, payment_id: str, cfg: dict) -> dict:
 
 def _grant(c, cid, plan: str, order: dict | None, cfg: dict, *, credits: int | None = None, days: int | None = None,
            actor=None, note: str | None = None) -> dict:
+    if plan in billing.TIERS:
+        return _grant_tier(c, cid, plan, order, cfg, days=days, actor=actor, note=note)
     now = _now()
     p = cfg["plans"].get(plan, {})
-    starts, expires, report_type, item = now, None, None, None
+    expires, report_type, item = None, None, None
     if plan == "print":
         credits, item = 0, order["item"]
         expires = now + timedelta(hours=p["hours"])
     elif plan == "per_report":
         credits, report_type = 1, order["report_type"]
-    elif plan in ("sub_30", "sub_50"):
-        credits = p["reports"] if credits is None else credits
-        days = p["duration_days"] if days is None else days
-        expires = now + timedelta(days=days)
-    elif plan == "byok":
-        credits = 0
-        days = p["fee_days"] if days is None else days
-        last = c.execute("""select max(expires_at) e from entitlements where clinician_id=%s and plan='byok'
-                              and status='active' and expires_at > %s""", (str(cid), now)).fetchone()["e"]
-        starts = max(now, last) if last else now      # a renewal never cuts short a paid period
-        expires = starts + timedelta(days=days)
+    elif plan == "scale_extra":
+        credits, report_type = 1, "guided"
     else:  # manual
         expires = now + timedelta(days=days) if days else None
+    return dict(_insert_ent(c, cid, plan, report_type, item, credits, now, expires, order, note, actor, None))
+
+
+def _insert_ent(c, cid, plan, report_type, item, credits, starts, expires, order, note, actor, period, parent=None):
     ent = c.execute(
         """insert into entitlements (clinician_id, plan, report_type, item, credits_total, starts_at, expires_at,
-                                      order_id, note, created_by)
-           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
+                                      order_id, note, created_by, period, parent_id)
+           values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
         (str(cid), plan, report_type, item, credits, starts, expires, str(order["id"]) if order else None, note,
-         str(actor) if actor else None)).fetchone()
+         str(actor) if actor else None, period, str(parent) if parent else None)).fetchone()
     if credits:
         c.execute("""insert into credit_ledger (clinician_id, entitlement_id, kind, amount, report_type, order_id,
                                                 actor_id, reason) values (%s,%s,'grant',%s,%s,%s,%s,%s)""",
                   (str(cid), str(ent["id"]), credits, report_type, str(order["id"]) if order else None,
                    str(actor) if actor else None, note))
-    if plan in ("sub_30", "sub_50") and cfg.get("rollover"):
-        # Unused credits of a running subscription stay usable until the new period ends.
-        c.execute("""update entitlements set expires_at=%s
-                     where clinician_id=%s and plan in ('sub_30','sub_50') and status='active' and id<>%s
-                       and expires_at > %s and credits_used + credits_reserved < credits_total""",
-                  (expires, str(cid), str(ent["id"]), now))
+    return ent
+
+
+def _grant_tier(c, cid, plan, order, cfg, *, days=None, actor=None, note=None) -> dict:
+    """A month or a year of a plan (or an admin's days). A renewal of the same plan starts when the
+    current period ends, so paying early never loses days. Scale also gets its monthly allowances."""
+    now = _now()
+    period = order["period"] if order else "admin"
+    days = days or (cfg[f"{period}_days"] if period in billing.PERIODS else cfg["month_days"])
+    last = c.execute("""select max(expires_at) e from entitlements where clinician_id=%s and plan=%s
+                          and status='active' and coalesce(period, '') not in ('allowance','trial')
+                          and expires_at > %s""", (str(cid), plan, now)).fetchone()["e"]
+    starts = max(now, last) if last else now
+    ent = _insert_ent(c, cid, plan, None, None, 0, starts, starts + timedelta(days=days), order, note, actor, period)
+    if plan == "scale":
+        n = billing.allowance_windows(days)
+        step = timedelta(days=days) / n
+        for i in range(n):
+            _insert_ent(c, cid, "scale", None, None, cfg["plans"]["scale"]["guided_per_month"], starts + step * i,
+                        starts + step * (i + 1), None, "Scale: AI-Guided reports for this month", actor,
+                        "allowance", parent=ent["id"])
     return dict(ent)
+
+
+def _cancel_children(c, cid, parent_id, actor, reason: str, order_id=None) -> None:
+    """A plan's monthly allowances end with it (refund or deactivation)."""
+    for e in c.execute("select * from entitlements where parent_id=%s and status='active' for update",
+                       (str(parent_id),)).fetchall():
+        c.execute("update entitlements set status='cancelled' where id=%s", (str(e["id"]),))
+        remaining = e["credits_total"] - e["credits_used"] - e["credits_reserved"]
+        if remaining > 0:
+            c.execute("""insert into credit_ledger (clinician_id, entitlement_id, kind, amount, order_id, actor_id,
+                           reason) values (%s,%s,'revoke',%s,%s,%s,%s)""",
+                      (str(cid), str(e["id"]), -remaining, str(order_id) if order_id else None,
+                       str(actor) if actor else None, reason))
+
+
+# --- what a clinician's plan unlocks --------------------------------------------------------
+def plan_features(cid, cfg: dict) -> dict:
+    """{"features": set, "plans": [running plan rows, latest end first]}. Gives Learn's free months the
+    first time a verified clinician is checked: once per account, never again after they end."""
+    try:
+        uuid.UUID(str(cid))
+    except ValueError:
+        return {"features": set(), "plans": []}
+    learn = cfg["plans"]["learn"]
+    with _conn() as c, c.transaction():
+        if learn["enabled"] and learn["trial_days"] > 0:
+            c.execute("""insert into entitlements (clinician_id, plan, credits_total, starts_at, expires_at, note, period)
+                         select id, 'learn', 0, now(), now() + make_interval(days => %s), 'Free months', 'trial'
+                         from clinicians where id=%s and verification_status='verified'
+                         on conflict (clinician_id) where period = 'trial' do nothing""",
+                      (learn["trial_days"], str(cid)))
+        rows = c.execute(f"""select * from entitlements where clinician_id=%s and plan in {_TIERS_SQL}
+                               and status='active' and coalesce(period, '') <> 'allowance'
+                               and starts_at <= now() and expires_at > now()
+                             order by expires_at desc""", (str(cid),)).fetchall()
+    feats: set[str] = set()
+    for r in rows:
+        feats.update(billing.FEATURES[r["plan"]])
+    return {"features": feats, "plans": [dict(r) for r in rows]}
+
+
+def scale_active(cid) -> bool:
+    """On Scale now (the plan's own row, not an allowance): may buy extra AI-Guided reports."""
+    with _conn() as c:
+        return c.execute("""select 1 from entitlements where clinician_id=%s and plan='scale' and status='active'
+                              and coalesce(period, '') <> 'allowance' and starts_at <= now() and expires_at > now()
+                            limit 1""", (str(cid),)).fetchone() is not None
 
 
 # --- webhook events ----------------------------------------------------------------------
@@ -250,9 +321,9 @@ def reserve(cid, report_type: str, request_key: str) -> str:
                where clinician_id=%s and status='active' and starts_at <= now()
                  and (expires_at is null or expires_at > now())
                  and credits_used + credits_reserved < credits_total
-                 and (plan in ('sub_30','sub_50','manual') or (plan='per_report' and report_type=%s))
+                 and (plan = any(%s) or (plan='per_report' and report_type=%s))
                order by expires_at nulls last, created_at limit 1 for update""",
-            (str(cid), report_type)).fetchone()
+            (str(cid), list(_PAYS[report_type]), report_type)).fetchone()
         if not ent:
             raise NoCredit()
         c.execute("update entitlements set credits_reserved = credits_reserved + 1 where id=%s", (str(ent["id"]),))
@@ -289,26 +360,6 @@ def was_charged(cid, request_key: str) -> bool:
                          (str(cid), request_key)).fetchone() is not None
 
 
-def byok_access(cid) -> bool:
-    with _conn() as c:
-        return c.execute("""select 1 from entitlements where clinician_id=%s and plan='byok' and status='active'
-                              and starts_at <= now() and expires_at > now() limit 1""", (str(cid),)).fetchone() is not None
-
-
-def has_subscription(cid) -> bool:
-    """A running subscription: a 30/50-report plan, the own-key plan or an admin grant that is not
-    cancelled, has started and has not ended (used-up credits still count). A single report or a
-    single print does not. A refund that revokes the plan ends it."""
-    try:
-        uuid.UUID(str(cid))
-    except ValueError:
-        return False
-    with _conn() as c:
-        return c.execute("""select 1 from entitlements where clinician_id=%s and status='active' and starts_at <= now()
-                              and plan in ('sub_30','sub_50','byok','manual')
-                              and (expires_at is null or expires_at > now()) limit 1""", (str(cid),)).fetchone() is not None
-
-
 def print_passes(cid) -> dict:
     """Pages this clinician bought a single print for, still running: {page slug: ends at}."""
     try:
@@ -329,7 +380,7 @@ def _state(e: dict, now: datetime) -> str:
         return "expired"
     if e["starts_at"] > now:
         return "scheduled"
-    if e["plan"] not in ("byok", "print") and e["credits_used"] + e["credits_reserved"] >= e["credits_total"]:
+    if _counts_credits(e) and e["credits_used"] + e["credits_reserved"] >= e["credits_total"]:
         return "exhausted"
     return "active"
 
@@ -351,12 +402,13 @@ def entitlements(cid, include_old: bool = True) -> list[dict]:
 
 
 def balance(cid) -> dict:
-    """Usable credits now: {"guided": n, "direct": n, "any": n} (any = subscription/admin credits)."""
-    ents = [e for e in entitlements(cid) if e["state"] == "active" and e["plan"] in CREDIT_PLANS]
-    anyc = sum(e["remaining"] for e in ents if e["plan"] != "per_report")
+    """Usable credits now: {"guided": n, "direct": n, "any": n} (any = admin credits, for either type)."""
+    ents = [e for e in entitlements(cid) if e["state"] == "active" and _counts_credits(e)]
+    anyc = sum(e["remaining"] for e in ents if e["plan"] in _PAYS["direct"])
     out = {"any": anyc}
     for t in billing.REPORT_TYPES:
-        out[t] = anyc + sum(e["remaining"] for e in ents if e["plan"] == "per_report" and e["report_type"] == t)
+        out[t] = sum(e["remaining"] for e in ents if e["plan"] in _PAYS[t]
+                     or (e["plan"] == "per_report" and e["report_type"] == t))
     return out
 
 
@@ -375,7 +427,8 @@ def orders(cid, limit: int = 100) -> list[dict]:
 
 # --- admin -----------------------------------------------------------------------------
 def admin_grant(cid, plan: str, admin_id, reason: str, cfg: dict, credits: int | None, days: int | None) -> dict:
-    """Manual activation (no payment): a subscription plan's allowance, or a "manual" credit grant."""
+    """Manual activation (no payment): a plan for some days (Scale with its monthly reports), or a
+    "manual" credit grant."""
     with _conn() as c, c.transaction():
         _lock(c, cid)
         ent = _grant(c, cid, plan, None, cfg, credits=credits, days=days, actor=admin_id, note=reason)
@@ -406,6 +459,10 @@ def admin_set_status(ent_id, active: bool, admin_id, reason: str) -> dict | None
             return None
         row = c.execute("update entitlements set status=%s where id=%s returning *",
                         ("active" if active else "cancelled", str(ent_id))).fetchone()
+        if active:
+            c.execute("update entitlements set status='active' where parent_id=%s", (str(ent_id),))
+        else:
+            _cancel_children(c, e["clinician_id"], ent_id, admin_id, reason)
         remaining = e["credits_total"] - e["credits_used"] - e["credits_reserved"]
         if not active and remaining > 0:
             c.execute("""insert into credit_ledger (clinician_id, entitlement_id, kind, amount, actor_id, reason)
@@ -430,8 +487,9 @@ def admin_adjust(cid, delta: int, admin_id, reason: str) -> None:
             left = -delta
             rows = c.execute(
                 """select id, credits_total - credits_used - credits_reserved r from entitlements
-                   where clinician_id=%s and status='active' and (expires_at is null or expires_at > now())
-                     and plan <> 'byok' and credits_used + credits_reserved < credits_total
+                   where clinician_id=%s and status='active' and starts_at <= now()
+                     and (expires_at is null or expires_at > now())
+                     and credits_used + credits_reserved < credits_total
                    order by expires_at nulls last, created_at for update""", (str(cid),)).fetchall()
             if sum(r["r"] for r in rows) < left:
                 raise NoCredit()
@@ -463,6 +521,7 @@ def record_refund(order_id, refund_id: str, amount: int, admin_id, revoke: bool,
                                    actor_id, reason) values (%s,%s,'revoke',%s,%s,%s,%s)""",
                               (str(o["clinician_id"]), str(e["id"]), -remaining, str(order_id), str(admin_id),
                                "refund"))
+                _cancel_children(c, o["clinician_id"], e["id"], admin_id, "refund", order_id)
         _audit(c, admin_id, "billing_refund", o["clinician_id"],
                {"order": str(order_id), "amount": amount, "refund": refund_id, "revoke": revoke, "reason": reason})
 
@@ -494,11 +553,12 @@ def admin_users(plan: str | None, state: str | None, q: str | None, pay: str | N
         rows = c.execute(
             """select c.id, c.full_name, u.email, c.level, c.verification_status,
                  (select row_to_json(e) from (select id, plan, status, credits_total, credits_used, credits_reserved,
-                    starts_at, expires_at, created_at from entitlements where clinician_id=c.id and plan not in ('per_report','print')
+                    starts_at, expires_at, created_at, period from entitlements where clinician_id=c.id
+                    and plan not in ('per_report','print','scale_extra') and coalesce(period, '') <> 'allowance'
                     order by created_at desc limit 1) e) as latest,
                  (select coalesce(sum(credits_total - credits_used - credits_reserved), 0) from entitlements
                     where clinician_id=c.id and status='active' and starts_at <= now()
-                      and (expires_at is null or expires_at > now()) and plan <> 'byok') as remaining,
+                      and (expires_at is null or expires_at > now())) as remaining,
                  (select count(*) from credit_ledger where clinician_id=c.id and kind='consume') as reports_charged,
                  (select row_to_json(o) from (select id, plan, status, amount, currency, provider_order_id,
                     provider_payment_id, created_at, paid_at, refund_status from billing_orders
