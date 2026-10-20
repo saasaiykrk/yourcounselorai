@@ -225,6 +225,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   Future<void> _send() async {
     final email = _email.text.trim();
+    // The store reviewer can't receive emails: no code is sent; they type their fixed code instead.
+    if (AppConfig.isReviewEmail(email)) {
+      context.push('/code', extra: email);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -330,6 +335,7 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
     final email = widget.email;
     if (email == null) return;
     _startCountdown();
+    if (AppConfig.isReviewEmail(email)) return; // nothing is emailed to the reviewer
     try {
       await ref.read(authServiceProvider).requestCode(email);
     } catch (e) {
@@ -348,7 +354,12 @@ class _CodeScreenState extends ConsumerState<CodeScreen> {
       _error = null;
     });
     try {
-      await ref.read(authServiceProvider).verifyCode(email, _code.text);
+      final auth = ref.read(authServiceProvider);
+      if (AppConfig.isReviewEmail(email)) {
+        await auth.signInWithReviewCode(email, _code.text);
+      } else {
+        await auth.verifyCode(email, _code.text);
+      }
       ref.invalidate(meProvider);
       final me = await ref.read(profileRepositoryProvider).me();
       if (mounted) context.go(routeForProfile(me));
