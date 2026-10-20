@@ -60,6 +60,10 @@
         <input id="first_name" name="first_name" autocomplete="given-name" maxlength="40" required>
         <label for="email">Email</label>
         <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+        <div id="tag-block" hidden>
+          <p class="label" id="tag-label">Type of session <span class="muted">(optional)</span></p>
+          <div class="tags" id="tags" role="radiogroup" aria-labelledby="tag-label"></div>
+        </div>
         <div class="hp" aria-hidden="true">
           <label for="website">Leave this empty</label>
           <input id="website" name="website" tabindex="-1" autocomplete="off">
@@ -93,6 +97,7 @@
       <h1>Your appointment</h1>
       <p class="pill" id="m-status"></p>
       <p class="when" id="m-when"></p>
+      <p class="pill tag" id="m-tag" hidden></p>
       <p class="muted" id="m-with"></p>
       <p class="error" id="m-error" role="alert"></p>
       <button class="btn danger" id="m-cancel" type="button" hidden>Cancel appointment</button>

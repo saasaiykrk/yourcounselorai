@@ -47,7 +47,21 @@
   const tzName = (tz) => tz.replace(/_/g, " ");
 
   // --- booking ---------------------------------------------------------------------------------
-  const state = { slug: "", profile: null, today: "", first: "", last: "", days: {}, day: "", slot: "" };
+  const state = { slug: "", profile: null, today: "", first: "", last: "", days: {}, day: "", slot: "", tag: null };
+
+  // First Session · Follow-up · Online: one, or none (tap again to clear).
+  function renderTags() {
+    const tags = (state.profile && state.profile.tags) || [];
+    $("tag-block").hidden = !tags.length;
+    $("tags").replaceChildren(...tags.map((t) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "tag-btn"; b.textContent = t.label;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", String(state.tag === t.id));
+      b.addEventListener("click", () => { state.tag = state.tag === t.id ? null : t.id; renderTags(); });
+      return b;
+    }));
+  }
 
   async function startBooking(slug) {
     state.slug = slug;
@@ -137,6 +151,7 @@
     $("form-error").textContent = "";
     $("step-details").hidden = false;
     $("step-time").hidden = true;
+    renderTags();
     $("first_name").focus();
   }
 
@@ -155,7 +170,8 @@
     $("submit").disabled = true; $("submit").textContent = "Booking…";
     try {
       const r = await api(`/v1/public/booking/${encodeURIComponent(state.slug)}`, { method: "POST", body: JSON.stringify({
-        starts_at: state.slot, first_name: first, email, consent: true, website: $("website").value }) });
+        starts_at: state.slot, first_name: first, email, consent: true, website: $("website").value,
+        tag: state.tag }) });
       done(r);
     } catch (e) {
       err(e.message);
@@ -175,7 +191,8 @@
     $("done-badge").textContent = pending ? "…" : "✓";
     $("done-badge").className = "badge" + (pending ? " pending" : "");
     $("done-title").textContent = pending ? "Request sent" : "You're booked";
-    $("done-when").textContent = `${when(r.starts_at, r.timezone)} (${tzName(r.timezone)})`;
+    $("done-when").textContent = `${when(r.starts_at, r.timezone)} (${tzName(r.timezone)})`
+      + (r.tag_label ? ` · ${r.tag_label}` : "");
     $("done-text").textContent = (pending
       ? `${r.display_name} will confirm your request. Until then this time is held for you.`
       : `Your appointment with ${r.display_name} is confirmed.`)
@@ -209,6 +226,8 @@
     $("m-status").className = "pill " + a.status;
     $("m-when").textContent = `${when(a.starts_at, a.timezone)} (${tzName(a.timezone)})`;
     $("m-with").textContent = `with ${a.display_name}`;
+    $("m-tag").hidden = !a.tag_label;
+    $("m-tag").textContent = a.tag_label || "";
     $("m-cancel").hidden = !a.can_cancel;
     $("m-confirm").hidden = true;
     $("m-rebook").hidden = !(a.slug && !a.can_cancel);

@@ -216,6 +216,41 @@ void main() {
       expect(find.textContaining('Requests waiting for you (1)'), findsOneWidget);
     });
 
+    testWidgets('tags show on the list, and the consultant changes or clears one', (tester) async {
+      final repo = await _pump(tester);
+      expect(find.text('First Session · Booked by the client'), findsOneWidget);
+      await tester.tap(find.text('Meera'));
+      await tester.pumpAndSettle();
+      expect(find.text('Type of session'), findsOneWidget);
+      expect(tester.widget<ChoiceChip>(find.byKey(const ValueKey('tag-first_session'))).selected, isTrue);
+      await tester.tap(find.byKey(const ValueKey('tag-follow_up')));
+      await tester.pumpAndSettle();
+      Future<String?> meera() async =>
+          (await repo.appointments(DateTime(2000), DateTime(2100))).firstWhere((a) => a.clientName == 'Meera').tag;
+      expect(await meera(), 'follow_up', reason: 'one tag: the new one replaces the old');
+      await tester.tap(find.byKey(const ValueKey('tag-follow_up')));
+      await tester.pumpAndSettle();
+      expect(await meera(), isNull, reason: 'tapping the chosen tag again clears it');
+      Navigator.of(tester.element(find.text('Type of session'))).pop();
+      await tester.pumpAndSettle();
+      expect(find.text('Booked by the client'), findsWidgets, reason: 'the list reloads after a tag change');
+    });
+
+    test('a tag moves with a reschedule and parses from the server', () async {
+      final repo = PreviewCalendarRepository();
+      final all = await repo.appointments(DateTime(2000), DateTime(2100));
+      final kavya = all.firstWhere((a) => a.clientName == 'Kavya');
+      final moved = await repo.reschedule(
+        kavya.id,
+        start: kavya.start.add(const Duration(hours: 3)),
+        outsideHours: true,
+      );
+      expect(moved.tag, 'follow_up');
+      final a = Appointment.fromJson({..._appt, 'tag': 'online'});
+      expect((a.tag, a.tagLabel), ('online', 'Online'));
+      expect(Appointment.fromJson(_appt).tagLabel, isNull);
+    });
+
     testWidgets('rescheduling moves an appointment and leaves exactly one active', (tester) async {
       final repo = await _pump(tester);
       await tester.tap(find.text('Week'));
@@ -304,6 +339,7 @@ void main() {
       testWidgets('fits on a ${width.toInt()}px phone in every view', (tester) async {
         await _pump(tester, size: Size(width, 700));
         for (final v in ['Week', 'Month', 'Day']) {
+          await _reach(tester, find.text(v));
           await tester.tap(find.text(v));
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);

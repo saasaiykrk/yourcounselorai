@@ -157,7 +157,7 @@ def free_slots(cid, settings: dict, first_day: date, days: int, honour_notice: b
 # --- appointments --------------------------------------------------------------------------------
 def book(cid, settings: dict, starts_at: datetime, *, source: str, sealer, details: dict | None,
          email_hash: str | None, manage_hash: str | None, status: str, appointment_id: str,
-         check_hours: bool = True) -> dict:
+         check_hours: bool = True, tag: str | None = None) -> dict:
     """Create one appointment, or raise SlotTaken / TooMany. Availability is re-checked inside the
     consultant's lock; the exclusion constraint is the last line of defence."""
     slot = timedelta(minutes=settings["slot_minutes"])
@@ -185,10 +185,11 @@ def book(cid, settings: dict, starts_at: datetime, *, source: str, sealer, detai
             pending_until = min(_now() + timedelta(hours=booking.PENDING_HOURS), starts_at) if status == "pending" else None
             row = c.execute(
                 """insert into appointments (id, clinician_id, starts_at, ends_at, blocked_until, status, source,
-                     client_ct, client_nonce, client_key_ver, email_hash, manage_hash, consent_at, pending_until)
-                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
+                     client_ct, client_nonce, client_key_ver, email_hash, manage_hash, consent_at, pending_until, tag)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
                 (appointment_id, str(cid), starts_at, starts_at + slot, starts_at + slot + buf, status, source,
-                 ct, nonce, ver, email_hash, manage_hash, _now() if source == "public" else None, pending_until)).fetchone()
+                 ct, nonce, ver, email_hash, manage_hash, _now() if source == "public" else None, pending_until,
+                 tag)).fetchone()
             _notify_new(c, row)
             return row
     except psycopg.errors.ExclusionViolation:
@@ -242,6 +243,16 @@ _MOVES = {
     "cancel": ({"pending", "confirmed"}, "cancelled"),
     "complete": ({"confirmed"}, "completed"),
 }
+
+
+def set_tag(appt_id, cid, tag: str | None) -> dict:
+    """The consultant sets or clears an appointment's tag. LookupError if it isn't theirs."""
+    with _conn() as c:
+        row = c.execute("update appointments set tag=%s where id=%s and clinician_id=%s returning *",
+                        (tag, str(appt_id), str(cid))).fetchone()
+    if not row:
+        raise LookupError("not found")
+    return row
 
 
 def transition(appt_id, cid, action: str, by: str = "consultant") -> dict:
@@ -302,10 +313,10 @@ def reschedule(appt_id, cid, settings: dict, new_start: datetime, new_id: str, s
                       "updated_at=now() where id=%s", (str(appt_id),))
             new = c.execute(
                 """insert into appointments (id, clinician_id, starts_at, ends_at, blocked_until, status, source,
-                     client_ct, client_nonce, client_key_ver, email_hash, manage_hash, consent_at, rescheduled_from)
-                   values (%s,%s,%s,%s,%s,'confirmed',%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
+                     client_ct, client_nonce, client_key_ver, email_hash, manage_hash, consent_at, rescheduled_from, tag)
+                   values (%s,%s,%s,%s,%s,'confirmed',%s,%s,%s,%s,%s,%s,%s,%s,%s) returning *""",
                 (new_id, str(cid), new_start, new_start + slot, new_start + slot + buf, old["source"], ct, nonce, ver,
-                 old["email_hash"], old["manage_hash"], old["consent_at"], str(appt_id))).fetchone()
+                 old["email_hash"], old["manage_hash"], old["consent_at"], str(appt_id), old.get("tag"))).fetchone()
             c.execute("update appointments set rescheduled_to=%s where id=%s", (new_id, str(appt_id)))
             c.execute("update booking_notifications set status='failed' where appointment_id=%s and kind='reminder' "
                       "and status='pending'", (str(appt_id),))
@@ -343,7 +354,7 @@ def due_notifications(limit: int = 50) -> list[dict]:
     with _conn() as c:
         return c.execute(
             """select n.id, n.kind, n.recipient, n.attempts, a.id as appointment_id, a.clinician_id, a.starts_at,
-                      a.ends_at, a.status, a.client_ct, a.client_nonce, s.display_name, s.timezone, s.slug, u.email as clinician_email
+                      a.ends_at, a.status, a.tag, a.client_ct, a.client_nonce, s.display_name, s.timezone, s.slug, u.email as clinician_email
                from booking_notifications n join appointments a on a.id = n.appointment_id
                join booking_settings s on s.clinician_id = a.clinician_id
                left join auth.users u on u.id = a.clinician_id

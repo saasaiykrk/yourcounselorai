@@ -266,6 +266,9 @@ enum AppointmentStatus {
   bool get active => this == pending || this == confirmed;
 }
 
+/// What kind of session an appointment is: one tag, or none (the server's booking.TAGS).
+const kAppointmentTags = {'first_session': 'First Session', 'follow_up': 'Follow-up', 'online': 'Online'};
+
 class Appointment {
   const Appointment({
     required this.id,
@@ -279,6 +282,7 @@ class Appointment {
     this.cancelledBy,
     this.rescheduledFrom,
     this.rescheduledTo,
+    this.tag,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) {
@@ -295,6 +299,7 @@ class Appointment {
       cancelledBy: j['cancelled_by'] as String?,
       rescheduledFrom: j['rescheduled_from'] as String?,
       rescheduledTo: j['rescheduled_to'] as String?,
+      tag: j['tag'] as String?,
     );
   }
 
@@ -314,9 +319,14 @@ class Appointment {
   final String? rescheduledFrom;
   final String? rescheduledTo;
 
+  /// first_session · follow_up · online, or null.
+  final String? tag;
+
+  String? get tagLabel => kAppointmentTags[tag];
+
   String get title => clientName ?? (source == 'consultant' ? 'Appointment' : 'Client');
 
-  Appointment copyWith({AppointmentStatus? status, String? cancelledBy}) => Appointment(
+  Appointment copyWith({AppointmentStatus? status, String? cancelledBy, Object? tag = _keep}) => Appointment(
     id: id,
     start: start,
     end: end,
@@ -327,8 +337,11 @@ class Appointment {
     cancelledBy: cancelledBy ?? this.cancelledBy,
     rescheduledFrom: rescheduledFrom,
     rescheduledTo: rescheduledTo,
+    tag: identical(tag, _keep) ? this.tag : tag as String?,
   );
 }
+
+const _keep = Object();
 
 /// A free time: the instant to send back (UTC) and its wall time to show.
 class FreeSlot {
