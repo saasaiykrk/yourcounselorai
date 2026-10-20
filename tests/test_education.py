@@ -130,8 +130,9 @@ class ServiceTests(unittest.TestCase):
 
         def broken(u):
             raise RuntimeError("database down")
-        self.assertEqual(svc(broken).print_access("sub"), A(), "an error never unlocks printing")
-        self.assertEqual(svc(lambda u: True).print_access("sub"), A(), "only a PrintAccess counts")
+        self.assertEqual(svc(broken).print_access("sub"), A(library=False),
+                         "an error never unlocks printing, nor the library")
+        self.assertEqual(svc(lambda u: True).print_access("sub"), A(library=False), "only a PrintAccess counts")
 
 
 class SignerTests(unittest.TestCase):
