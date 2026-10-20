@@ -729,6 +729,11 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
               : const Text('Check status'),
         ),
         TextButton(onPressed: _signOut, child: const Text('Sign out')),
+        TextButton(
+          onPressed: () => context.push('/account/delete'),
+          style: TextButton.styleFrom(foregroundColor: AppColors.muted),
+          child: const Text('Delete account'),
+        ),
       ],
       children: [
         StepList(

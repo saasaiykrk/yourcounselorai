@@ -389,6 +389,21 @@ keeps working, so apps already installed are not affected.
 Sign-in needs no change: the app and the admin panel sign in with a 6-digit code (no email links), and the admin
 panel calls the server on its own address.
 
+## Account deletion (Account → Delete account): run migration 011
+
+1. **Database (before deploying this release):** Supabase → SQL Editor → run
+   `db/migrations/011_account_deletion.sql` (safe to run again). Without it, deleting an account fails.
+2. **What deleting does:** the sign-in and email (Supabase Auth user), name, gender, age, registration number,
+   level, the clinician's own AI key, and their booking page, hours, time off and appointments are deleted.
+   Consults leave the history; the de-identified copy stays for the 12-month safety-review period. Payment
+   records stay (tax law). Running plans are cancelled. The registration shows as **deleted** in /admin.
+3. **Admins can't delete themselves** from the app: another admin removes admin access first.
+4. **Web link for Google Play:** `https://<server>/delete-account` (for example
+   `https://app.yourcounselor.in/delete-account`) explains the steps and gives the email for anyone who can't
+   open the app. For an emailed request, ask the person to use the app if they still can. If they can't, delete
+   the user in Supabase → Authentication → Users (this removes the sign-in and email); the rest of their details
+   then need clearing by hand in the SQL Editor, the same steps `delete_account` in `app/db.py` runs.
+
 ## Changing settings or secrets
 
 Deploys keep the service's existing environment variables and Secret Manager mounts. To change them, run
