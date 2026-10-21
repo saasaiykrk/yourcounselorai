@@ -1,4 +1,4 @@
-// Public booking page: /book/<link name> to book, /book/manage/<token> to see or cancel.
+// Public booking page: /<link name> (or the older /book/<link name>) to book, /book/manage/<token> to see or cancel.
 // No third-party code, no cookies, no storage. Everything shown is set with textContent.
 "use strict";
 (function () {
@@ -79,6 +79,25 @@
     $("role").textContent = p.role;
     $("bio").textContent = p.bio || "";
     $("bio").hidden = !p.bio;
+    // The consultant's own public details (photo, address, mobile, links). Text only; links are https.
+    if (p.photo) {
+      $("photo").src = p.photo; $("photo").alt = p.display_name; $("photo").hidden = false; $("avatar").hidden = true;
+    }
+    $("c-address").hidden = !p.address;
+    $("address").textContent = p.address || "";
+    if (p.address) $("map").href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.address);
+    $("c-phone").hidden = !p.phone;
+    $("phone").textContent = p.phone || "";
+    if (p.phone) $("phone").href = "tel:" + p.phone.replace(/[^+0-9]/g, "");
+    const links = (p.links || []).filter((u) => /^https:\/\//.test(u));
+    $("links").replaceChildren(...links.map((u) => {
+      const a = document.createElement("a");
+      a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = u.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, "");
+      return a;
+    }));
+    $("c-links").hidden = !links.length;
+    $("contact").hidden = !(p.address || p.phone || links.length);
     $("length").textContent = `${p.slot_minutes}-minute appointment`;
     $("tz").textContent = `Times in ${tzName(p.timezone)}`;
     $("tz-note").textContent = browserTz && browserTz !== p.timezone
@@ -231,7 +250,7 @@
     $("m-cancel").hidden = !a.can_cancel;
     $("m-confirm").hidden = true;
     $("m-rebook").hidden = !(a.slug && !a.can_cancel);
-    if (a.slug) $("m-rebook").href = `/book/${a.slug}`;
+    if (a.slug) $("m-rebook").href = `/${a.slug}`;
     show("manage");
     $("m-cancel").onclick = () => { $("m-cancel").hidden = true; $("m-confirm").hidden = false; };
     $("m-keep").onclick = () => { $("m-cancel").hidden = false; $("m-confirm").hidden = true; };
@@ -256,6 +275,7 @@
     $("copy").addEventListener("click", copyLink);
     if (parts[0] === "book" && parts[1] === "manage" && parts[2]) startManage(parts[2]);
     else if (parts[0] === "book" && parts[1]) startBooking(parts[1]);
+    else if (parts.length === 1 && parts[0] !== "book") startBooking(parts[0]);
     else show("missing");
   });
 })();

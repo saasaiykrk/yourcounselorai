@@ -29,11 +29,18 @@
     <section id="book" hidden>
       <div class="card profile">
         <div class="avatar" id="avatar" aria-hidden="true"></div>
+        <img class="avatar photo" id="photo" alt="" width="64" height="64" hidden>
         <div>
           <h1 id="name"></h1>
           <p class="tag" id="role"></p>
           <p class="bio" id="bio"></p>
           <p class="facts"><span id="length"></span> · <span id="tz"></span></p>
+          <ul class="contact" id="contact" hidden>
+            <li id="c-address" hidden><span class="k">Address</span><span id="address"></span>
+              <a id="map" target="_blank" rel="noopener noreferrer">Open in Maps</a></li>
+            <li id="c-phone" hidden><span class="k">Mobile</span><a id="phone"></a></li>
+            <li id="c-links" hidden><span class="k">Links</span><span id="links"></span></li>
+          </ul>
         </div>
       </div>
 

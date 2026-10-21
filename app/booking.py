@@ -30,7 +30,11 @@ PENDING_HOURS = 24                      # an unanswered request frees its slot a
 MAX_WINDOWS_PER_DAY = 4
 MAX_ACTIVE_PER_EMAIL = 2                # future pending/confirmed bookings one email may hold per consultant
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$")
-RESERVED_SLUGS = {"admin", "api", "book", "manage", "assets", "health", "healthz", "v1", "dev", "static", "help"}
+# Booking pages live at the top level (/<link name>), so a link name can't be one of the server's own paths
+# or a name a page may need later.
+RESERVED_SLUGS = {"admin", "api", "book", "manage", "assets", "health", "healthz", "v1", "dev", "static", "help",
+                  "learn", "delete-account", "docs", "redoc", "openapi", "privacy", "terms", "status", "app", "www",
+                  "login", "signin", "about", "contact", "support", "pricing", "plans", "favicon", "robots"}
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}$")
 NAME_RE = re.compile(r"^[^\d<>@{}\[\]\\/|=+*#$%^&_~`\"]{1,40}$")
 # What kind of session an appointment is: one tag, or none. The client picks it on the booking page;
@@ -39,7 +43,37 @@ TAGS = {"first_session": "First Session", "follow_up": "Follow-up", "online": "O
 WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
 DEFAULT_SETTINGS = {"enabled": False, "bio": "", "timezone": "Asia/Kolkata", "slot_minutes": 30,
-                    "buffer_minutes": 0, "min_notice_minutes": 240, "max_advance_days": 30, "approval": "manual"}
+                    "buffer_minutes": 0, "min_notice_minutes": 240, "max_advance_days": 30, "approval": "manual",
+                    "address": "", "phone": "", "links": []}
+MAX_LINKS = 5
+PHONE_RE = re.compile(r"^\+?[0-9][0-9 ()-]{5,18}[0-9]$")
+PHOTO_MAX_BYTES = 400 * 1024
+
+
+def photo_type(data: bytes) -> str | None:
+    """The image type from the file's own first bytes (never from what the upload claims), or None."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+def _link(raw) -> str | None:
+    """A web link the page can show safely: https only (http and bare names become https), no spaces."""
+    from urllib.parse import urlsplit
+    v = str(raw or "").strip()
+    if not v:
+        return None
+    if "://" not in v:
+        v = "https://" + v
+    u = urlsplit(v)
+    if u.scheme not in ("http", "https") or not u.hostname or "." not in u.hostname or " " in v or len(v) > 200 \
+            or u.username or u.password:
+        raise BookingError(f"links: '{str(raw)[:60]}' is not a web address like instagram.com/yourname")
+    return "https://" + v.split("://", 1)[1]
 
 
 class BookingError(ValueError):
@@ -77,6 +111,27 @@ def validate_settings(s: dict) -> dict:
         problems.append("bio: at most 500 characters")
     if not isinstance(out["enabled"], bool):
         problems.append("enabled: true or false")
+    out["address"] = re.sub(r"[ \t]+", " ", str(out.get("address") or "")).strip()
+    if len(out["address"]) > 300 or out["address"].count("\n") > 5:
+        problems.append("address: at most 300 characters and 6 lines")
+    phone = re.sub(r"\s+", " ", str(out.get("phone") or "")).strip()
+    if phone and (not PHONE_RE.match(phone) or not 7 <= sum(ch.isdigit() for ch in phone) <= 15):
+        problems.append("phone: a phone number like +91 98765 43210")
+    out["phone"] = phone
+    links = out.get("links") or []
+    if not isinstance(links, list) or len(links) > MAX_LINKS:
+        problems.append(f"links: at most {MAX_LINKS}")
+        links = []
+    clean = []
+    for raw in links:
+        try:
+            v = _link(raw)
+        except BookingError as e:
+            problems += e.problems
+            continue
+        if v and v not in clean:
+            clean.append(v)
+    out["links"] = clean
     try:
         zone(str(out["timezone"]))
     except BookingError as e:

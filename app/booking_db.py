@@ -59,16 +59,35 @@ def public_settings(slug: str) -> dict | None:
 
 
 def save_settings(cid, s: dict) -> dict:
+    from psycopg.types.json import Jsonb
     cols = ("slug", "enabled", "display_name", "bio", "timezone", "slot_minutes", "buffer_minutes",
-            "min_notice_minutes", "max_advance_days", "approval")
+            "min_notice_minutes", "max_advance_days", "approval", "address", "phone", "links")
+    vals = [Jsonb(s[k]) if k == "links" else s[k] for k in cols]
     try:
         with _conn() as c:
             return c.execute(
                 f"""insert into booking_settings (clinician_id, {', '.join(cols)}) values (%s, {', '.join(['%s'] * len(cols))})
                     on conflict (clinician_id) do update set {', '.join(f'{k}=excluded.{k}' for k in cols)}, updated_at=now()
-                    returning *""", (str(cid), *[s[k] for k in cols])).fetchone()
+                    returning *""", (str(cid), *vals)).fetchone()
     except psycopg.errors.UniqueViolation:
         raise SlugTaken()
+
+
+def set_photo(cid, data: bytes | None, mime: str | None) -> int | None:
+    """The consultant's booking-page photo (None removes it). Returns its new version, or None if they
+    have no booking settings yet."""
+    with _conn() as c:
+        row = c.execute("""update booking_settings set photo=%s, photo_type=%s, photo_version=photo_version+1,
+                             updated_at=now() where clinician_id=%s returning photo_version""",
+                        (data, mime, str(cid))).fetchone()
+    return row["photo_version"] if row else None
+
+
+def photo(cid) -> tuple[bytes, str] | None:
+    with _conn() as c:
+        row = c.execute("select photo, photo_type from booking_settings where clinician_id=%s and photo is not null",
+                        (str(cid),)).fetchone()
+    return (bytes(row["photo"]), row["photo_type"]) if row else None
 
 
 def slug_free(slug: str, cid) -> bool:
