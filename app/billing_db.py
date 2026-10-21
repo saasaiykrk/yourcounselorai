@@ -221,6 +221,78 @@ def _cancel_children(c, cid, parent_id, actor, reason: str, order_id=None) -> No
                        str(actor) if actor else None, reason))
 
 
+# --- plans bought outside the app (funnels) ----------------------------------------------
+def record_external(e: dict) -> tuple[dict, bool]:
+    """Stores one purchase event. Returns (row, new); a repeated event_id returns the stored row, unchanged."""
+    with _conn() as c:
+        row = c.execute(
+            """insert into external_purchases (event_id, source, email, plan, period, report_type, amount, currency,
+                                               payment_ref)
+               values (%(event_id)s, %(source)s, %(email)s, %(plan)s, %(period)s, %(report_type)s, %(amount)s,
+                       %(currency)s, %(payment_ref)s)
+               on conflict (event_id) do nothing returning *""", e).fetchone()
+        if row:
+            return dict(row), True
+        return dict(c.execute("select * from external_purchases where event_id=%s", (e["event_id"],)).fetchone()), False
+
+
+def _apply_external(c, cid, cfg: dict) -> int:
+    """Grants every waiting purchase for this clinician's sign-in email (inside the caller's transaction,
+    under the clinician's lock). Each becomes a paid order (provider 'external') and its plan or credit."""
+    rows = c.execute("""select p.* from external_purchases p join auth.users u on lower(u.email) = lower(p.email)
+                        where u.id=%s and p.status='pending' order by p.id for update of p""", (str(cid),)).fetchall()
+    for p in rows:
+        order = c.execute(
+            f"""insert into billing_orders as o (clinician_id, plan, report_type, period, amount, currency, config_version,
+                                                 provider, provider_order_id, provider_payment_id, status, paid_at)
+                values (%s,%s,%s,%s,%s,%s,0,'external',%s,%s,'paid',now()) returning {_ORDER_COLS}""",
+            (str(cid), p["plan"], p["report_type"], p["period"], p["amount"], p["currency"], "ext:" + p["event_id"],
+             ("ext:" + p["payment_ref"]) if p["payment_ref"] else None)).fetchone()
+        _grant(c, cid, p["plan"], dict(order), cfg, note=f"Bought outside the app ({p['source'] or 'funnel'})")
+        c.execute("""update external_purchases set status='applied', clinician_id=%s, order_id=%s, applied_at=now()
+                     where id=%s""", (str(cid), str(order["id"]), p["id"]))
+    return len(rows)
+
+
+def apply_external_for_email(email: str, cfg: dict) -> str | None:
+    """If an account with this email exists (and has registered), applies its waiting purchases now.
+    Returns the clinician id, or None (the purchase waits for them to sign up)."""
+    with _conn() as c, c.transaction():
+        row = c.execute("""select c.id from auth.users u join clinicians c on c.id = u.id
+                           where lower(u.email) = lower(%s) limit 1""", (email,)).fetchone()
+        if not row:
+            return None
+        _lock(c, row["id"])
+        _apply_external(c, row["id"], cfg)
+        return str(row["id"])
+
+
+def get_external(event_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute("select * from external_purchases where event_id=%s", (event_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def external_purchases(status: str | None = None, limit: int = 300) -> list[dict]:
+    with _conn() as c:
+        return c.execute("""select p.*, c.full_name from external_purchases p left join clinicians c on c.id = p.clinician_id
+                            where (%(s)s::text is null or p.status = %(s)s) order by p.id desc limit %(n)s""",
+                         {"s": status, "n": limit}).fetchall()
+
+
+def cancel_external(pid: int, admin_id, reason: str) -> bool:
+    """An admin cancels a purchase that is still waiting (e.g. refunded in the funnel). Applied ones are
+    handled like any plan: Subscriptions & Users → Deactivate."""
+    with _conn() as c, c.transaction():
+        row = c.execute("""update external_purchases set status='cancelled', note=%s where id=%s and status='pending'
+                           returning id""", (reason[:300], pid)).fetchone()
+        if row:
+            c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
+                         values (%s,'external_purchase_cancel',null,%s)""",
+                      (str(admin_id), json.dumps({"purchase": pid, "reason": reason})))
+        return row is not None
+
+
 # --- what a clinician's plan unlocks --------------------------------------------------------
 def plan_features(cid, cfg: dict) -> dict:
     """{"features": set, "plans": [running plan rows, latest end first]}. Gives Learn's free months the
@@ -230,6 +302,13 @@ def plan_features(cid, cfg: dict) -> dict:
     except ValueError:
         return {"features": set(), "plans": []}
     learn = cfg["plans"]["learn"]
+    with _conn() as c, c.transaction():
+        # Bought in a funnel before signing up: it starts now. Its own transaction, so the check below (whose
+        # now() is its own start) sees the new plan as already started.
+        if c.execute("""select 1 from external_purchases p join auth.users u on lower(u.email) = lower(p.email)
+                        where u.id=%s and p.status='pending' limit 1""", (str(cid),)).fetchone():
+            _lock(c, cid)
+            _apply_external(c, cid, cfg)
     with _conn() as c, c.transaction():
         if learn["enabled"] and learn["trial_days"] > 0:
             c.execute("""insert into entitlements (clinician_id, plan, credits_total, starts_at, expires_at, note, period)

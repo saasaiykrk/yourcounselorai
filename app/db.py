@@ -54,6 +54,9 @@ def delete_account(cid) -> str:
                       (str(cid),))
             c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
                          values (%s, 'account_deleted', %s, '{}'::jsonb)""", (str(cid), str(cid)))
+        # Funnel purchases keep their payment record, without the email.
+        c.execute("""update external_purchases set email='' where clinician_id=%s
+                       or lower(email) = (select lower(email) from auth.users where id=%s)""", (str(cid), str(cid)))
         c.execute("delete from auth.users where id=%s", (str(cid),))
     return "deleted"
 

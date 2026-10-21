@@ -268,6 +268,10 @@
         <div class="stats" id="pay-stats"></div>
         <section class="panel"><div class="panel-head"><h2>By plan</h2></div><div id="pay-by-plan"></div></section>
         <section class="panel"><div class="panel-head"><h2>Transactions</h2></div><div id="pay-list"></div></section>
+        <section class="panel"><div class="panel-head"><h2>From funnels (webhook)</h2></div>
+          <p class="muted small">Plans bought outside the app and reported to <span class="mono">/v1/webhooks/purchase</span>.
+            A sale for an email with no account waits here and starts when that person signs up.</p>
+          <div id="ext-list"></div></section>
         <section class="panel"><div class="panel-head"><h2>Own API key use (last 30 days)</h2></div>
           <p class="muted small">Counts only. Clinicians' keys are never shown here.</p><div id="byok-usage"></div></section>
       </section>
