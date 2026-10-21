@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../api/api_client.dart';
 import '../api/api_exceptions.dart';
 import '../api/calendar_models.dart';
@@ -7,6 +9,11 @@ abstract interface class CalendarRepository {
   Future<CalendarHome> home();
 
   Future<void> saveSettings(BookingSettings settings);
+
+  /// The booking page's photo: null removes it.
+  Future<void> setPhoto(Uint8List? image);
+
+  Future<Uint8List?> photo();
 
   Future<void> saveAvailability(List<WorkWindow> windows);
 
@@ -43,6 +50,12 @@ class ApiCalendarRepository implements CalendarRepository {
 
   @override
   Future<void> saveSettings(BookingSettings settings) => _api.saveCalendarSettings(settings);
+
+  @override
+  Future<void> setPhoto(Uint8List? image) => image == null ? _api.removeBookingPhoto() : _api.uploadBookingPhoto(image);
+
+  @override
+  Future<Uint8List?> photo() => _api.bookingPhoto();
 
   @override
   Future<void> saveAvailability(List<WorkWindow> windows) => _api.saveAvailability(windows);
@@ -164,6 +177,14 @@ class PreviewCalendarRepository implements CalendarRepository {
     _settings = settings;
     _configured = true;
   }
+
+  Uint8List? _photo;
+
+  @override
+  Future<void> setPhoto(Uint8List? image) async => _photo = image;
+
+  @override
+  Future<Uint8List?> photo() async => _photo;
 
   @override
   Future<void> saveAvailability(List<WorkWindow> windows) async => _windows = List.of(windows);

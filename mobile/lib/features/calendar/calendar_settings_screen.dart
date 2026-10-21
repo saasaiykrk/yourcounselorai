@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/calendar_models.dart';
 import '../../core/config.dart';
@@ -17,6 +20,22 @@ String _minutesLabel(int m) => m == 0
     ? '${m ~/ 1440} day${m == 1440 ? '' : 's'}'
     : '${m ~/ 60} hour${m == 60 ? '' : 's'}';
 
+/// Picks a photo for the booking page, already made small on the phone (at most 600 px, JPEG): its bytes,
+/// or null if the clinician closed the picker. Tests replace it.
+final bookingPhotoPickerProvider = Provider<Future<Uint8List?> Function()>(
+  (ref) => () async {
+    final f = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 600,
+      maxHeight: 600,
+      imageQuality: 85,
+    );
+    return f?.readAsBytes();
+  },
+);
+
+const _photoMaxBytes = 400 * 1024;
+
 /// Booking link name, on/off, appointment length, buffer, notice, how far ahead, timezone, approval.
 class CalendarSettingsScreen extends ConsumerStatefulWidget {
   const CalendarSettingsScreen({super.key});
@@ -30,14 +49,22 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
   final _slug = TextEditingController();
   final _name = TextEditingController();
   final _bio = TextEditingController();
+  final _address = TextEditingController();
+  final _phone = TextEditingController();
+  final _links = TextEditingController();
   bool _busy = false;
   String? _error;
+  Uint8List? _photo;
+  bool _photoBusy = false;
 
   @override
   void dispose() {
     _slug.dispose();
     _name.dispose();
     _bio.dispose();
+    _address.dispose();
+    _phone.dispose();
+    _links.dispose();
     super.dispose();
   }
 
@@ -47,6 +74,44 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
     _slug.text = s.slug;
     _name.text = s.displayName;
     _bio.text = s.bio;
+    _address.text = s.address;
+    _phone.text = s.phone;
+    _links.text = s.links.join('\n');
+    if (s.photoVersion != null) _loadPhoto();
+  }
+
+  Future<void> _loadPhoto() async {
+    try {
+      final p = await ref.read(calendarRepositoryProvider).photo();
+      if (mounted) setState(() => _photo = p);
+    } catch (_) {
+      // the photo stays as it is on the page; only this preview is missing
+    }
+  }
+
+  Future<void> _choosePhoto() async {
+    final bytes = await ref.read(bookingPhotoPickerProvider)();
+    if (bytes == null || !mounted) return;
+    if (bytes.length > _photoMaxBytes) {
+      setState(() => _error = 'That photo is too large. Choose a smaller one (at most 400 KB).');
+      return;
+    }
+    await _photoChange(bytes);
+  }
+
+  Future<void> _photoChange(Uint8List? bytes) async {
+    setState(() {
+      _photoBusy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(calendarRepositoryProvider).setPhoto(bytes);
+      if (mounted) setState(() => _photo = bytes);
+    } catch (e) {
+      if (mounted) setState(() => _error = calendarErrorText(e));
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
   }
 
   Future<void> _save() async {
@@ -54,6 +119,12 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
       slug: _slug.text.trim().toLowerCase(),
       displayName: _name.text.trim(),
       bio: _bio.text.trim(),
+      address: _address.text.trim(),
+      phone: _phone.text.trim(),
+      links: [
+        for (final l in _links.text.split(RegExp(r'[\n,]')))
+          if (l.trim().isNotEmpty) l.trim(),
+      ],
     );
     setState(() {
       _busy = true;
@@ -132,7 +203,89 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
                 maxLines: 3,
                 decoration: const InputDecoration(
                   labelText: 'Short introduction (optional)',
-                  helperText: 'Shown on your booking page. No contact numbers or client details.',
+                  helperText: 'Shown on your booking page. No client details.',
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text('On your booking page (optional)', style: AppText.label),
+              const SizedBox(height: 4),
+              const Text(
+                'Clients see these on your booking page only. Add them only if you are happy for them to be public.',
+                style: AppText.caption,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  CircleAvatar(
+                    key: const ValueKey('booking-photo'),
+                    radius: 32,
+                    backgroundColor: AppColors.lavender,
+                    backgroundImage: _photo == null ? null : MemoryImage(_photo!),
+                    child: _photo == null
+                        ? const Icon(Icons.person_outline_rounded, color: AppColors.royalPurple, size: 30)
+                        : null,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _photoBusy || !h.configured ? null : _choosePhoto,
+                          icon: const Icon(Icons.photo_outlined, size: 18),
+                          label: Text(_photo == null ? 'Add photo' : 'Change photo'),
+                        ),
+                        if (_photo != null)
+                          TextButton(
+                            onPressed: _photoBusy ? null : () => _photoChange(null),
+                            style: TextButton.styleFrom(foregroundColor: AppColors.crisis),
+                            child: const Text('Remove'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (!h.configured)
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('Save these settings once, then add a photo.', style: AppText.caption),
+                ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('booking-address'),
+                controller: _address,
+                maxLength: 300,
+                minLines: 2,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Address', counterText: ''),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('booking-phone'),
+                controller: _phone,
+                maxLength: 20,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Mobile number',
+                  hintText: '+91 98765 43210',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const ValueKey('booking-links'),
+                controller: _links,
+                minLines: 2,
+                maxLines: 5,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Links',
+                  helperText: 'One per line, up to 5: your website, Instagram, LinkedIn…',
+                  hintText: 'instagram.com/yourname',
                 ),
               ),
               const SizedBox(height: 18),

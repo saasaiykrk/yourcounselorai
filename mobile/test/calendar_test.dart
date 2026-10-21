@@ -13,6 +13,7 @@ import 'package:your_counselor/core/api/calendar_models.dart';
 import 'package:your_counselor/core/calendar/calendar_repository.dart';
 import 'package:your_counselor/core/providers.dart';
 import 'package:your_counselor/main.dart';
+import 'package:your_counselor/features/calendar/calendar_settings_screen.dart';
 import 'package:your_counselor/router.dart';
 
 class _Adapter implements HttpClientAdapter {
@@ -271,6 +272,43 @@ void main() {
       expect(kavya.where((a) => a.status == AppointmentStatus.rescheduled).length, 1);
     });
 
+    testWidgets('booking page details: photo, address, mobile and links are saved', (tester) async {
+      final repo = PreviewCalendarRepository();
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC',
+      ); // a real 1×1 PNG
+      tester.view.physicalSize = const Size(390, 844) * 3;
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            calendarRepositoryProvider.overrideWithValue(repo),
+            bookingPhotoPickerProvider.overrideWithValue(() async => png),
+          ],
+          child: YourCounselorApp(router: buildRouter(initialLocation: '/calendar')),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Booking settings'));
+      await tester.pumpAndSettle();
+      await _reach(tester, find.text('Add photo'));
+      await tester.tap(find.text('Add photo'));
+      await tester.pumpAndSettle();
+      expect(await repo.photo(), png);
+      expect(find.text('Change photo'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('booking-address')), '12 MG Road, Bengaluru');
+      await tester.enterText(find.byKey(const ValueKey('booking-phone')), '+91 98765 43210');
+      await tester.enterText(find.byKey(const ValueKey('booking-links')), 'instagram.com/asha\nasharao.in');
+      await _reach(tester, find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      final s = (await repo.home()).settings;
+      expect((s.address, s.phone), ('12 MG Road, Bengaluru', '+91 98765 43210'));
+      expect(s.links, ['instagram.com/asha', 'asharao.in']);
+      expect(s.toJson().containsKey('photo_version'), isFalse, reason: 'the photo is saved on its own');
+    });
+
     testWidgets('a day can be cancelled with a confirmation', (tester) async {
       final repo = await _pump(tester);
       await tester.tap(find.text('Meera'));
@@ -312,6 +350,7 @@ void main() {
       await tester.drag(find.byType(Scrollable).first, const Offset(0, 3000));
       await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, 'Link name'), 'dr-asha');
+      await _reach(tester, find.text('45 min'));
       await tester.tap(find.text('45 min'));
       await _reach(tester, find.text('Save'));
       await tester.tap(find.text('Save'));
