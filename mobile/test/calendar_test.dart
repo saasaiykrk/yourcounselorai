@@ -124,7 +124,7 @@ void main() {
         (_) => _json(200, {
           'configured': true,
           'settings': {'slug': 'asha-rao', 'display_name': 'Dr Asha Rao', 'enabled': true, 'approval': 'auto'},
-          'booking_url': 'https://yc.test/book/asha-rao',
+          'booking_url': 'https://yc.test/asha-rao',
           'windows': [
             {'weekday': 0, 'start': '09:00', 'end': '13:00'},
           ],
@@ -139,7 +139,7 @@ void main() {
       );
       final h = await api.calendar();
       expect(h.settings.autoApprove, isTrue);
-      expect(h.bookingUrl, 'https://yc.test/book/asha-rao');
+      expect(h.bookingUrl, 'https://yc.test/asha-rao');
       expect(h.windows.single.end, '13:00');
       expect(h.timeOff.single.label, 'Diwali');
       expect(h.summary!.pending, 1);
@@ -184,7 +184,7 @@ void main() {
       await tester.tap(find.text('Calendar').last);
       await tester.pumpAndSettle();
       expect(find.text('Your booking link'), findsOneWidget);
-      expect(find.text('https://yourcounselor.app/book/asha-rao'), findsOneWidget);
+      expect(find.text('https://app.yourcounselor.in/asha-rao'), findsOneWidget);
       expect(find.text('Taking bookings'), findsOneWidget);
       expect(find.text('Waiting'), findsOneWidget);
       expect(find.textContaining('Requests waiting for you (2)'), findsOneWidget);
@@ -200,7 +200,7 @@ void main() {
       await _pump(tester);
       await tester.tap(find.text('Copy link'));
       await tester.pump();
-      expect(copied, 'https://yourcounselor.app/book/asha-rao');
+      expect(copied, 'https://app.yourcounselor.in/asha-rao');
       expect(find.text('Booking link copied'), findsOneWidget);
     });
 

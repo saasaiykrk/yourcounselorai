@@ -1,4 +1,4 @@
-// Public booking page: /book/<link name> to book, /book/manage/<token> to see or cancel.
+// Public booking page: /<link name> (or the older /book/<link name>) to book, /book/manage/<token> to see or cancel.
 // No third-party code, no cookies, no storage. Everything shown is set with textContent.
 "use strict";
 (function () {
@@ -231,7 +231,7 @@
     $("m-cancel").hidden = !a.can_cancel;
     $("m-confirm").hidden = true;
     $("m-rebook").hidden = !(a.slug && !a.can_cancel);
-    if (a.slug) $("m-rebook").href = `/book/${a.slug}`;
+    if (a.slug) $("m-rebook").href = `/${a.slug}`;
     show("manage");
     $("m-cancel").onclick = () => { $("m-cancel").hidden = true; $("m-confirm").hidden = false; };
     $("m-keep").onclick = () => { $("m-cancel").hidden = false; $("m-confirm").hidden = true; };
@@ -256,6 +256,7 @@
     $("copy").addEventListener("click", copyLink);
     if (parts[0] === "book" && parts[1] === "manage" && parts[2]) startManage(parts[2]);
     else if (parts[0] === "book" && parts[1]) startBooking(parts[1]);
+    else if (parts.length === 1 && parts[0] !== "book") startBooking(parts[0]);
     else show("missing");
   });
 })();

@@ -150,7 +150,7 @@ class PreviewCalendarRepository implements CalendarRepository {
   Future<CalendarHome> home() async => CalendarHome(
     configured: _configured,
     settings: _settings,
-    bookingUrl: _configured ? 'https://yourcounselor.app/book/${_settings.slug}' : null,
+    bookingUrl: _configured ? 'https://app.yourcounselor.in/${_settings.slug}' : null,
     windows: List.of(_windows),
     timeOff: List.of(_off),
     summary: _configured ? _summary() : null,

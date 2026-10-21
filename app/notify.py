@@ -69,7 +69,7 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
     if manage and n["kind"] in ("requested", "confirmed", "rescheduled", "reminder"):
         body += f"\nTo see or cancel your appointment: {manage}\n"
     if n["kind"] == "rejected":
-        body += f"\nBook again: {base_url}/book/{n['slug']}\n"
+        body += f"\nBook again: {base_url}/{n['slug']}\n"
     body += "\nIf you are in crisis or need urgent help, contact local emergency services.\n\n— YourCounselor"
     return details["email"], SUBJECTS[n["kind"]], body
 

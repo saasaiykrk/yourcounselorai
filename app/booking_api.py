@@ -12,7 +12,7 @@ Consultant (verified clinician; sees and changes only their own calendar):
   POST /v1/calendar/appointments/{id}/{confirm|reject|cancel|complete}
   POST /v1/calendar/appointments/{id}/reschedule
 Public (no sign-in; only what booking needs):
-  GET  /book/{slug} · GET /book/manage/{token}    → the booking page (static)
+  GET  /{slug} (and the older /book/{slug}) · GET /book/manage/{token}    → the booking page (static)
   GET  /v1/public/booking/{slug}                  → name, short bio, timezone, appointment length
   GET  /v1/public/booking/{slug}/slots            → free times
   POST /v1/public/booking/{slug}                  → book (first name, email, consent)
@@ -214,6 +214,21 @@ def _slugify(name: str) -> str:
     return (s or "consultant")[:40].strip("-")
 
 
+def install_short_links(app: FastAPI) -> None:
+    """https://<server>/<link name>: the booking page at the top level. Registered LAST (main.py), so every
+    other route matches first; only a valid, unreserved link name gets the page."""
+    headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
+               "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+                                          "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+                                          "frame-ancestors 'none'"}
+
+    @app.get("/{slug}", include_in_schema=False)
+    def booking_short(slug: str):
+        if not booking.SLUG_RE.match(slug) or slug in booking.RESERVED_SLUGS or "--" in slug:
+            raise HTTPException(404, "not found")
+        return FileResponse(WEB / "index.html", media_type="text/html", headers=headers)
+
+
 def install(app: FastAPI, svc: BookingService, verified_clinician, features=None) -> None:
     """features(clinician id) → what their plan unlocks (main.py: billing). None: everything."""
 
@@ -267,7 +282,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
             settings = {**booking.DEFAULT_SETTINGS, "slug": _slugify(name), "display_name": name}
         tz = settings["timezone"]
         return {"configured": bool(s), "settings": settings,
-                "booking_url": f"{svc.base_url(request)}/book/{settings['slug']}" if s else None,
+                "booking_url": f"{svc.base_url(request)}/{settings['slug']}" if s else None,
                 "windows": [{"weekday": w, "start": f"{a:%H:%M}", "end": f"{b:%H:%M}"} for w, a, b in svc.store.windows(c["id"])],
                 "time_off": [{"id": t["id"], "starts_at": _iso(t["starts_at"]), "ends_at": _iso(t["ends_at"]),
                               "local_start": _local(t["starts_at"], tz), "local_end": _local(t["ends_at"], tz),
@@ -295,7 +310,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
             svc.store.save_settings(c["id"], s)
         except svc.store.SlugTaken:
             raise HTTPException(409, {"error": "slug_taken", "message": "That link name is taken. Try another."})
-        return {"settings": s, "booking_url": f"{svc.base_url(request)}/book/{s['slug']}"}
+        return {"settings": s, "booking_url": f"{svc.base_url(request)}/{s['slug']}"}
 
     @app.put("/v1/calendar/availability")
     def calendar_availability(body: AvailabilityIn, c: dict = Depends(consultant)):
@@ -538,7 +553,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         return FileResponse(WEB / name, media_type=assets[name], headers={**headers, "Cache-Control": "public, max-age=300"})
 
     @app.get("/book/manage/{token}")
-    @app.get("/book/{slug}")
+    @app.get("/book/{slug}")             # links shared before the short /<link name> address keep working
     def booking_page(slug: str = "", token: str = ""):
         return FileResponse(WEB / "index.html", media_type="text/html", headers=headers)
 
