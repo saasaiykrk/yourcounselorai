@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import 'api_exceptions.dart';
@@ -278,6 +281,28 @@ class ApiClient {
   Future<CalendarHome> calendar() async => CalendarHome.fromJson(await _send('GET', '/v1/calendar'));
 
   Future<void> saveCalendarSettings(BookingSettings s) => _send('PUT', '/v1/calendar/settings', body: s.toJson());
+
+  /// The booking page's photo: a JPEG, PNG or WebP of at most 400 KB (the server checks its bytes).
+  Future<void> uploadBookingPhoto(Uint8List image) =>
+      _send('PUT', '/v1/calendar/photo', body: {'image': base64Encode(image)});
+
+  Future<void> removeBookingPhoto() => _send('DELETE', '/v1/calendar/photo');
+
+  /// The saved photo, or null if there is none.
+  Future<Uint8List?> bookingPhoto() async {
+    final token = await _token();
+    if (token == null) throw const Unauthorized();
+    try {
+      final r = await _dio.get<List<int>>(
+        '/v1/calendar/photo',
+        options: Options(responseType: ResponseType.bytes, headers: {'Authorization': 'Bearer $token'}),
+      );
+      return r.data == null ? null : Uint8List.fromList(r.data!);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      throw mapDioException(e);
+    }
+  }
 
   Future<void> saveAvailability(List<WorkWindow> windows) => _send(
     'PUT',
