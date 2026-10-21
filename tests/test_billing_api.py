@@ -44,6 +44,7 @@ if HAVE:
     db._DSN = URL
 
 KEY_SECRET, WEBHOOK_SECRET = "test_key_secret", "test_webhook_secret"
+FUNNEL_SECRET = "funnel_secret_123"
 OWN_KEY = "sk-ant-api03-" + "x" * 80 + "AbCd"
 CASE = "34F, panic attacks for 4 weeks, sudden onset, avoids the metro. Asked and absent for risk."
 
@@ -141,7 +142,8 @@ class BillingApiTests(unittest.TestCase):
         self.saved = (svc.cfg, svc.store, svc.store_on, svc.razorpay, svc.vault, svc.model_factory, main.PIPELINE)
         svc.cfg = SimpleNamespace(
             razorpay_key_id="rzp_test_x", razorpay_key_secret=KEY_SECRET, razorpay_webhook_secret=WEBHOOK_SECRET,
-            razorpay_configured=True, claude_model="claude-test", byok_encryption_key="", byok_key_version=1)
+            razorpay_configured=True, claude_model="claude-test", byok_encryption_key="", byok_key_version=1,
+            funnel_webhook_secret=FUNNEL_SECRET)
         svc.store, svc.store_on = billing_db, (lambda: True)
         self.rzp = FakeRazorpay()
         svc.razorpay = Razorpay("rzp_test_x", KEY_SECRET, transport=httpx.MockTransport(self.rzp.handler))
@@ -595,6 +597,78 @@ class BillingApiTests(unittest.TestCase):
         self.configure({"enabled": True, "plans": {"byok_scale": {"enabled": False}}})
         self.assertEqual(self.save_key().status_code, 409)
         self.assertEqual(self.consult(use_own_key=True).status_code, 409)
+
+    # --- plans bought outside the app (funnels) -----------------------------------------------------
+    def funnel(self, secret=FUNNEL_SECRET, **body):
+        sale = {"event_id": "ord_" + uuid.uuid4().hex[:10], "email": self.email(), "plan": "scale", "period": "year",
+                "amount": 19999, "source": "Landing page", "payment_id": "pay_" + uuid.uuid4().hex[:8], **body}
+        return self.client.post("/v1/webhooks/purchase", json=sale, headers={"X-Webhook-Secret": secret} if secret else {})
+
+    def email(self, who=None):
+        """A real-looking sign-in email for this clinician (the webhook checks the address)."""
+        who = who or self.cid
+        mail = f"buyer-{who[:8]}@example.com"
+        with psycopg.connect(URL, autocommit=True) as c:
+            c.execute("update auth.users set email=%s where id=%s", (mail, who))
+        return mail
+
+    def test_a_funnel_sale_for_an_existing_account_starts_at_once_and_shows_in_payments(self):
+        self.configure({"enabled": True})
+        self.assertEqual(self.funnel(secret="wrong").status_code, 401)
+        self.assertEqual(self.funnel(secret="").status_code, 401)
+        ev = "ord_same_" + uuid.uuid4().hex[:8]
+        r = self.funnel(event_id=ev, email=self.email().upper())
+        self.assertEqual((r.status_code, r.json()["status"]), (200, "applied"), r.text)
+        again = self.funnel(event_id=ev)
+        self.assertTrue(again.json()["duplicate"], "the tool's retry grants nothing more")
+        self.assertEqual(self.balance()["guided"], 10, "a year of Scale: this month's reports, once")
+        self.assertIn("guided_included", billing_db.plan_features(self.cid, main.BILLING.config()[1])["features"])
+        o = billing_db.orders(self.cid)[0]
+        self.assertEqual((o["provider"], o["status"], o["amount"], o["plan"], o["period"]),
+                         ("external", "paid", 1999900, "scale", "year"))
+        self.who = self.admin_id
+        pays = self.client.get("/v1/admin/payments").json()["payments"]
+        self.assertIn(str(o["id"]), [p["id"] for p in pays], "in the admin's transaction history")
+        lst = self.client.get("/v1/admin/external-purchases").json()
+        self.assertEqual(lst["purchases"][0]["status"], "applied")
+
+    def test_a_funnel_sale_before_sign_up_waits_for_that_email(self):
+        self.configure({"enabled": True})
+        newbie = str(uuid.uuid4())
+        mail = f"new-{newbie[:6]}@example.com"
+        r = self.funnel(email=mail, plan="practice", period="month", amount=999)
+        self.assertEqual(r.json()["status"], "pending")
+        self.who = self.admin_id
+        self.assertEqual(self.client.get("/v1/admin/external-purchases", params={"status": "pending"})
+                         .json()["purchases"][0]["email"], mail)
+        with psycopg.connect(URL, autocommit=True) as c:          # they sign up and are verified
+            c.execute("insert into auth.users (id, email) values (%s,%s)", (newbie, mail))
+            c.execute("""insert into clinicians (id, role, registration_body, level, verification_status, consent_version)
+                         values (%s,'psychologist','RCI','L2','verified','v1')""", (newbie,))
+        f = billing_db.plan_features(newbie, main.BILLING.config()[1])
+        self.assertTrue({"pdf", "appointments"} <= f["features"], "the plan starts at their first visit")
+        self.assertEqual(billing_db.get_external(r.request.content and json.loads(r.request.content)["event_id"])["status"],
+                         "applied")
+
+    def test_bad_funnel_sales_are_refused_and_an_admin_can_cancel_a_waiting_one(self):
+        self.configure({"enabled": True})
+        for bad in ({"plan": "gold"}, {"plan": "scale", "period": None}, {"plan": "per_report"},
+                    {"email": "not-an-email"}, {"event_id": ""}, {"period": "week"}):
+            self.assertEqual(self.funnel(**bad).status_code, 422, bad)
+        ev = "ord_cancel_" + uuid.uuid4().hex[:8]
+        r = self.funnel(email="later@example.com", event_id=ev)
+        pid = billing_db.get_external(ev)["id"]
+        self.who = self.admin_id
+        self.assertEqual(self.client.post(f"/v1/admin/external-purchases/{pid}/cancel",
+                                          json={"active": False, "reason": "refunded in the funnel"}).status_code, 200)
+        self.assertEqual(billing_db.get_external(ev)["status"], "cancelled")
+        self.assertEqual(r.json()["status"], "pending")
+        self.assertEqual(self.client.post(f"/v1/admin/external-purchases/{pid}/cancel",
+                                          json={"active": False, "reason": "again"}).status_code, 409)
+
+    def test_the_funnel_webhook_is_off_without_its_secret(self):
+        main.BILLING.cfg.funnel_webhook_secret = ""
+        self.assertEqual(self.funnel().status_code, 404)
 
     # --- admin -------------------------------------------------------------------------------
     def test_only_admins_change_pricing(self):
