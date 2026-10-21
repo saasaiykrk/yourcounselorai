@@ -64,6 +64,10 @@ class BookingSettings {
     this.minNoticeMinutes = 240,
     this.maxAdvanceDays = 30,
     this.approval = 'manual',
+    this.address = '',
+    this.phone = '',
+    this.links = const [],
+    this.photoVersion,
   });
 
   factory BookingSettings.fromJson(Map<String, dynamic> j) => BookingSettings(
@@ -77,6 +81,10 @@ class BookingSettings {
     minNoticeMinutes: _int(j['min_notice_minutes'], 240),
     maxAdvanceDays: _int(j['max_advance_days'], 30),
     approval: j['approval'] as String? ?? 'manual',
+    address: j['address'] as String? ?? '',
+    phone: j['phone'] as String? ?? '',
+    links: [for (final l in (j['links'] as List? ?? const [])) '$l'],
+    photoVersion: (j['photo_version'] as num?)?.toInt(),
   );
 
   final String slug;
@@ -92,6 +100,14 @@ class BookingSettings {
   /// auto: requests are confirmed at once · manual: the consultant accepts or declines.
   final String approval;
 
+  /// Shown on the public booking page only: the consultant's own address, mobile number and web links.
+  final String address;
+  final String phone;
+  final List<String> links;
+
+  /// Set when the booking page has a photo (it changes with every new photo).
+  final int? photoVersion;
+
   bool get autoApprove => approval == 'auto';
 
   Map<String, dynamic> toJson() => {
@@ -105,6 +121,9 @@ class BookingSettings {
     'min_notice_minutes': minNoticeMinutes,
     'max_advance_days': maxAdvanceDays,
     'approval': approval,
+    'address': address,
+    'phone': phone,
+    'links': links,
   };
 
   BookingSettings copyWith({
@@ -118,6 +137,9 @@ class BookingSettings {
     int? minNoticeMinutes,
     int? maxAdvanceDays,
     String? approval,
+    String? address,
+    String? phone,
+    List<String>? links,
   }) => BookingSettings(
     slug: slug ?? this.slug,
     displayName: displayName ?? this.displayName,
@@ -129,6 +151,10 @@ class BookingSettings {
     minNoticeMinutes: minNoticeMinutes ?? this.minNoticeMinutes,
     maxAdvanceDays: maxAdvanceDays ?? this.maxAdvanceDays,
     approval: approval ?? this.approval,
+    address: address ?? this.address,
+    phone: phone ?? this.phone,
+    links: links ?? this.links,
+    photoVersion: photoVersion,
   );
 }
 

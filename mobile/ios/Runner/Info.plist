@@ -12,6 +12,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>To choose the photo shown on your booking page.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Your Counselor</string>
 	<key>CFBundleExecutable</key>

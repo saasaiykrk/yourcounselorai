@@ -138,7 +138,8 @@ class BookingApiTests(unittest.TestCase):
         prof = self.client.get(f"/v1/public/booking/{self.slug}")
         self.assertEqual(prof.status_code, 200)
         self.assertEqual(set(prof.json()), {"display_name", "bio", "role", "timezone", "slot_minutes",
-                                            "max_advance_days", "approval", "tags"})
+                                            "max_advance_days", "approval", "tags", "address", "phone", "links",
+                                            "photo"})
         self.assertEqual(self.slots(), [at(9), at(9, 30), at(10), at(10, 30), at(12), at(12, 30)],
                          "working periods with a break between them")
         page = self.client.get(f"/book/{self.slug}")
@@ -160,6 +161,52 @@ class BookingApiTests(unittest.TestCase):
         for name in ("learn", "delete-account", "docs", "privacy"):
             r = self.client.put("/v1/calendar/settings", json={"slug": name, "display_name": "Dr Asha Rao"})
             self.assertEqual(r.status_code, 422, f"{name} is reserved")
+
+    # --- the consultant's public details: address, mobile, links, photo -----------------------------------
+    def test_address_mobile_and_links_show_on_the_booking_page(self):
+        self.setup_calendar(address="12 MG Road,\nBengaluru 560001", phone="+91 98765 43210",
+                            links=["instagram.com/asharao", "https://www.asharao.in/", "http://linkedin.com/in/asha"])
+        p = self.client.get(f"/v1/public/booking/{self.slug}").json()
+        self.assertEqual((p["address"], p["phone"]), ("12 MG Road,\nBengaluru 560001", "+91 98765 43210"))
+        self.assertEqual(p["links"], ["https://instagram.com/asharao", "https://www.asharao.in/",
+                                      "https://linkedin.com/in/asha"], "every link becomes https")
+        self.assertIsNone(p["photo"])
+        home = self.client.get("/v1/calendar").json()["settings"]
+        self.assertEqual((home["phone"], len(home["links"]), home["photo_version"]), ("+91 98765 43210", 3, None))
+
+    def test_bad_details_are_refused(self):
+        self.setup_calendar()
+        base = {"slug": self.slug, "display_name": "Dr Asha Rao"}
+        for bad in ({"phone": "call me"}, {"phone": "12"}, {"links": ["javascript:alert(1)"]},
+                    {"links": ["not a link"]}, {"links": ["https://user:pw@evil.com"]},
+                    {"links": [f"site{i}.com" for i in range(6)]}, {"address": "x" * 301}):
+            r = self.client.put("/v1/calendar/settings", json={**base, **bad})
+            self.assertEqual(r.status_code, 422, bad)
+
+    def test_a_photo_is_checked_by_its_own_bytes_and_shown_only_when_saved(self):
+        import base64
+        png = b"\x89PNG\r\n\x1a\n" + b"\0" * 100
+        self.assertEqual(self.client.put("/v1/calendar/photo", json={"image": base64.b64encode(png).decode()})
+                         .status_code, 409, "set up the booking page first")
+        self.setup_calendar()
+        for bad in (b"<svg onload=alert(1)>", b"GIF89a" + b"\0" * 10, b"\xff\xd8\xff" + b"\0" * (400 * 1024)):
+            r = self.client.put("/v1/calendar/photo", json={"image": base64.b64encode(bad).decode()})
+            self.assertEqual(r.status_code, 422, bad[:6])
+        self.assertEqual(self.client.put("/v1/calendar/photo", json={"image": "%%%"}).status_code, 422)
+        r = self.client.put("/v1/calendar/photo", json={"image": base64.b64encode(png).decode()})
+        self.assertEqual(r.status_code, 200, r.text)
+        url = self.client.get(f"/v1/public/booking/{self.slug}").json()["photo"]
+        self.assertTrue(url.startswith(f"/v1/public/booking/{self.slug}/photo?v="))
+        img = self.client.get(url)
+        self.assertEqual((img.status_code, img.headers["content-type"], img.content), (200, "image/png", png))
+        self.assertEqual(img.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(self.client.get("/v1/calendar/photo").content, png, "the app shows it too")
+        self.client.delete("/v1/calendar/photo")
+        self.assertIsNone(self.client.get(f"/v1/public/booking/{self.slug}").json()["photo"])
+        self.assertEqual(self.client.get(f"/v1/public/booking/{self.slug}/photo").status_code, 404)
+        self.setup_calendar(enabled=False)
+        self.assertEqual(self.client.get(f"/v1/public/booking/{self.slug}/photo").status_code, 404,
+                         "nothing public while the page is off")
 
     def test_link_names_are_unique_and_pages_off_or_unverified_are_hidden(self):
         self.setup_calendar()

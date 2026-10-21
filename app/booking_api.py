@@ -31,7 +31,7 @@ from collections import defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import booking, notify
@@ -54,7 +54,14 @@ class SettingsIn(BaseModel):
     buffer_minutes: int = 0
     min_notice_minutes: int = 240
     max_advance_days: int = 30
+    address: str = Field(default="", max_length=400)
+    phone: str = Field(default="", max_length=30)
+    links: list[str] = Field(default_factory=list, max_length=10)
     approval: str = "manual"
+
+
+class PhotoIn(BaseModel):
+    image: str = Field(max_length=600_000)          # base64 of a JPEG, PNG or WebP, at most 400 KB
 
 
 class WindowIn(BaseModel):
@@ -276,7 +283,9 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         s = svc.store.get_settings(c["id"])
         if s:
             settings = {k: s[k] for k in ("slug", "enabled", "display_name", "bio", "timezone", "slot_minutes",
-                                          "buffer_minutes", "min_notice_minutes", "max_advance_days", "approval")}
+                                          "buffer_minutes", "min_notice_minutes", "max_advance_days", "approval",
+                                          "address", "phone", "links")}
+            settings["photo_version"] = s["photo_version"] if s.get("photo") is not None else None
         else:
             name = c.get("full_name") or ""
             settings = {**booking.DEFAULT_SETTINGS, "slug": _slugify(name), "display_name": name}
@@ -311,6 +320,41 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         except svc.store.SlugTaken:
             raise HTTPException(409, {"error": "slug_taken", "message": "That link name is taken. Try another."})
         return {"settings": s, "booking_url": f"{svc.base_url(request)}/{s['slug']}"}
+
+    @app.put("/v1/calendar/photo")
+    def calendar_photo(body: PhotoIn, c: dict = Depends(consultant)):
+        """The photo on the booking page. Checked by its own bytes; never shown before it is saved."""
+        need_store()
+        import base64
+        import binascii
+        try:
+            data = base64.b64decode(body.image, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, {"error": "invalid", "message": "That photo could not be read."})
+        mime = booking.photo_type(data)
+        if mime is None:
+            raise HTTPException(422, {"error": "invalid", "message": "Choose a JPEG, PNG or WebP photo."})
+        if len(data) > booking.PHOTO_MAX_BYTES:
+            raise HTTPException(422, {"error": "invalid", "message": "That photo is too large (at most 400 KB)."})
+        version = svc.store.set_photo(c["id"], data, mime)
+        if version is None:
+            raise HTTPException(409, {"error": "calendar_not_set_up", "message": "Save your booking settings first."})
+        return {"photo_version": version}
+
+    @app.delete("/v1/calendar/photo")
+    def calendar_photo_remove(c: dict = Depends(consultant)):
+        need_store()
+        svc.store.set_photo(c["id"], None, None)
+        return {"photo_version": None}
+
+    @app.get("/v1/calendar/photo")
+    def calendar_photo_get(c: dict = Depends(consultant)):
+        need_store()
+        p = svc.store.photo(c["id"])
+        if not p:
+            raise HTTPException(404, "no photo")
+        return Response(p[0], media_type=p[1], headers={"Cache-Control": "private, no-store",
+                                                         "X-Content-Type-Options": "nosniff"})
 
     @app.put("/v1/calendar/availability")
     def calendar_availability(body: AvailabilityIn, c: dict = Depends(consultant)):
@@ -492,8 +536,21 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
     def public_profile(slug: str):
         s = public_settings(slug)
         return {"display_name": s["display_name"], "bio": s["bio"], "role": ROLE.get(s["role"], "Consultant"),
+                "address": s.get("address") or "", "phone": s.get("phone") or "", "links": s.get("links") or [],
+                "photo": f"/v1/public/booking/{s['slug']}/photo?v={s['photo_version']}" if s.get("photo") is not None
+                else None,
                 "timezone": s["timezone"], "slot_minutes": s["slot_minutes"], "max_advance_days": s["max_advance_days"],
                 "approval": s["approval"], "tags": [{"id": k, "label": v} for k, v in booking.TAGS.items()]}
+
+    @app.get("/v1/public/booking/{slug}/photo")
+    def public_photo(slug: str):
+        s = public_settings(slug)
+        p = svc.store.photo(s["clinician_id"])
+        if not p:
+            raise HTTPException(404, "no photo")
+        return Response(p[0], media_type=p[1], headers={"Cache-Control": "public, max-age=86400",
+                                                         "X-Content-Type-Options": "nosniff",
+                                                         "Content-Security-Policy": "default-src 'none'"})
 
     @app.get("/v1/public/booking/{slug}/slots")
     def public_slots(slug: str, start: date, days: int = Query(7, ge=1, le=14)):

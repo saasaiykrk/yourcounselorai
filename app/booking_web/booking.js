@@ -79,6 +79,25 @@
     $("role").textContent = p.role;
     $("bio").textContent = p.bio || "";
     $("bio").hidden = !p.bio;
+    // The consultant's own public details (photo, address, mobile, links). Text only; links are https.
+    if (p.photo) {
+      $("photo").src = p.photo; $("photo").alt = p.display_name; $("photo").hidden = false; $("avatar").hidden = true;
+    }
+    $("c-address").hidden = !p.address;
+    $("address").textContent = p.address || "";
+    if (p.address) $("map").href = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(p.address);
+    $("c-phone").hidden = !p.phone;
+    $("phone").textContent = p.phone || "";
+    if (p.phone) $("phone").href = "tel:" + p.phone.replace(/[^+0-9]/g, "");
+    const links = (p.links || []).filter((u) => /^https:\/\//.test(u));
+    $("links").replaceChildren(...links.map((u) => {
+      const a = document.createElement("a");
+      a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
+      a.textContent = u.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, "");
+      return a;
+    }));
+    $("c-links").hidden = !links.length;
+    $("contact").hidden = !(p.address || p.phone || links.length);
     $("length").textContent = `${p.slot_minutes}-minute appointment`;
     $("tz").textContent = `Times in ${tzName(p.timezone)}`;
     $("tz-note").textContent = browserTz && browserTz !== p.timezone

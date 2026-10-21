@@ -218,6 +218,11 @@ tag on the calendar and can set, change or clear it (Calendar → the appointmen
 one). The tag shows in the booking emails and on the client's own link. It is one tag or none, stored plainly
 (it names the kind of session, not the client).
 
+Consultants can also add their **address, mobile number, up to 5 web links and a photo** in Calendar → Booking
+settings. These show on their booking page only (the photo is a small JPEG, PNG or WebP, at most 400 KB, checked by
+its own bytes). **This needs `db/migrations/014_booking_profile.sql`** (Supabase → SQL Editor, safe to run again)
+before the release that adds it is deployed; without it, saving booking settings fails.
+
 **Tags need `db/migrations/013_appointment_tags.sql`** (Supabase → SQL Editor, safe to run again) before the
 release that adds them is deployed; without it, every new booking fails.
 
