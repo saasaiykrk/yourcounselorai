@@ -208,6 +208,47 @@ How it is protected:
 4. **Admins and the Google Play reviewer:** give them a plan in /admin → Subscriptions & Users → the person →
    **Give a plan…** → Scale (or BYOK Scale), with the days you want (e.g. 90).
 
+## Plans bought outside the app (funnels): run migration 015
+
+A funnel, landing page or automation tool (GoHighLevel, Systeme.io, Zapier, Make, Pabbly…) can tell the server
+about a sale. The plan starts at once if an account already uses that email; otherwise it waits and starts when
+that person signs up with the same email. Every sale shows in **/admin → Payments → From funnels**, and applied
+ones also appear in Transactions (marked "Funnel") and in the totals.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/015_external_purchases.sql` (safe to run again).
+2. **The secret** (Cloud Shell; the tool sends it with every sale; never put it in the app or in chat):
+   ```bash
+   openssl rand -hex 24      # copy the value; you paste it here and in the funnel tool
+   read -rsp "funnel secret: " v; echo; printf '%s' "$v" | gcloud secrets create funnel-webhook-secret \
+     --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-secrets FUNNEL_WEBHOOK_SECRET=funnel-webhook-secret:latest
+   ```
+   Until it is set, the webhook answers 404 (switched off).
+3. **In the funnel tool**, add a webhook that runs after a successful payment:
+   - **URL:** `https://app.yourcounselor.in/v1/webhooks/purchase` · **Method:** POST · **Body:** JSON
+   - **Header:** `X-Webhook-Secret: <the secret>` (or `Authorization: Bearer <the secret>`)
+   - **Body** (map the tool's fields to these names; other fields are ignored):
+     ```json
+     {"event_id": "<the tool's order or transaction id>", "email": "<buyer's email>",
+      "plan": "scale", "period": "year", "amount": 19999, "source": "Launch funnel", "payment_id": "<optional>"}
+     ```
+     | plan | also send | gives |
+     |---|---|---|
+     | `learn`, `practice`, `byok_scale`, `scale` | `period`: `month` or `year` | that plan for a month (30 days) or a year (365 days) |
+     | `per_report` | `report_type`: `guided` or `direct` | one report credit |
+     `amount` is in rupees as paid (for the records; it does not change what is granted). `event_id` must be unique
+     per sale: the same `event_id` sent again is ignored, so the tool's retries never grant twice.
+4. **Test it** (Cloud Shell, with a test email):
+   ```bash
+   curl -sS -X POST https://app.yourcounselor.in/v1/webhooks/purchase -H "Content-Type: application/json" \
+     -H "X-Webhook-Secret: $v" -d '{"event_id":"test-1","email":"you@example.com","plan":"practice","period":"month","amount":999}'
+   ```
+   The answer says `"applied"` (account found) or `"pending"` (starts at sign-up). A wrong secret gets 401.
+5. **Refunds** are handled where the money was taken (the funnel's own gateway). Then, in /admin: a sale still
+   waiting → Payments → From funnels → **Cancel…**; a plan already active → Subscriptions & Users → the person →
+   **Deactivate…**.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,

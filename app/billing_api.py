@@ -15,6 +15,8 @@ Clinician (signed in):
   DELETE /v1/billing/byok                  → remove it
 Razorpay:
   POST   /v1/payments/razorpay/webhook     → signed events; each applied once
+Funnels (plans bought outside the app):
+  POST   /v1/webhooks/purchase             → X-Webhook-Secret; applied at once, or when the buyer signs up
 Admin (is_admin; every change audited):
   GET/PUT /v1/admin/pricing · GET /v1/admin/pricing/history · GET /v1/admin/billing/users · GET /v1/admin/billing/users/{id}
   POST /v1/admin/billing/users/{id}/grant  · POST /v1/admin/billing/users/{id}/adjust
@@ -37,7 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from . import billing, byok
 from .razorpay import Razorpay, RazorpayError, webhook_signature_ok
@@ -57,6 +59,20 @@ class OrderIn(BaseModel):
     report_type: str | None = Field(default=None, pattern="^(guided|direct)$")
     item: str | None = Field(default=None, pattern="^[a-z0-9-]{1,80}$")     # single print: the page
     period: str | None = Field(default=None, pattern="^(month|year)$")     # a plan: monthly or yearly
+
+
+class ExternalPurchaseIn(BaseModel):
+    """One sale from a funnel or automation tool. Extra fields the tool sends are ignored."""
+    model_config = ConfigDict(extra="ignore")
+    event_id: str = Field(min_length=1, max_length=160)      # the tool's own order / transaction id
+    email: str = Field(max_length=254)
+    plan: str = Field(pattern="^(learn|practice|byok_scale|scale|per_report)$")
+    period: str | None = Field(default=None, pattern="^(month|year)$")
+    report_type: str | None = Field(default=None, pattern="^(guided|direct)$")
+    amount: float | None = Field(default=None, ge=0, le=1_000_000)   # rupees, as paid
+    currency: str = Field(default="INR", pattern="^[A-Z]{3}$")
+    source: str = Field(default="", max_length=60)
+    payment_id: str | None = Field(default=None, max_length=120)
 
 
 class VerifyPaymentIn(BaseModel):
@@ -562,6 +578,51 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
             svc.store.forget_event(event_id)       # Razorpay retries; the retry runs it again
             raise
         return {"ok": True}
+
+    # --- plans bought outside the app (funnels) ----------------------------------------------
+    @app.post("/v1/webhooks/purchase")
+    def external_purchase(body: ExternalPurchaseIn, x_webhook_secret: str = Header(""), authorization: str = Header("")):
+        import hmac
+        import re
+        secret = getattr(svc.cfg, "funnel_webhook_secret", "") or ""
+        if not (svc.store_on() and secret):
+            raise HTTPException(404, "not found")
+        given = x_webhook_secret or authorization.removeprefix("Bearer ").strip()
+        if not given or not hmac.compare_digest(given.encode(), secret.encode()):
+            raise HTTPException(401, {"error": "bad_secret", "message": "Wrong or missing X-Webhook-Secret."})
+        email = body.email.strip().lower()
+        if not re.match(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}$", email):
+            raise HTTPException(422, {"error": "invalid", "message": "email: not an email address"})
+        tier = body.plan in billing.TIERS
+        if tier and not body.period:
+            raise HTTPException(422, {"error": "invalid", "message": "period: month or year for this plan"})
+        if body.plan == "per_report" and not body.report_type:
+            raise HTTPException(422, {"error": "invalid", "message": "report_type: guided or direct for a single report"})
+        row, new = svc.store.record_external({
+            "event_id": body.event_id.strip(), "source": body.source.strip(), "email": email, "plan": body.plan,
+            "period": body.period if tier else None, "report_type": body.report_type if body.plan == "per_report" else None,
+            "amount": round((body.amount or 0) * 100), "currency": body.currency,
+            "payment_ref": (body.payment_id or "").strip() or None})
+        if new or row["status"] == "pending":
+            if svc.store.apply_external_for_email(email, svc.config()[1]):
+                row = svc.store.get_external(row["event_id"]) or row
+        return {"ok": True, "duplicate": not new, "status": row["status"],
+                "message": {"applied": "The plan is active on their account.",
+                            "pending": "No account with this email yet: the plan starts when they sign up.",
+                            "cancelled": "This purchase was cancelled by an admin."}[row["status"]]}
+
+    @app.get("/v1/admin/external-purchases")
+    def admin_external(status: str | None = Query(None, pattern="^(pending|applied|cancelled)$"), a: dict = Depends(admin)):
+        _need_store()
+        return {"purchases": [_order_view(r) for r in svc.store.external_purchases(status)],
+                "configured": bool(getattr(svc.cfg, "funnel_webhook_secret", ""))}
+
+    @app.post("/v1/admin/external-purchases/{pid}/cancel")
+    def admin_external_cancel(pid: int, body: StatusIn, a: dict = Depends(admin)):
+        _need_store()
+        if not svc.store.cancel_external(pid, a["id"], body.reason):
+            raise HTTPException(409, {"error": "not_pending", "message": "Only a purchase still waiting can be cancelled."})
+        return {"cancelled": True}
 
     # --- admin -------------------------------------------------------------------------
     @app.get("/v1/admin/pricing")

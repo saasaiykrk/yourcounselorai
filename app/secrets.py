@@ -30,6 +30,7 @@ OPTIONAL = {
     "RAZORPAY_KEY_ID": "",            # public by design (the app's checkout uses it)
     "RAZORPAY_KEY_SECRET": "",
     "RAZORPAY_WEBHOOK_SECRET": "",
+    "FUNNEL_WEBHOOK_SECRET": "",      # POST /v1/webhooks/purchase (plans bought in a funnel); unset = switched off
     "BYOK_ENCRYPTION_KEY": "",        # 32 random bytes, base64: `openssl rand -base64 32`
     "BYOK_ENCRYPTION_KEY_PREVIOUS": "",  # the old key during a rotation, so stored keys still open
     "BYOK_KEY_VERSION": "1",          # +1 on every rotation
@@ -68,6 +69,7 @@ class Config:
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    funnel_webhook_secret: str = ""
     byok_encryption_key: str = ""
     byok_encryption_key_previous: str = ""
     byok_key_version: int = 1
@@ -157,6 +159,7 @@ def load_config() -> Config:
         razorpay_key_id=g("RAZORPAY_KEY_ID"),
         razorpay_key_secret=g("RAZORPAY_KEY_SECRET"),
         razorpay_webhook_secret=g("RAZORPAY_WEBHOOK_SECRET"),
+        funnel_webhook_secret=g("FUNNEL_WEBHOOK_SECRET"),
         byok_encryption_key=g("BYOK_ENCRYPTION_KEY"),
         byok_encryption_key_previous=g("BYOK_ENCRYPTION_KEY_PREVIOUS"),
         byok_key_version=int(g("BYOK_KEY_VERSION") or "1"),
