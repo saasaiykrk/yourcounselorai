@@ -131,7 +131,7 @@ class BookingApiTests(unittest.TestCase):
         self.setup_calendar()
         home = self.client.get("/v1/calendar").json()
         self.assertTrue(home["configured"])
-        self.assertEqual(home["booking_url"], f"https://yc.test/book/{self.slug}")
+        self.assertEqual(home["booking_url"], f"https://yc.test/{self.slug}", "the short link, without /book/")
         slots = self.client.get("/v1/calendar/slots", params={"start": DAY.isoformat(), "days": 1}).json()["days"][0]["slots"]
         self.assertEqual(slots[0], {"starts_at": at(9), "local": f"{DAY}T09:00"})
         self.assertEqual(len(home["windows"]), 3)
@@ -144,6 +144,22 @@ class BookingApiTests(unittest.TestCase):
         page = self.client.get(f"/book/{self.slug}")
         self.assertEqual(page.status_code, 200)
         self.assertIn("frame-ancestors 'none'", page.headers["content-security-policy"])
+        short = self.client.get(f"/{self.slug}")
+        self.assertEqual(short.status_code, 200, "the booking page at the top level")
+        self.assertEqual(short.text, page.text)
+        self.assertIn("frame-ancestors 'none'", short.headers["content-security-policy"])
+
+    def test_top_level_links_never_hide_the_servers_own_pages(self):
+        self.assertEqual(self.client.get("/health").headers["content-type"], "application/json")
+        self.assertIn("text/html", self.client.get("/delete-account").headers["content-type"])
+        self.assertEqual(self.client.get("/admin").status_code, 200)
+        for bad in ("/favicon.ico", "/x", "/Has-Caps", "/a--b", "/learn", "/docs-x/y"):
+            r = self.client.get(bad)
+            self.assertNotEqual((r.status_code, r.headers.get("content-security-policy", "")[:11]), (200, "default-src"),
+                                bad)
+        for name in ("learn", "delete-account", "docs", "privacy"):
+            r = self.client.put("/v1/calendar/settings", json={"slug": name, "display_name": "Dr Asha Rao"})
+            self.assertEqual(r.status_code, 422, f"{name} is reserved")
 
     def test_link_names_are_unique_and_pages_off_or_unverified_are_hidden(self):
         self.setup_calendar()

@@ -952,3 +952,7 @@ def dev_clean(body: CleanIn):
     r = deid.clean(body.text)
     return {"redactions": [{"type": x.type, "start": x.start, "end": x.end} for x in r.redactions],
             "warnings": r.warnings, "cleaned": r.text, "is_clean": r.is_clean}
+
+
+# Booking pages at the top level (https://<server>/<link name>). Must stay the LAST route: everything above matches first.
+booking_api.install_short_links(app)

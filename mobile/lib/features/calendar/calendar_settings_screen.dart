@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/calendar_models.dart';
+import '../../core/config.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -117,10 +118,10 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
                 controller: _slug,
                 maxLength: 40,
                 autocorrect: false,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Link name',
                   helperText: 'Lowercase letters, numbers and hyphens, e.g. asha-rao',
-                  prefixText: '/book/',
+                  prefixText: '${Uri.tryParse(AppConfig.backendUrl)?.host ?? ''}/',
                   counterText: '',
                 ),
               ),

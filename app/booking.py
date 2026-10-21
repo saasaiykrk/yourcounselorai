@@ -30,7 +30,11 @@ PENDING_HOURS = 24                      # an unanswered request frees its slot a
 MAX_WINDOWS_PER_DAY = 4
 MAX_ACTIVE_PER_EMAIL = 2                # future pending/confirmed bookings one email may hold per consultant
 SLUG_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$")
-RESERVED_SLUGS = {"admin", "api", "book", "manage", "assets", "health", "healthz", "v1", "dev", "static", "help"}
+# Booking pages live at the top level (/<link name>), so a link name can't be one of the server's own paths
+# or a name a page may need later.
+RESERVED_SLUGS = {"admin", "api", "book", "manage", "assets", "health", "healthz", "v1", "dev", "static", "help",
+                  "learn", "delete-account", "docs", "redoc", "openapi", "privacy", "terms", "status", "app", "www",
+                  "login", "signin", "about", "contact", "support", "pricing", "plans", "favicon", "robots"}
 EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}$")
 NAME_RE = re.compile(r"^[^\d<>@{}\[\]\\/|=+*#$%^&_~`\"]{1,40}$")
 # What kind of session an appointment is: one tag, or none. The client picks it on the booking page;

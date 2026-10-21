@@ -212,7 +212,7 @@ How it is protected:
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
 buffer, notice, how far ahead clients can book, and whether requests need their approval. They share a link
-`https://<your Cloud Run URL>/book/<link name>` where clients pick a free time and give **only a first name
+`https://app.yourcounselor.in/<link name>` (older `/book/<link name>` links still work) where clients pick a free time and give **only a first name
 and an email**, and may pick one tag: **First Session**, **Follow-up** or **Online**. The consultant sees the
 tag on the calendar and can set, change or clear it (Calendar → the appointment → Type of session, or when adding
 one). The tag shows in the booking emails and on the client's own link. It is one tag or none, stored plainly
