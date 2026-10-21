@@ -111,7 +111,7 @@ function needReason(input) {
 }
 
 function clearBilling() {
-  for (const id of ["pricing-body", "subs-list", "subs-detail", "pay-stats", "pay-by-plan", "pay-list", "byok-usage"]) {
+  for (const id of ["pricing-body", "subs-list", "subs-detail", "pay-stats", "pay-by-plan", "pay-list", "byok-usage", "ext-list"]) {
     $(id).replaceChildren();
   }
   $("subs-detail").hidden = true;
@@ -447,6 +447,7 @@ async function loadPayments() {
     renderSummary(sum.by_plan);
     renderPaymentList(list.payments);
     renderUsage(usage);
+    loadExternal();
   } catch (err) {
     if (err.message !== "signed-out") {
       $("pay-stats").replaceChildren(el("p", { class: "error", text: "Couldn't load payments: " + err.message }));
@@ -473,13 +474,15 @@ function renderSummary(rows) {
 function renderPaymentList(rows) {
   put($("pay-list"), table(["Date", "Clinician", "Plan", "Amount", "Status", "Razorpay", ""], rows.map((o) => {
     const left = o.amount - (o.refunded_amount || 0);
-    const canRefund = o.status === "paid" && o.provider_payment_id && o.refund_status !== "pending" && left > 0;
+    const canRefund = o.provider === "razorpay" && o.status === "paid" && o.provider_payment_id
+      && o.refund_status !== "pending" && left > 0;
     return [when(o.created_at), el("span", {}, el("b", { text: o.full_name || "—" }), el("br"), el("span", { class: "muted small", text: o.email || "" })),
       PLAN[o.plan] + (o.report_type ? " · " + o.report_type : ""), rupees(o.amount, o.currency),
       el("span", {}, pill(PAY, o.status), o.refund_status ? el("span", { class: "pill grey",
         text: REFUND[o.refund_status] + (o.refunded_amount ? " " + rupees(o.refunded_amount, o.currency) : "") }) : null,
         o.failure_reason && o.status !== "paid" ? el("div", { class: "muted small", text: o.failure_reason }) : null),
-      el("span", { class: "mono small", text: [o.provider_order_id, o.provider_payment_id].filter(Boolean).join("\n") || "—" }),
+      o.provider === "external" ? el("span", { class: "pill grey", text: "Funnel" })
+        : el("span", { class: "mono small", text: [o.provider_order_id, o.provider_payment_id].filter(Boolean).join("\n") || "—" }),
       canRefund ? el("button", { type: "button", class: "btn ghost small", text: "Refund…", onclick: () => refundDialog(o, left) }) : ""];
   })) || empty("No transactions match."));
 }
@@ -500,6 +503,40 @@ function refundDialog(o, left) {
         { amount: paise, revoke_credits: revoke.box.checked, reason: r });
       toast(res.refund.status === "processed" ? "Refunded" : "Refund started; Razorpay will confirm it");
       loadPayments();
+    } });
+}
+
+const EXT = { pending: ["Waiting for sign-up", "check"], applied: ["Plan active", "ok"], cancelled: ["Cancelled", "grey"] };
+
+async function loadExternal() {
+  const box = $("ext-list");
+  try {
+    const { purchases, configured } = await api("GET", "/v1/admin/external-purchases");
+    const rows = purchases.map((p) => [when(p.created_at),
+      el("span", {}, el("b", { text: p.full_name || p.email || "—" }), p.full_name ? el("br") : null,
+        p.full_name ? el("span", { class: "muted small", text: p.email }) : null),
+      PLAN[p.plan] + (p.period ? " · " + PERIOD[p.period] : "") + (p.report_type ? " · " + p.report_type : ""),
+      rupees(p.amount, p.currency), p.source || "—", pill(EXT, p.status),
+      p.status === "pending" ? el("button", { type: "button", class: "btn ghost small", text: "Cancel…",
+        onclick: () => cancelExternal(p) }) : ""]);
+    put(box, configured ? null : el("p", { class: "notice" }, icon("warn"),
+        el("span", { text: "The webhook is off: FUNNEL_WEBHOOK_SECRET is not set on the server (see DEPLOY.md)." })),
+      table(["Date", "Buyer", "Plan", "Amount", "Source", "Status", ""], rows) || empty("No funnel sales yet."));
+  } catch (err) {
+    if (err.message !== "signed-out") box.replaceChildren(el("p", { class: "error", text: "Couldn't load: " + err.message }));
+  }
+}
+
+function cancelExternal(p) {
+  const reason = reasonInput("e.g. Refunded in the funnel");
+  formDialog({ title: "Cancel this purchase?", ok: "Cancel purchase", danger: true,
+    body: [el("p", { class: "muted small", text: (p.email || "") + " · " + PLAN[p.plan] + ". It will not start when they sign up. No money moves here." }),
+           field("Reason", reason)],
+    onSubmit: async () => {
+      await api("POST", "/v1/admin/external-purchases/" + encodeURIComponent(p.id) + "/cancel",
+        { active: false, reason: needReason(reason) });
+      toast("Cancelled");
+      loadExternal();
     } });
 }
 
