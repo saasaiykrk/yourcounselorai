@@ -31,7 +31,7 @@ class BrandLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Image.asset(
-      'assets/brand/logo_full.png',
+      'assets/brand/logo_splash.png',
       width: width,
       fit: BoxFit.contain,
       semanticLabel: 'Your Counselor: where counseling meets technology',

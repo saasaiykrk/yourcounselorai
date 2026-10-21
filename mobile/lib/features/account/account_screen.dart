@@ -84,7 +84,10 @@ class AccountScreen extends ConsumerWidget {
             children: [
               const BrandMark(size: 36),
               const SizedBox(height: 4),
-              Text('Version 1.0.0 · ${AppConfig.mode.name} build', style: AppText.caption),
+              Text(
+                AppConfig.mode == AppMode.live ? 'Version 1.0.0' : 'Version 1.0.0 · ${AppConfig.mode.name} build',
+                style: AppText.caption,
+              ),
             ],
           ),
         ],
