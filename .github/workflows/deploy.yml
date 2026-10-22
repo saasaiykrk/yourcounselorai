@@ -37,6 +37,7 @@ jobs:
     env:
       SERVICE: yourcounselor-api
       REGION: asia-south1
+      PUBLIC_URL: https://app.yourcounselor.in
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,12 +108,15 @@ jobs:
       - name: Smoke test /health
         if: steps.changes.outputs.backend == 'true'
         run: |
-          URL=$(gcloud run services describe "$SERVICE" --region "$REGION" --project "$PROJECT" \
-                  --format='value(status.url)')
-          for i in 1 2 3 4 5; do
+          # The public address (through the load balancer). The run.app address may be closed to the
+          # internet (ingress internal-and-cloud-load-balancing), so it is not checked. The new revision
+          # already has all traffic (step above), so this checks the new code.
+          URL="$PUBLIC_URL"
+          for i in 1 2 3 4 5 6; do
             if curl -fsS "$URL/health" -o health.json; then break; fi
-            sleep 5
+            sleep 10
           done
+          [ -s health.json ] || { echo "::error::$URL/health did not answer"; exit 1; }
           python3 - <<'PY'
           import json, sys
           d = json.load(open("health.json"))

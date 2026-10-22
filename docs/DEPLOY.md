@@ -422,7 +422,9 @@ Cloud Run's simple "domain mapping" isn't offered in Mumbai (asia-south1), so th
 Cloud **external HTTPS load balancer** in front of the same Cloud Run service. It keeps the server and data in
 Mumbai, gives a free Google-managed certificate, and allows long consults (Cloud Run's own 300-second limit
 applies). Cost: about US$18 a month for the load balancer, plus a little per GB. The old `*.run.app` address
-keeps working, so apps already installed are not affected.
+keeps working, so apps already installed are not affected. The deploy workflow's smoke test checks
+`https://app.yourcounselor.in/health` (`PUBLIC_URL` in `deploy.yml`), so the `*.run.app` address can later be
+closed with `--ingress internal-and-cloud-load-balancing` without breaking deploys.
 
 1. **Load balancer** (Cloud Shell, once):
    ```bash
