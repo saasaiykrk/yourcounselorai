@@ -44,7 +44,7 @@ def delete_account(cid) -> str:
         if row:
             c.execute("""update clinicians set full_name=null, gender=null, age_at_registration=null,
                            registration_number=null, level=null, verification_status='deleted',
-                           verification_note=null, deleted_at=coalesce(deleted_at, now())
+                           verification_note=null, proven_email=null, deleted_at=coalesce(deleted_at, now())
                          where id=%s""", (str(cid),))
             c.execute("update conversations set hidden_at=now() where clinician_id=%s and hidden_at is null",
                       (str(cid),))
@@ -64,6 +64,13 @@ def delete_account(cid) -> str:
 def get_clinician(cid) -> dict | None:
     with _conn() as c:
         return c.execute("select * from clinicians where id=%s", (str(cid),)).fetchone()
+
+
+def note_proven_email(cid, email: str) -> None:
+    """The clinician signed in with a code sent to this address (see migration 016)."""
+    with _conn() as c:
+        c.execute("update clinicians set proven_email=%s where id=%s and proven_email is distinct from %s",
+                  (email.lower(), str(cid), email.lower()))
 
 
 def upsert_clinician_profile(cid, p: dict) -> None:

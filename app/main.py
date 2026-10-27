@@ -200,6 +200,17 @@ _dev_consults = DevConsultationStore()  # guided consultations in DEV_MODE (no d
 
 
 # --- auth -------------------------------------------------------------------
+def proven_email(claims: dict) -> str | None:
+    """The sign-in email, lowercased, when this session came from a code emailed to it (Supabase's `amr`
+    claim: otp or magiclink). A password sign-in or a changed address proves nothing: sign-up sends no
+    confirmation email."""
+    amr = claims.get("amr")
+    email = (claims.get("email") or "").strip().lower()
+    if not email or not isinstance(amr, list):
+        return None
+    return email if any(isinstance(m, dict) and m.get("method") in ("otp", "magiclink") for m in amr) else None
+
+
 def current_user(authorization: str = Header(...)) -> dict:
     token = authorization.removeprefix("Bearer ").strip()
     if CFG.dev_mode and token.startswith("dev-"):
@@ -210,7 +221,7 @@ def current_user(authorization: str = Header(...)) -> dict:
         claims = jwt.decode(token, key, algorithms=["RS256", "ES256"], audience="authenticated")
     except Exception:
         raise HTTPException(401, "invalid token")
-    return {"id": claims["sub"]}
+    return {"id": claims["sub"], "proven_email": proven_email(claims)}
 
 
 def verified_clinician(user: dict = Depends(current_user)) -> dict:
@@ -359,14 +370,18 @@ def me(user: dict = Depends(current_user)):
     row = db.get_clinician(user["id"])
     if not row:
         return {"id": user["id"], "verification_status": "none"}
+    if user.get("proven_email"):
+        db.note_proven_email(user["id"], user["proven_email"])    # before the plan check: funnel plans need it
     # What the clinician's plan unlocks (library, pdf, booking, appointments, guided_own_key, guided_included).
     unlocked = sorted(BILLING.features(user["id"])) if row["verification_status"] == "verified" else []
-    return {**row, "features": {**features, "unlocked": unlocked}}
+    return {**{k: v for k, v in row.items() if k != "proven_email"}, "features": {**features, "unlocked": unlocked}}
 
 
 @app.post("/v1/profile")
 def profile(body: ProfileIn, user: dict = Depends(current_user)):
     db.upsert_clinician_profile(user["id"], body.model_dump())
+    if user.get("proven_email"):
+        db.note_proven_email(user["id"], user["proven_email"])
     return {"verification_status": "pending"}
 
 

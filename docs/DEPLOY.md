@@ -208,7 +208,7 @@ How it is protected:
 4. **Admins and the Google Play reviewer:** give them a plan in /admin → Subscriptions & Users → the person →
    **Give a plan…** → Scale (or BYOK Scale), with the days you want (e.g. 90).
 
-## Plans bought outside the app (funnels): run migration 015
+## Plans bought outside the app (funnels): run migrations 015 and 016
 
 A funnel, landing page or automation tool (GoHighLevel, Systeme.io, Zapier, Make, Pabbly…) can tell the server
 about a sale. The plan starts at once if an account already uses that email; otherwise it waits and starts when
@@ -248,6 +248,23 @@ ones also appear in Transactions (marked "Funnel") and in the totals.
 5. **Refunds** are handled where the money was taken (the funnel's own gateway). Then, in /admin: a sale still
    waiting → Payments → From funnels → **Cancel…**; a plan already active → Subscriptions & Users → the person →
    **Deactivate…**.
+
+## Sign-up without a confirmation email: run migration 016 first
+
+New clinicians get one email, the 6-digit code, and are signed in; there is no separate "confirm your email"
+message. Because Supabase then also accepts a password sign-up or an email change without any code, an account's
+address alone proves nothing. The server therefore notes the address only when someone opens the app with a code
+sent to it (`clinicians.proven_email`), and funnel plans go only to that address.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/016_proven_email.sql` (safe to run again). Then
+   deploy the backend.
+2. **Supabase → Authentication → Sign In / Providers → Email:** turn **Confirm email** off. Save.
+3. **Supabase → Authentication → Emails → Templates → Magic Link:** this is now the only email new and
+   returning clinicians get. It must show `{{ .Token }}` (the code), not a link.
+4. **Supabase → Authentication → URL Configuration → Site URL:** `https://app.yourcounselor.in` (not localhost).
+
+Existing accounts are proven the next time they open the app. The reviewer's password account is never proven,
+so give it plans from /admin, not through a funnel.
 
 ## Calendar and online booking (each consultant switches it on for themselves)
 

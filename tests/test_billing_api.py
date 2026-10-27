@@ -600,17 +600,29 @@ class BillingApiTests(unittest.TestCase):
 
     # --- plans bought outside the app (funnels) -----------------------------------------------------
     def funnel(self, secret=FUNNEL_SECRET, **body):
-        sale = {"event_id": "ord_" + uuid.uuid4().hex[:10], "email": self.email(), "plan": "scale", "period": "year",
+        sale = {"event_id": "ord_" + uuid.uuid4().hex[:10], "plan": "scale", "period": "year",
                 "amount": 19999, "source": "Landing page", "payment_id": "pay_" + uuid.uuid4().hex[:8], **body}
+        if "email" not in body:
+            sale["email"] = self.email()
         return self.client.post("/v1/webhooks/purchase", json=sale, headers={"X-Webhook-Secret": secret} if secret else {})
 
-    def email(self, who=None):
-        """A real-looking sign-in email for this clinician (the webhook checks the address)."""
+    def email(self, who=None, proven=True):
+        """A real-looking sign-in email for this clinician (the webhook checks the address). proven: they
+        have opened the app with an emailed code to it (the only proof they own it)."""
         who = who or self.cid
         mail = f"buyer-{who[:8]}@example.com"
         with psycopg.connect(URL, autocommit=True) as c:
             c.execute("update auth.users set email=%s where id=%s", (mail, who))
+        if proven:
+            self.sign_in_with_code(who, mail)
         return mail
+
+    def sign_in_with_code(self, who, mail):
+        before = self.who
+        main.app.dependency_overrides[main.current_user] = lambda: {"id": who, "proven_email": mail}
+        self.client.get("/v1/me")
+        main.app.dependency_overrides[main.current_user] = lambda: {"id": self.who}
+        self.who = before
 
     def test_a_funnel_sale_for_an_existing_account_starts_at_once_and_shows_in_payments(self):
         self.configure({"enabled": True})
@@ -645,10 +657,30 @@ class BillingApiTests(unittest.TestCase):
             c.execute("insert into auth.users (id, email) values (%s,%s)", (newbie, mail))
             c.execute("""insert into clinicians (id, role, registration_body, level, verification_status, consent_version)
                          values (%s,'psychologist','RCI','L2','verified','v1')""", (newbie,))
+        self.sign_in_with_code(newbie, mail)
         f = billing_db.plan_features(newbie, main.BILLING.config()[1])
         self.assertTrue({"pdf", "appointments"} <= f["features"], "the plan starts at their first visit")
         self.assertEqual(billing_db.get_external(r.request.content and json.loads(r.request.content)["event_id"])["status"],
                          "applied")
+
+    def test_a_funnel_sale_goes_only_to_an_account_that_proved_the_email_with_a_code(self):
+        """Sign-up needs no confirmation email, so an account can hold an address its owner never received a
+        code at (a password sign-up, or an email change). Such an account must not collect that buyer's plan."""
+        self.configure({"enabled": True})
+        cfg = main.BILLING.config()[1]
+        mail = self.email(proven=False)                            # never signed in with a code to it
+        r = self.funnel(email=mail, plan="practice", period="month", amount=999)
+        self.assertEqual(r.json()["status"], "pending", r.text)
+        self.assertNotIn("pdf", billing_db.plan_features(self.cid, cfg)["features"])
+        self.who = self.cid
+        self.client.get("/v1/me")                                  # a password sign-in proves nothing
+        self.assertNotIn("pdf", billing_db.plan_features(self.cid, cfg)["features"])
+        other = f"proven-{self.cid[:6]}@example.com"               # proved another address, then switched
+        self.sign_in_with_code(self.cid, other)
+        self.assertNotIn("pdf", billing_db.plan_features(self.cid, cfg)["features"])
+        self.sign_in_with_code(self.cid, mail.upper())             # the owner signs in with the code
+        self.assertIn("pdf", billing_db.plan_features(self.cid, cfg)["features"])
+        self.assertEqual(billing_db.get_external(json.loads(r.request.content)["event_id"])["status"], "applied")
 
     def test_bad_funnel_sales_are_refused_and_an_admin_can_cancel_a_waiting_one(self):
         self.configure({"enabled": True})
@@ -736,3 +768,16 @@ class BillingApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProvenEmailTests(unittest.TestCase):
+    """Which sign-ins prove the account owns its email (Supabase's `amr` claim in the login token)."""
+
+    def test_only_an_emailed_code_proves_the_address(self):
+        code = {"sub": "u", "email": "Dr.Ravi@Example.com", "amr": [{"method": "otp", "timestamp": 1}]}
+        self.assertEqual(main.proven_email(code), "dr.ravi@example.com")
+        self.assertEqual(main.proven_email({**code, "amr": [{"method": "magiclink", "timestamp": 1}]}),
+                         "dr.ravi@example.com")
+        for not_proof in ({**code, "amr": [{"method": "password", "timestamp": 1}]}, {**code, "amr": []},
+                          {"sub": "u", "email": "x@example.com"}, {**code, "email": ""}, {**code, "amr": "otp"}):
+            self.assertIsNone(main.proven_email(not_proof), not_proof)
