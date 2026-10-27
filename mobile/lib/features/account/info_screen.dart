@@ -23,13 +23,7 @@ class InfoScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         gap: 14,
         children: [
-          if (doc.draft)
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: StatusPill('Beta draft', tone: Tone.check, icon: Icons.edit_note_rounded, uppercase: true),
-            ),
           PageHeading(doc.title, message: doc.intro),
-          if (doc.draft) const Text(kDraftNotice, style: AppText.smallMuted),
           for (final s in doc.sections)
             AppCard(
               child: Column(

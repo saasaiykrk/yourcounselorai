@@ -45,17 +45,24 @@ def _lock(c, cid) -> None:
 
 
 # --- settings, hours, time off ----------------------------------------------------------------
+# Every column but the photo itself (up to 400 KB), which only photo() reads; has_photo says if there is one.
+_SETTINGS_COLS = ", ".join(f"s.{k}" for k in (
+    "clinician_id", "slug", "enabled", "display_name", "bio", "timezone", "slot_minutes", "buffer_minutes",
+    "min_notice_minutes", "max_advance_days", "approval", "updated_at", "address", "phone", "links", "photo_type",
+    "photo_version")) + ", (s.photo is not null) as has_photo"
+
+
 def get_settings(cid) -> dict | None:
     with _conn() as c:
-        return c.execute("select * from booking_settings where clinician_id=%s", (str(cid),)).fetchone()
+        return c.execute(f"select {_SETTINGS_COLS} from booking_settings s where s.clinician_id=%s", (str(cid),)).fetchone()
 
 
 def public_settings(slug: str) -> dict | None:
     """Settings of an enabled booking page whose consultant is verified, else None."""
     with _conn() as c:
         return c.execute(
-            """select s.*, c.role from booking_settings s join clinicians c on c.id = s.clinician_id
-               where s.slug=%s and s.enabled and c.verification_status='verified'""", (slug,)).fetchone()
+            f"""select {_SETTINGS_COLS}, c.role from booking_settings s join clinicians c on c.id = s.clinician_id
+                where s.slug=%s and s.enabled and c.verification_status='verified'""", (slug,)).fetchone()
 
 
 def save_settings(cid, s: dict) -> dict:
@@ -66,9 +73,9 @@ def save_settings(cid, s: dict) -> dict:
     try:
         with _conn() as c:
             return c.execute(
-                f"""insert into booking_settings (clinician_id, {', '.join(cols)}) values (%s, {', '.join(['%s'] * len(cols))})
+                f"""insert into booking_settings as s (clinician_id, {', '.join(cols)}) values (%s, {', '.join(['%s'] * len(cols))})
                     on conflict (clinician_id) do update set {', '.join(f'{k}=excluded.{k}' for k in cols)}, updated_at=now()
-                    returning *""", (str(cid), *vals)).fetchone()
+                    returning {_SETTINGS_COLS}""", (str(cid), *vals)).fetchone()
     except psycopg.errors.UniqueViolation:
         raise SlugTaken()
 

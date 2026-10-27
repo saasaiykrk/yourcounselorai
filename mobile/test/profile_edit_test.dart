@@ -20,6 +20,7 @@ class _Profile implements ProfileRepository {
     fullName: 'Dr Old Name',
     gender: 'female',
     age: 34,
+    mobile: '+919876543210',
   );
   final edits = <ProfileEdit>[];
 
@@ -45,6 +46,7 @@ class _Profile implements ProfileRepository {
       fullName: p.fullName,
       gender: p.gender,
       age: p.age,
+      mobile: p.mobile,
     );
     return ProfileEditResult(verificationStatus: current.verificationStatus, reverify: reverify);
   }
@@ -77,8 +79,9 @@ void main() {
       'gender': 'male',
       'age_at_registration': 41,
       'registration_number': 'B777',
+      'mobile': '+919876543210',
     });
-    expect((me.gender, me.age, me.registrationNumber), ('male', 41, 'B777'));
+    expect((me.gender, me.age, me.registrationNumber, me.mobile), ('male', 41, 'B777', '+919876543210'));
     final json = const ProfileEdit(
       fullName: 'A B',
       gender: 'male',
@@ -86,8 +89,17 @@ void main() {
       role: 'psychologist',
       registrationBody: 'RCI',
       registrationNumber: 'B777',
+      mobile: '+919876543210',
     ).toJson();
-    expect(json.keys.toSet(), {'full_name', 'gender', 'age', 'role', 'registration_body', 'registration_number'});
+    expect(json.keys.toSet(), {
+      'full_name',
+      'gender',
+      'age',
+      'role',
+      'registration_body',
+      'registration_number',
+      'mobile',
+    });
   });
 
   testWidgets('changing the name keeps the verification', (tester) async {
@@ -128,6 +140,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(profile.edits.single.registrationNumber, 'A99999');
     expect(router.state.uri.path, '/pending');
+  });
+
+  testWidgets('the mobile number is prefilled, checked and saved in one form', (tester) async {
+    final profile = _Profile();
+    await _pump(tester, profile);
+    expect(tester.widget<TextField>(_field('mobile')).controller!.text, '+919876543210');
+    await tester.enterText(_field('mobile'), '12345');
+    await tester.pump();
+    expect(find.text('A mobile number like 98765 43210'), findsOneWidget);
+    await tester.ensureVisible(find.text('Save changes'));
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes')).onPressed, isNull);
+    await tester.enterText(_field('mobile'), '091234 56789');
+    await tester.pump();
+    await tester.tap(find.text('Save changes'));
+    await tester.pumpAndSettle();
+    expect(profile.edits.single.mobile, '+919123456789');
+  });
+
+  testWidgets('an account from before the mobile number must add one to save', (tester) async {
+    final profile = _Profile()
+      ..current = const Me(
+        verificationStatus: 'verified',
+        level: 'L2',
+        role: 'psychologist',
+        registrationBody: 'RCI',
+        registrationNumber: 'A12345',
+        fullName: 'Dr Old Name',
+        gender: 'female',
+        age: 34,
+      );
+    await _pump(tester, profile);
+    await tester.ensureVisible(find.text('Save changes'));
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes')).onPressed, isNull);
   });
 
   testWidgets('fits a 320px phone', (tester) async {

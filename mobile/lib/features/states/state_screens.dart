@@ -164,7 +164,7 @@ class LimitScreen extends StatelessWidget {
       icon: Icons.update_rounded,
       tone: Tone.brand,
       title: "You've reached today's limit",
-      message: 'During the beta, each clinician can run $limit consults in any 24 hours.',
+      message: 'Each clinician can run $limit consults in any 24 hours.',
       actions: [OutlinedButton(onPressed: () => context.go('/consult'), child: const Text('OK'))],
       children: [
         AppCard(

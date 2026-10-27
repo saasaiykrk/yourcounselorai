@@ -1,5 +1,5 @@
-// Account information links: each one opens its page, the draft legal pages say
-// they are drafts, and "Contact" always shows the address even without a mail app.
+// Account information links: each one opens its page with no "beta draft" label, the DPA
+// states the uses of the mobile number, and "Contact" always shows the address even without a mail app.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,9 +40,17 @@ void main() {
       await _open(tester, label);
       expect(find.text(doc.intro), findsOneWidget);
       expect(find.text(doc.sections.first.heading), findsOneWidget);
-      expect(find.text(kDraftNotice), doc.draft ? findsOneWidget : findsNothing);
+      expect(find.textContaining(RegExp('beta', caseSensitive: false)), findsNothing);
+      expect(find.textContaining(RegExp('draft', caseSensitive: false)), findsNothing);
     });
   }
+
+  testWidgets('the DPA says what the mobile number is used for, and how to stop offers', (tester) async {
+    await _pump(tester, '/dpa');
+    await tester.scrollUntilVisible(find.text('Offers and updates'), 300);
+    expect(find.textContaining('mobile number and email address to contact you'), findsOneWidget);
+    expect(find.textContaining('reply STOP'), findsOneWidget);
+  });
 
   testWidgets('the Clinician Terms carry the disclaimer', (tester) async {
     await _pump(tester, '/terms');

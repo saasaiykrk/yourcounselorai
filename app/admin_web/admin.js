@@ -361,7 +361,7 @@ function renderClinicians() {
   const list = $("clinician-list");
   const q = $("clinician-search").value.trim().toLowerCase();
   const rows = clinicianRows.filter((c) => !q ||
-    [c.full_name, c.email, c.registration_number].some((v) => (v || "").toLowerCase().includes(q)));
+    [c.full_name, c.email, c.registration_number, c.mobile].some((v) => (v || "").toLowerCase().includes(q)));
   if (!rows.length) {
     list.replaceChildren(empty(q ? "No registrations match \"" + q + "\"."
       : clinicianStatus === "pending" ? "Nobody is waiting for approval." : "None.", q ? "search" : "inbox"));
@@ -391,6 +391,7 @@ function clinicianCard(c) {
       fact("Role", ROLE[c.role] || c.role),
       fact("Registration", regValue),
       fact("Gender · age", personal || "Not given"),
+      fact("Mobile", c.mobile || "Not given"),
       fact(status === "pending" ? "Registered" : "Decided", when(status === "pending" ? c.created_at : (c.verified_at || c.created_at)))),
     c.verification_note ? el("p", { class: "note-line", text: "How it was checked: " + c.verification_note }) : null);
   if (status === "pending") {

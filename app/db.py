@@ -7,16 +7,38 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 _DSN = os.environ.get("DATABASE_URL", "")
+_pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool() -> ConnectionPool:
+    """Open connections, kept and reused. A new connection to Supabase costs several network round trips
+    (TCP, TLS, sign-in), and one screen can make many queries. Checked before each use, so a connection
+    the database closed is replaced instead of failing. prepare_threshold=None: works through
+    Supabase's transaction pooler too."""
+    global _pool
+    with _pool_lock:
+        if _pool is None or _pool.conninfo != _DSN:
+            if _pool is not None:
+                _pool.close()
+            _pool = ConnectionPool(_DSN, min_size=1, max_size=10, max_idle=300, timeout=20,
+                                   check=ConnectionPool.check_connection, open=True,
+                                   kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None})
+        return _pool
 
 
 def _conn():
-    return psycopg.connect(_DSN, row_factory=dict_row, autocommit=True)
+    """`with _conn() as c:` lends a connection and gives it back afterwards (autocommit; use
+    c.transaction() for several statements together)."""
+    return _get_pool().connection()
 
 
 def ping() -> bool:
@@ -32,7 +54,7 @@ def delete_account(cid) -> str:
     """The clinician deletes their account. Returns "deleted", or "admin" (admins can't delete
     themselves; another admin removes admin access first).
 
-    Gone: the sign-in (auth.users, with the email), name, gender, age, registration number and level,
+    Gone: the sign-in (auth.users, with the email), name, mobile number, gender, age, registration number and level,
     the clinician's own AI key, and their booking pages, hours, time off and appointments (which hold
     clients' names and emails). Consults leave the history; the de-identified copy stays for the
     safety-review retention period, with no name or email attached. Payment records stay (tax law).
@@ -44,7 +66,7 @@ def delete_account(cid) -> str:
         if row:
             c.execute("""update clinicians set full_name=null, gender=null, age_at_registration=null,
                            registration_number=null, level=null, verification_status='deleted',
-                           verification_note=null, proven_email=null, deleted_at=coalesce(deleted_at, now())
+                           verification_note=null, proven_email=null, mobile=null, deleted_at=coalesce(deleted_at, now())
                          where id=%s""", (str(cid),))
             c.execute("update conversations set hidden_at=now() where clinician_id=%s and hidden_at is null",
                       (str(cid),))
@@ -77,15 +99,15 @@ def upsert_clinician_profile(cid, p: dict) -> None:
     with _conn() as c:
         c.execute(
             """insert into clinicians (id, full_name, gender, age_at_registration, role, registration_body,
-                                          registration_number, consent_version, consent_at)
-               values (%s,%s,%s,%s,%s,%s,%s,%s, now())
+                                          registration_number, consent_version, consent_at, mobile)
+               values (%s,%s,%s,%s,%s,%s,%s,%s, now(), %s)
                on conflict (id) do update set full_name=excluded.full_name, gender=excluded.gender,
                  age_at_registration=excluded.age_at_registration, role=excluded.role,
                  registration_body=excluded.registration_body, registration_number=excluded.registration_number,
                  consent_version=excluded.consent_version, consent_at=now(), verification_status='pending',
-                 level=null""",
+                 level=null, mobile=coalesce(excluded.mobile, clinicians.mobile)""",
             (str(cid), p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"],
-             p.get("registration_number"), p["consent_version"]))
+             p.get("registration_number"), p["consent_version"], p.get("mobile")))
 
 
 def update_clinician_profile(cid, p: dict) -> dict | None:
@@ -99,12 +121,12 @@ def update_clinician_profile(cid, p: dict) -> dict | None:
         reverify = any((old[k] or None) != (p[k] or None) for k in ("role", "registration_body", "registration_number"))
         row = c.execute(
             """update clinicians set full_name=%s, gender=%s, age_at_registration=%s, role=%s, registration_body=%s,
-                 registration_number=%s,
+                 registration_number=%s, mobile=coalesce(%s, mobile),
                  verification_status = case when %s then 'pending' else verification_status end,
                  level = case when %s then null else level end
                where id=%s returning verification_status""",
             (p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"], p["registration_number"],
-             reverify, reverify, str(cid))).fetchone()
+             p.get("mobile"), reverify, reverify, str(cid))).fetchone()
         return {"verification_status": row["verification_status"], "reverify": reverify}
 
 
@@ -207,7 +229,7 @@ def log_deid_rejection(cid, counts: dict) -> None:
 
 
 # --- admin (reads and updates for the admin panel; every write is audited) ---------------
-_CLINICIAN_COLS = """c.id, u.email, c.full_name, c.gender, c.age_at_registration, c.role,
+_CLINICIAN_COLS = """c.id, u.email, c.mobile, c.full_name, c.gender, c.age_at_registration, c.role,
                      c.registration_body, c.registration_number, c.level,
                      c.verification_status, c.verification_note, c.verified_at, c.is_admin, c.created_at"""
 

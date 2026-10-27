@@ -15,6 +15,7 @@ class Me {
     this.gender,
     this.age,
     this.registrationNumber,
+    this.mobile,
     this.unlocked,
   });
 
@@ -30,6 +31,7 @@ class Me {
     gender: json['gender'] as String?,
     age: (json['age_at_registration'] as num?)?.toInt(),
     registrationNumber: json['registration_number'] as String?,
+    mobile: json['mobile'] as String?,
     unlocked: (json['features'] as Map?)?['unlocked'] is List
         ? {for (final f in (json['features'] as Map)['unlocked'] as List) '$f'}
         : null,
@@ -61,6 +63,9 @@ class Me {
   final int? age;
   final String? registrationNumber;
 
+  /// The clinician's own mobile number (+919876543210); null for accounts from before it was asked.
+  final String? mobile;
+
   /// What the clinician's plan unlocks (library, pdf, booking, appointments, guided_own_key,
   /// guided_included). Null: the server didn't say (an older server) — nothing is locked in the app;
   /// the server still checks every request.
@@ -86,6 +91,7 @@ class ProfileSubmission {
     required this.registrationBody,
     required this.registrationNumber,
     required this.consentVersion,
+    required this.mobile,
   });
 
   /// The clinician's own details (never a client's). Seen only by admins checking the
@@ -100,6 +106,9 @@ class ProfileSubmission {
   final String? registrationNumber;
   final String consentVersion;
 
+  /// The clinician's own mobile number (see the Data Processing Agreement for its uses).
+  final String mobile;
+
   Map<String, dynamic> toJson() => {
     'full_name': fullName,
     'gender': gender,
@@ -108,6 +117,7 @@ class ProfileSubmission {
     'registration_body': registrationBody,
     'registration_number': registrationNumber,
     'consent_version': consentVersion,
+    'mobile': mobile,
   };
 }
 
@@ -121,6 +131,7 @@ class ProfileEdit {
     required this.role,
     required this.registrationBody,
     required this.registrationNumber,
+    required this.mobile,
   });
 
   final String fullName;
@@ -129,6 +140,7 @@ class ProfileEdit {
   final String role;
   final String registrationBody;
   final String? registrationNumber;
+  final String mobile;
 
   Map<String, dynamic> toJson() => {
     'full_name': fullName,
@@ -137,6 +149,7 @@ class ProfileEdit {
     'role': role,
     'registration_body': registrationBody,
     'registration_number': registrationNumber,
+    'mobile': mobile,
   };
 }
 

@@ -48,6 +48,42 @@ class ProfileApiTests(unittest.TestCase):
             self.assertEqual(r.status_code, 422, bad)
             save.assert_not_called()
 
+    def test_mobile_number_is_saved_in_one_form(self):
+        for raw, want in (("98765 43210", "+919876543210"), ("+91 98765-43210", "+919876543210"),
+                          ("09876543210", "+919876543210"), ("919876543210", "+919876543210"),
+                          ("+44 7911 123456", "+447911123456"), ("0044 7911 123456", "+447911123456")):
+            r, save = self.post({**GOOD, "mobile": raw})
+            self.assertEqual(r.status_code, 200, (raw, r.text))
+            self.assertEqual(save.call_args.args[1]["mobile"], want, raw)
+
+    def test_a_wrong_mobile_number_is_refused(self):
+        for bad in ("12345", "5876543210", "+91 12345 67890", "98765 4321a", "+1", "call me", "+91 98765 432100"):
+            r, save = self.post({**GOOD, "mobile": bad})
+            self.assertEqual(r.status_code, 422, bad)
+            self.assertIn("mobile", r.text, bad)
+            save.assert_not_called()
+
+    def test_older_apps_without_a_mobile_number_can_still_register(self):
+        r, save = self.post(GOOD)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsNone(save.call_args.args[1]["mobile"])
+
+    def test_editing_can_change_the_mobile_number_and_older_apps_leave_it(self):
+        saved = dict(main._DEV_CLINICIAN)
+        try:
+            main._DEV_CLINICIAN.update(full_name="Dr Old", gender="female", age_at_registration=34, mobile="+919876543210",
+                                       role="psychologist", registration_body="RCI", registration_number="A12345")
+            base = {k: v for k, v in GOOD.items() if k != "consent_version"}
+            self.assertEqual(self.edit(base).status_code, 200)
+            self.assertEqual(main._DEV_CLINICIAN["mobile"], "+919876543210", "not sent: unchanged")
+            r = self.edit({**base, "mobile": "91234 56789"})
+            self.assertEqual(r.json(), {"verification_status": "verified", "reverify": False})
+            self.assertEqual(self.client.get("/v1/me", headers=ME).json()["mobile"], "+919123456789")
+            self.assertEqual(self.edit({**base, "mobile": "123"}).status_code, 422)
+        finally:
+            main._DEV_CLINICIAN.clear()
+            main._DEV_CLINICIAN.update(saved)
+
     # --- editing (PATCH /v1/profile) ------------------------------------------------
     def edit(self, body):
         return self.client.patch("/v1/profile", headers=ME, json=body)

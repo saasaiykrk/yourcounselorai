@@ -19,7 +19,7 @@ Set it up once:
 1. **Supabase** → Authentication → Users → **Add user** → *Create new user*: email `playreview@yourcounselor.in`,
    password: **the fixed 6-digit code you choose** (for example a random 6-digit number), tick **Auto Confirm User**.
 2. **On your phone** (new app build): Sign in → that email → **Send code** → type the 6-digit code → Verify. Fill in
-   the registration (name "Google Play Reviewer", role Psychologist, registration body RCI, number "PLAY-REVIEW").
+   the registration (name "Google Play Reviewer", mobile number 98765 43210, role Psychologist, registration body RCI, number "PLAY-REVIEW").
 3. **/admin → Registrations**: verify the account (level **L2**).
 4. **/admin → Subscriptions & Users** → the reviewer → **Give a plan…** → **Scale** for 90 days (it brings 10
    AI-Guided reports a month), plus **Adjust credits** +5 for quick consults, so reviews can use every part of
@@ -62,6 +62,7 @@ Encryption in transit: **Yes** (HTTPS everywhere). Users can ask for their data 
 |---|---|---|---|---|---|
 | Personal info → **Name** | Yes | No | Required | Account management, app functionality | Clinician's name. Clients' first names, when the clinician adds an appointment (optional field). |
 | Personal info → **Email address** | Yes | No | Required | Account management, app functionality | Sign-in code. Clients' emails for appointment notices (optional field). |
+| Personal info → **Phone number** | Yes | No | Required | Account management, Developer communications, Advertising or marketing | Clinician's own mobile number, asked at registration. Used to contact them and for offers and updates (they can reply STOP). |
 | Personal info → **Other info** | Yes | No | Required | Account management (verification) | Gender, age, professional role, registration body and number. |
 | Health and fitness → **Health info** | Yes | No | Required to use consults | App functionality | De-identified case descriptions and the replies. Identifiers are removed on the phone first. |
 | Financial info → **Purchase history** | Yes | No | Optional (only if you buy) | App functionality, account management | Plan, amount, payment status. |
