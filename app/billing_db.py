@@ -237,9 +237,11 @@ def record_external(e: dict) -> tuple[dict, bool]:
 
 
 def _apply_external(c, cid, cfg: dict) -> int:
-    """Grants every waiting purchase for this clinician's sign-in email (inside the caller's transaction,
-    under the clinician's lock). Each becomes a paid order (provider 'external') and its plan or credit."""
+    """Grants every waiting purchase for this clinician's sign-in email, once they have proved they own it by
+    signing in with a code sent to it (clinicians.proven_email; inside the caller's transaction, under the
+    clinician's lock). Each becomes a paid order (provider 'external') and its plan or credit."""
     rows = c.execute("""select p.* from external_purchases p join auth.users u on lower(u.email) = lower(p.email)
+                        join clinicians pc on pc.id = u.id and pc.proven_email = lower(u.email)
                         where u.id=%s and p.status='pending' order by p.id for update of p""", (str(cid),)).fetchall()
     for p in rows:
         order = c.execute(
@@ -255,11 +257,12 @@ def _apply_external(c, cid, cfg: dict) -> int:
 
 
 def apply_external_for_email(email: str, cfg: dict) -> str | None:
-    """If an account with this email exists (and has registered), applies its waiting purchases now.
-    Returns the clinician id, or None (the purchase waits for them to sign up)."""
+    """If an account with this email exists (registered, and has signed in with a code sent to it), applies
+    its waiting purchases now. Returns the clinician id, or None (the purchase waits for them to sign up)."""
     with _conn() as c, c.transaction():
         row = c.execute("""select c.id from auth.users u join clinicians c on c.id = u.id
-                           where lower(u.email) = lower(%s) limit 1""", (email,)).fetchone()
+                           where lower(u.email) = lower(%s) and c.proven_email = lower(u.email) limit 1""",
+                        (email,)).fetchone()
         if not row:
             return None
         _lock(c, row["id"])
@@ -306,6 +309,7 @@ def plan_features(cid, cfg: dict) -> dict:
         # Bought in a funnel before signing up: it starts now. Its own transaction, so the check below (whose
         # now() is its own start) sees the new plan as already started.
         if c.execute("""select 1 from external_purchases p join auth.users u on lower(u.email) = lower(p.email)
+                        join clinicians pc on pc.id = u.id and pc.proven_email = lower(u.email)
                         where u.id=%s and p.status='pending' limit 1""", (str(cid),)).fetchone():
             _lock(c, cid)
             _apply_external(c, cid, cfg)
