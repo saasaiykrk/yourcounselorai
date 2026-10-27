@@ -770,6 +770,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@unittest.skipUnless(HAVE, "TEST_DATABASE_URL not set")
 class ProvenEmailTests(unittest.TestCase):
     """Which sign-ins prove the account owns its email (Supabase's `amr` claim in the login token)."""
 
