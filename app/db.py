@@ -7,16 +7,38 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import uuid
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 _DSN = os.environ.get("DATABASE_URL", "")
+_pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool() -> ConnectionPool:
+    """Open connections, kept and reused. A new connection to Supabase costs several network round trips
+    (TCP, TLS, sign-in), and one screen can make many queries. Checked before each use, so a connection
+    the database closed is replaced instead of failing. prepare_threshold=None: works through
+    Supabase's transaction pooler too."""
+    global _pool
+    with _pool_lock:
+        if _pool is None or _pool.conninfo != _DSN:
+            if _pool is not None:
+                _pool.close()
+            _pool = ConnectionPool(_DSN, min_size=1, max_size=10, max_idle=300, timeout=20,
+                                   check=ConnectionPool.check_connection, open=True,
+                                   kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None})
+        return _pool
 
 
 def _conn():
-    return psycopg.connect(_DSN, row_factory=dict_row, autocommit=True)
+    """`with _conn() as c:` lends a connection and gives it back afterwards (autocommit; use
+    c.transaction() for several statements together)."""
+    return _get_pool().connection()
 
 
 def ping() -> bool:

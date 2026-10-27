@@ -285,7 +285,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
             settings = {k: s[k] for k in ("slug", "enabled", "display_name", "bio", "timezone", "slot_minutes",
                                           "buffer_minutes", "min_notice_minutes", "max_advance_days", "approval",
                                           "address", "phone", "links")}
-            settings["photo_version"] = s["photo_version"] if s.get("photo") is not None else None
+            settings["photo_version"] = s["photo_version"] if s.get("has_photo") else None
         else:
             name = c.get("full_name") or ""
             settings = {**booking.DEFAULT_SETTINGS, "slug": _slugify(name), "display_name": name}
@@ -537,7 +537,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         s = public_settings(slug)
         return {"display_name": s["display_name"], "bio": s["bio"], "role": ROLE.get(s["role"], "Consultant"),
                 "address": s.get("address") or "", "phone": s.get("phone") or "", "links": s.get("links") or [],
-                "photo": f"/v1/public/booking/{s['slug']}/photo?v={s['photo_version']}" if s.get("photo") is not None
+                "photo": f"/v1/public/booking/{s['slug']}/photo?v={s['photo_version']}" if s.get("has_photo")
                 else None,
                 "timezone": s["timezone"], "slot_minutes": s["slot_minutes"], "max_advance_days": s["max_advance_days"],
                 "approval": s["approval"], "tags": [{"id": k, "label": v} for k, v in booking.TAGS.items()]}
