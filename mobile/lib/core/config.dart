@@ -43,7 +43,8 @@ abstract final class AppConfig {
   static const consultTimeout = Duration(seconds: 300);
 
   /// Terms and consent version recorded at signup; the lawyer-reviewed text replaces it in Phase 4.
-  static const consentVersion = 'beta-draft-2'; // 2: names Google (Gemini), Razorpay and client bookings
+  // 2: names Google (Gemini), Razorpay and client bookings · 3: mobile number, offers and updates
+  static const consentVersion = '2026-10-v3';
 
   /// Throws with a readable message when a live build is missing its settings.
   static void validate() {

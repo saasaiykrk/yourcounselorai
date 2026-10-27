@@ -55,7 +55,7 @@ from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Path, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
 from . import account_page, ai_admin_api, billing_api, booking_api, byok, db, deid, education, status_page
@@ -245,6 +245,28 @@ def admin(user: dict = Depends(current_user)) -> dict:
 
 
 # --- schemas ----------------------------------------------------------------
+def normalize_mobile(raw: str | None) -> str | None:
+    """The clinician's mobile number in one form, +<country code><number>. Indian numbers may be typed
+    without the code (98765 43210, 098765 43210, 91 98765 43210)."""
+    if raw is None:
+        return None
+    v = re.sub(r"[\s().-]", "", raw)
+    if v.startswith("00"):
+        v = "+" + v[2:]
+    if re.fullmatch(r"0?[6-9]\d{9}", v):
+        v = "+91" + v[-10:]
+    elif re.fullmatch(r"91[6-9]\d{9}", v):
+        v = "+" + v
+    ok = re.fullmatch(r"\+91[6-9]\d{9}", v) if v.startswith("+91") else re.fullmatch(r"\+[1-9]\d{7,14}", v)
+    if not ok:
+        raise ValueError("a mobile number like 98765 43210 or +91 98765 43210")
+    return v
+
+
+# Optional on the server so app versions from before the field still register; the app asks for it.
+Mobile = Annotated[str | None, Field(default=None, max_length=30), AfterValidator(normalize_mobile)]
+
+
 class ProfileIn(BaseModel):
     # The clinician's own details (never a client's); admin-only, never sent to the AI.
     full_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=100)]
@@ -254,6 +276,7 @@ class ProfileIn(BaseModel):
     registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
     registration_number: str | None = Field(default=None, max_length=40)
     consent_version: str = Field(max_length=20)
+    mobile: Mobile = None                     # also used for offers and updates (Data Processing Agreement)
 
 
 class ProfileEditIn(BaseModel):
@@ -265,6 +288,7 @@ class ProfileEditIn(BaseModel):
     role: str = Field(pattern="^(counsellor_trainee|psychologist|psychiatrist)$")
     registration_body: str = Field(pattern="^(RCI|NMC|SMC|none)$")
     registration_number: str | None = Field(default=None, max_length=40)
+    mobile: Mobile = None                     # not sent (older apps): unchanged
 
 
 # A change to these means the registration must be checked again (and the level set again).
@@ -395,7 +419,7 @@ def edit_profile(body: ProfileEditIn, user: dict = Depends(current_user)):
         row = _DEV_CLINICIAN
         reverify = any((row.get(k) or None) != p[k] for k in _PROFESSIONAL)
         row.update(full_name=p["full_name"], gender=p["gender"], age_at_registration=p["age"],
-                   **{k: p[k] for k in _PROFESSIONAL})
+                   **{k: p[k] for k in _PROFESSIONAL}, **({"mobile": p["mobile"]} if p["mobile"] else {}))
         if reverify:
             row.update(verification_status="pending", level=None)
         return {"verification_status": row["verification_status"], "reverify": reverify}

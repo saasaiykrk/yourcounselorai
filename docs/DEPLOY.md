@@ -266,6 +266,16 @@ sent to it (`clinicians.proven_email`), and funnel plans go only to that address
 Existing accounts are proven the next time they open the app. The reviewer's password account is never proven,
 so give it plans from /admin, not through a funnel.
 
+## Mobile number at registration: run migration 017 first
+
+The app asks every new clinician for their mobile number (existing clinicians add it in Account → Edit profile).
+The Data Processing Agreement says it is also used for offers and updates, and how to stop them (reply STOP or
+email). Admins see it on each registration card in /admin.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/017_clinician_mobile.sql` (safe to run again), before
+   deploying the backend.
+2. People who ask to stop offers: stop sending them from your messaging tool. Account and safety messages continue.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,

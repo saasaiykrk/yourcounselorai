@@ -51,7 +51,7 @@ you sign in with, and ask us to delete your account.</p>
 <section><h2>What is deleted</h2>
 <ul>
 <li>Your sign-in and email address.</li>
-<li>Your name, gender, age, registration number and verification level.</li>
+<li>Your name, mobile number, gender, age, registration number and verification level.</li>
 <li>Your own AI key, if you added one.</li>
 <li>Your booking page, working hours, time off and appointments, including your clients' names and emails.</li>
 <li>Your consult history leaves your account.</li>
@@ -62,7 +62,7 @@ you sign in with, and ask us to delete your account.</p>
 <ul>
 <li><b>Payment records</b> (plan, amount, date): kept for as long as tax law requires.</li>
 <li><b>De-identified consult text</b> (identifiers were removed before it was sent) and safety-review records:
-kept for the 12-month beta retention period for safety review (longer only while a safety report is open), then deleted. They no longer carry your name or email.</li>
+kept for the 12-month retention period for safety review (longer only while a safety report is open), then deleted. They no longer carry your name or email.</li>
 </ul>
 <p class="muted" style="margin-top:8px">Any running plan ends when the account is deleted. Admin accounts must
 have admin access removed by another admin first.</p>

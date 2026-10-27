@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exceptions.dart';
 import '../../core/api/api_models.dart';
 import '../../core/content/safety_content.dart';
+import '../../core/mobile_number.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
@@ -47,6 +48,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
   late final _name = TextEditingController(text: widget.me.fullName ?? '');
   late final _age = TextEditingController(text: widget.me.age?.toString() ?? '');
   late final _registration = TextEditingController(text: widget.me.registrationNumber ?? '');
+  late final _mobile = TextEditingController(text: widget.me.mobile ?? '');
   late String? _gender = widget.me.gender;
   late ClinicianRole _role = ClinicianRole.values.firstWhere(
     (r) => r.apiValue == widget.me.role,
@@ -60,12 +62,15 @@ class _EditFormState extends ConsumerState<_EditForm> {
     return a != null && a >= 18 && a <= 100 ? a : null;
   }
 
+  String? get _mobileValue => normalizeMobile(_mobile.text);
+
   String? get _registrationValue => _role.needsRegistration ? _registration.text.trim() : null;
 
   bool get _valid =>
       _name.text.trim().length >= 2 &&
       _gender != null &&
       _ageValue != null &&
+      _mobileValue != null &&
       (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
 
   /// Role or registration differ from what was verified.
@@ -79,6 +84,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
     _name.dispose();
     _age.dispose();
     _registration.dispose();
+    _mobile.dispose();
     super.dispose();
   }
 
@@ -115,6 +121,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
               role: _role.apiValue,
               registrationBody: _role.registrationBody,
               registrationNumber: _registrationValue,
+              mobile: _mobileValue!,
             ),
           );
       ref.invalidate(meProvider);
@@ -195,8 +202,27 @@ class _EditFormState extends ConsumerState<_EditForm> {
                 onChanged: (_) => setState(() {}),
               ),
             ),
+            const SizedBox(height: 16),
+            const Text('Mobile number', style: AppText.label),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('profile-mobile'),
+              controller: _mobile,
+              maxLength: 20,
+              keyboardType: TextInputType.phone,
+              autofillHints: const [AutofillHints.telephoneNumber],
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]'))],
+              decoration: InputDecoration(
+                hintText: '98765 43210',
+                counterText: '',
+                errorText: _mobile.text.trim().isNotEmpty && _mobileValue == null
+                    ? 'A mobile number like 98765 43210'
+                    : null,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
             const SizedBox(height: 6),
-            const Text('Only our verification team sees these. They are never sent to the AI.', style: AppText.caption),
+            const Text('Only our team sees these. They are never sent to the AI.', style: AppText.caption),
           ],
         ),
         Column(

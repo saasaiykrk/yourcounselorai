@@ -9,7 +9,7 @@ YourCounselor ("we", "us") is operated by [legal entity name], [registered addre
 ## 1. Information we collect
 
 **From clinicians (app users)**
-- Account details: email address, name, gender, age, professional role, registration body and registration number, used to verify that you are a registered professional.
+- Account details: email address, mobile number, name, gender, age, professional role, registration body and registration number, used to verify that you are a registered professional and to contact you.
 - Case text you write: before anything leaves your phone, the app removes names, phone numbers, email addresses, ID numbers and similar identifiers, and you confirm the text contains none. Our server checks again and refuses text with identifiers. We store de-identified case text and the replies so you can see them in History.
 - Payments for plans, single reports and single prints of education pages: plan, amount and payment status. Card, UPI and bank details are handled by Razorpay; we never see or store them.
 - Your own AI provider API key, if you choose to add one: stored encrypted, never shown again.
@@ -30,7 +30,9 @@ YourCounselor ("we", "us") is operated by [legal entity name], [registered addre
 - To manage appointments and send booking emails.
 - To review safety reports and improve safety.
 
-We do not sell personal data, and we do not use it for advertising.
+- To send you offers, news and updates about Your Counselor at your mobile number or email address (WhatsApp, SMS, email or a call). Reply STOP to any message, or email us, to stop them at any time.
+
+We do not sell personal data. We do not show advertising in the app, and case information is never used for marketing.
 
 ## 3. Who we share it with (processors)
 | Service | What it receives | Why |

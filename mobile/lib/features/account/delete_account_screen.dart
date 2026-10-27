@@ -90,7 +90,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
           ),
           const _Section('What is deleted', [
             'Your sign-in and email address.',
-            'Your name, gender, age, registration number and verification level.',
+            'Your name, mobile number, gender, age, registration number and verification level.',
             'Your own AI key, if you added one.',
             "Your booking page, working hours, time off and appointments, including your clients' names "
                 'and emails.',
@@ -98,7 +98,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
           ]),
           const _Section('What is kept', [
             'Payment records (plan, amount, date), for as long as tax law requires.',
-            'The de-identified consult text and safety-review records, for the 12-month beta retention period '
+            'The de-identified consult text and safety-review records, for the 12-month retention period '
                 '(longer only while a safety report is open). They no longer carry your name or email.',
           ]),
           Column(

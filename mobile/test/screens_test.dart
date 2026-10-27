@@ -323,12 +323,13 @@ void main() {
     expect(consult.reports, ['turn-1:unsafe']);
   });
 
-  testWidgets('professional details need name, gender, age, consent and a registration number', (tester) async {
+  testWidgets('professional details need name, gender, age, mobile, consent and a registration number', (tester) async {
     await _pumpAt(tester, '/details');
     expect(_onPressed(tester, 'Submit for verification'), isNull);
 
     await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
     await tester.enterText(_field('Years'), '34');
+    await tester.enterText(_field('98765 43210'), '98765 43210');
     await tester.enterText(_field('As shown on the register'), 'A12345');
     await tester.pump();
     expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'gender and consent still missing');
@@ -349,6 +350,11 @@ void main() {
     await tester.enterText(_field('As on your registration'), ' ');
     await tester.pump();
     expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'name is required');
+    await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
+    await tester.enterText(_field('98765 43210'), '12345');
+    await tester.pump();
+    expect(find.text('A mobile number like 98765 43210'), findsOneWidget);
+    expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'a mobile number is required');
   });
 
   test('registration sends name, gender and age', () {
@@ -359,11 +365,13 @@ void main() {
       role: 'psychologist',
       registrationBody: 'RCI',
       registrationNumber: 'A12345',
-      consentVersion: 'beta-draft-1',
+      consentVersion: '2026-10-v3',
+      mobile: '+919876543210',
     );
     expect(p.toJson(), containsPair('full_name', 'Dr Sample Clinician'));
     expect(p.toJson(), containsPair('gender', 'female'));
     expect(p.toJson(), containsPair('age', 34));
+    expect(p.toJson(), containsPair('mobile', '+919876543210'));
   });
 
   testWidgets('the store reviewer uses the normal screens with a fixed code; nothing is emailed', (tester) async {
@@ -414,9 +422,12 @@ void main() {
 
     await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
     await tester.enterText(_field('Years'), '34');
+    await tester.enterText(_field('98765 43210'), '+91 98765 43210');
     await tester.ensureVisible(find.text('Prefer not to say'));
     await tester.tap(find.text('Prefer not to say'));
     await tester.enterText(_field('As shown on the register'), 'A12345');
+    FocusManager.instance.primaryFocus?.unfocus(); // close the keyboard: its selection handle covers the box
+    await tester.pump();
     await tester.ensureVisible(find.byType(Checkbox));
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
