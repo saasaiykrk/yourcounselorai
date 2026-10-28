@@ -292,7 +292,7 @@ Future<Uint8List> buildReportPdf(ConsultReply reply, {required DateTime generate
     await _font('assets/fonts/NotoMath-Subset.ttf'),
     await _font('assets/fonts/NotoGreek-Subset.ttf'),
   ];
-  final logo = pw.MemoryImage((await rootBundle.load('assets/brand/logo_full.png')).buffer.asUint8List());
+  final logo = pw.MemoryImage((await rootBundle.load('assets/brand/logo_splash.png')).buffer.asUint8List());
 
   final theme =
       pw.ThemeData.withFont(
