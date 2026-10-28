@@ -145,10 +145,11 @@ void main() {
   testWidgets('the mobile number is prefilled, checked and saved in one form', (tester) async {
     final profile = _Profile();
     await _pump(tester, profile);
-    expect(tester.widget<TextField>(_field('mobile')).controller!.text, '+919876543210');
+    expect(tester.widget<TextField>(_field('mobile')).controller!.text, '98765 43210');
+    expect(find.text('+91'), findsOneWidget, reason: 'the saved number is split into country and number');
     await tester.enterText(_field('mobile'), '12345');
     await tester.pump();
-    expect(find.text('A mobile number like 98765 43210, or +44 7911 123456'), findsOneWidget);
+    expect(find.text('A 10-digit mobile number, like 98765 43210'), findsOneWidget);
     await tester.ensureVisible(find.text('Save changes'));
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes')).onPressed, isNull);
     await tester.enterText(_field('mobile'), '091234 56789');

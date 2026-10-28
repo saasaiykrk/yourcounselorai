@@ -6,11 +6,11 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_exceptions.dart';
 import '../../core/api/api_models.dart';
 import '../../core/content/safety_content.dart';
-import '../../core/mobile_number.dart';
 import '../../core/providers.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/layout.dart';
+import '../../core/widgets/mobile_number_field.dart';
 import '../../core/widgets/surfaces.dart';
 
 /// Account → Edit profile. Name, gender and age change straight away. A changed role or
@@ -48,7 +48,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
   late final _name = TextEditingController(text: widget.me.fullName ?? '');
   late final _age = TextEditingController(text: widget.me.age?.toString() ?? '');
   late final _registration = TextEditingController(text: widget.me.registrationNumber ?? '');
-  late final _mobile = TextEditingController(text: widget.me.mobile ?? '');
+  late MobileInput _mobile = (value: widget.me.mobile, typed: widget.me.mobile != null);
   late String? _gender = widget.me.gender;
   late ClinicianRole _role = ClinicianRole.values.firstWhere(
     (r) => r.apiValue == widget.me.role,
@@ -62,7 +62,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
     return a != null && a >= 18 && a <= 100 ? a : null;
   }
 
-  String? get _mobileValue => normalizeMobile(_mobile.text);
+  String? get _mobileValue => _mobile.value;
 
   String? get _registrationValue =>
       _role.asksRegistration && _registration.text.trim().isNotEmpty ? _registration.text.trim() : null;
@@ -80,7 +80,6 @@ class _EditFormState extends ConsumerState<_EditForm> {
     _name.dispose();
     _age.dispose();
     _registration.dispose();
-    _mobile.dispose();
     super.dispose();
   }
 
@@ -201,22 +200,10 @@ class _EditFormState extends ConsumerState<_EditForm> {
             const SizedBox(height: 16),
             const Text('Mobile number', style: AppText.label),
             const SizedBox(height: 8),
-            TextField(
-              key: const ValueKey('profile-mobile'),
-              controller: _mobile,
-              maxLength: 20,
-              keyboardType: TextInputType.phone,
-              autofillHints: const [AutofillHints.telephoneNumber],
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]'))],
-              decoration: InputDecoration(
-                hintText: '98765 43210',
-                helperText: 'Outside India? Start with + and your country code.',
-                counterText: '',
-                errorText: _mobile.text.trim().isNotEmpty && _mobileValue == null
-                    ? 'A mobile number like 98765 43210, or +44 7911 123456'
-                    : null,
-              ),
-              onChanged: (_) => setState(() {}),
+            MobileNumberField(
+              fieldKey: const ValueKey('profile-mobile'),
+              initial: widget.me.mobile,
+              onChanged: (m) => setState(() => _mobile = m),
             ),
             const SizedBox(height: 6),
             const Text('Only our team sees these. They are never sent to the AI.', style: AppText.caption),
