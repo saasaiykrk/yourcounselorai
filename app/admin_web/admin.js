@@ -271,7 +271,7 @@ function selectView(name, filter) {
     else tab.removeAttribute("aria-current");
     $("panel-" + v).hidden = v !== name;
   }
-  if (name === "clinicians") { if (filter != null) setSeg("clinician-filter", (clinicianStatus = filter)); loadClinicians(); }
+  if (name === "clinicians") { if (filter != null) setSeg("clinician-filter", (clinicianStatus = filter)); loadClinicians(); loadAutoApprove(); }
   else if (name === "incidents") { if (filter != null) setSeg("incident-filter", (incidentStatus = filter)); loadIncidents(); }
   else if (name === "pricing") loadPricing();
   else if (name === "subs") loadSubs(filter);
@@ -343,6 +343,39 @@ const GENDER = { female: "Female", male: "Male", other: "Other", prefer_not_to_s
 function registration(c) {
   return c.registration_body && c.registration_body !== "none"
     ? c.registration_body + " " + (c.registration_number || "(no number)") : "No registration given";
+}
+
+// The "Skip verification" switch above the registrations.
+async function loadAutoApprove() {
+  const box = $("auto-approve");
+  try {
+    box.checked = (await api("GET", "/v1/admin/registration-settings")).auto_approve;
+    box.disabled = false;
+  } catch (err) {
+    if (err.message !== "signed-out") $("auto-approve-error").textContent = "Couldn't load the switch.";
+  }
+}
+
+async function setAutoApprove() {
+  const box = $("auto-approve"), on = box.checked;
+  $("auto-approve-error").textContent = "";
+  if (on && !window.confirm("Approve new registrations without checking the register?\n\nEveryone waiting now is " +
+      "approved too, with the level of the role they chose (psychiatrist = L3, the most clinical answers).")) {
+    box.checked = false;
+    return;
+  }
+  box.disabled = true;
+  try {
+    const r = await api("PUT", "/v1/admin/registration-settings", { auto_approve: on });
+    toast(on ? "Skip verification is on" + (r.approved_waiting ? " · " + r.approved_waiting + " waiting approved" : "")
+      : "Skip verification is off: new registrations wait for you");
+    loadClinicians(); loadCounts();
+  } catch (err) {
+    box.checked = !on;
+    if (err.message !== "signed-out") $("auto-approve-error").textContent = "Couldn't save: " + err.message;
+  } finally {
+    box.disabled = false;
+  }
 }
 
 async function loadClinicians() {
@@ -781,6 +814,7 @@ async function start() {
   wireSeg("clinician-filter", (v) => { clinicianStatus = v; loadClinicians(); });
   wireSeg("incident-filter", (v) => { incidentStatus = v; $("incident-detail").hidden = true; loadIncidents(); });
   $("clinician-search").addEventListener("input", renderClinicians);
+  $("auto-approve").addEventListener("change", setAutoApprove);
   $("refresh-overview").addEventListener("click", () => { loadOverview(); loadCounts(); });
   $("refresh-clinicians").addEventListener("click", () => { loadClinicians(); loadCounts(); });
   $("refresh-incidents").addEventListener("click", () => { loadIncidents(); loadCounts(); });

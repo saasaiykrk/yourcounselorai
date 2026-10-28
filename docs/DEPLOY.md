@@ -276,6 +276,17 @@ email). Admins see it on each registration card in /admin.
    deploying the backend.
 2. People who ask to stop offers: stop sending them from your messaging tool. Account and safety messages continue.
 
+## Skip verification (admin switch): run migration 018 first
+
+/admin → Registrations has a **Skip verification** switch, off by default. While it is on, a new registration is
+approved at once with the level of the role the clinician chose (counsellor/trainee L1, psychologist L2,
+psychiatrist L3): nobody checks the register. Turning it on also approves everyone already waiting (not anyone an
+admin rejected). Each automatic approval and each switch change is in the audit log; an admin can still change a
+level or reject someone.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/018_auto_approve.sql` (safe to run again), before
+   deploying the backend.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,

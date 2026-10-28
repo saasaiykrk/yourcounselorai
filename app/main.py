@@ -406,7 +406,8 @@ def profile(body: ProfileIn, user: dict = Depends(current_user)):
     db.upsert_clinician_profile(user["id"], body.model_dump())
     if user.get("proven_email"):
         db.note_proven_email(user["id"], user["proven_email"])
-    return {"verification_status": "pending"}
+    row = db.get_clinician(user["id"])          # "verified" at once when the admin's skip-verification switch is on
+    return {"verification_status": (row or {}).get("verification_status") or "pending"}
 
 
 @app.patch("/v1/profile")
@@ -826,6 +827,27 @@ education.install(app, EDUCATION, current_user, BOOKING.base_url)
 # --- admin panel (app Admin area and /admin web page) -------------------------
 # Admin-only. Lists hold clinicians' registration details and de-identified case
 # text only; every change is written to admin_audit.
+class AutoApproveIn(BaseModel):
+    auto_approve: bool
+
+
+_dev_auto_approve = {"on": False}     # DEV_MODE: no database
+
+
+@app.get("/v1/admin/registration-settings")
+def registration_settings(a: dict = Depends(admin)):
+    """The "Skip verification" switch: on, registrations are approved at once at the level of the chosen role."""
+    return {"auto_approve": _dev_auto_approve["on"] if CFG.dev_mode else db.auto_approve()}
+
+
+@app.put("/v1/admin/registration-settings")
+def set_registration_settings(body: AutoApproveIn, a: dict = Depends(admin)):
+    if CFG.dev_mode:
+        _dev_auto_approve["on"] = body.auto_approve
+        return {"auto_approve": body.auto_approve, "approved_waiting": 0}
+    return {"auto_approve": body.auto_approve, "approved_waiting": db.set_auto_approve(body.auto_approve, a["id"])}
+
+
 @app.get("/v1/admin/clinicians")
 def admin_clinicians(status: str = Query("pending", pattern="^(pending|verified|rejected)$"),
                      a: dict = Depends(admin)):

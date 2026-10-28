@@ -526,7 +526,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
             ),
           );
       ref.invalidate(meProvider);
-      if (mounted) context.go('/pending');
+      // Approved at once when the admin's "Skip verification" switch is on; otherwise waiting.
+      final me = await ref.read(meProvider.future).catchError((_) => const Me(verificationStatus: 'pending'));
+      if (mounted) context.go(me.isVerified ? '/consult' : '/pending');
     } catch (e) {
       if (mounted) setState(() => _error = _messageFor(e));
     } finally {

@@ -23,10 +23,33 @@ class ProfileApiTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app)
 
-    def post(self, body):
-        with mock.patch.object(main.db, "upsert_clinician_profile") as save:
+    def post(self, body, status="pending"):
+        with mock.patch.object(main.db, "upsert_clinician_profile") as save, \
+                mock.patch.object(main.db, "get_clinician", return_value={"verification_status": status}):
             r = self.client.post("/v1/profile", headers=ME, json=body)
         return r, save
+
+    def test_registration_answers_with_the_real_status(self):
+        self.assertEqual(self.post(GOOD)[0].json(), {"verification_status": "pending"})
+        self.assertEqual(self.post(GOOD, status="verified")[0].json(), {"verification_status": "verified"},
+                         "skip-verification switch on: approved at once")
+
+    def test_the_skip_verification_switch_is_admin_only_and_starts_off(self):
+        self.assertEqual(self.client.get("/v1/admin/registration-settings", headers=ME).json(), {"auto_approve": False})
+        r = self.client.put("/v1/admin/registration-settings", headers=ME, json={"auto_approve": True})
+        self.assertEqual(r.json()["auto_approve"], True)
+        self.client.put("/v1/admin/registration-settings", headers=ME, json={"auto_approve": False})
+        saved = main.db.get_clinician
+        main.app.dependency_overrides[main.current_user] = lambda: {"id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}
+        main.db.get_clinician = lambda cid: {"id": cid, "is_admin": False}
+        try:
+            for method in ("get", "put"):
+                r = getattr(self.client, method)("/v1/admin/registration-settings", headers=ME,
+                                                  **({"json": {"auto_approve": True}} if method == "put" else {}))
+                self.assertEqual(r.status_code, 403, method)
+        finally:
+            main.db.get_clinician = saved
+            main.app.dependency_overrides.clear()
 
     def test_saves_name_gender_and_age(self):
         r, save = self.post(GOOD)

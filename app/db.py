@@ -95,8 +95,51 @@ def note_proven_email(cid, email: str) -> None:
                   (email.lower(), str(cid), email.lower()))
 
 
-def upsert_clinician_profile(cid, p: dict) -> None:
+# The level of each role when the admin's "skip verification" switch is on (migration 018).
+_ROLE_LEVEL_SQL = """case role when 'counsellor_trainee' then 'L1' when 'psychologist' then 'L2'
+                               when 'psychiatrist' then 'L3' end"""
+
+
+def auto_approve() -> bool:
+    """The admin's "skip verification" switch. Off when the setting is missing."""
     with _conn() as c:
+        row = c.execute("select auto_approve from registration_settings where id=1").fetchone()
+    return bool(row and row["auto_approve"])
+
+
+def _auto_verify(c, cid=None) -> int:
+    """With the switch on, approves waiting registrations (one, or all when cid is None) at the level of their
+    role, read from the clinicians row. Audited, with the clinician as the actor. Returns how many."""
+    rows = c.execute(
+        f"""update clinicians set verification_status='verified', level={_ROLE_LEVEL_SQL},
+              verification_note='Approved automatically: "Skip verification" was on in /admin',
+              verified_by=null, verified_at=now()
+            where verification_status='pending' and {_ROLE_LEVEL_SQL} is not null
+              and (%(cid)s::uuid is null or id=%(cid)s::uuid)
+              and (select auto_approve from registration_settings where id=1)
+            returning id, level""", {"cid": str(cid) if cid else None}).fetchall()
+    for r in rows:
+        c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
+                     values (%s,'auto_verify',%s,%s)""", (str(r["id"]), str(r["id"]), json.dumps({"level": r["level"]})))
+    return len(rows)
+
+
+def set_auto_approve(on: bool, admin_id) -> int:
+    """An admin turns the switch on or off. Turning it on also approves everyone already waiting. Returns
+    how many were approved."""
+    with _conn() as c, c.transaction():
+        c.execute("""insert into registration_settings (id, auto_approve, updated_by, updated_at) values (1,%s,%s,now())
+                     on conflict (id) do update set auto_approve=excluded.auto_approve, updated_by=excluded.updated_by,
+                       updated_at=now()""", (on, str(admin_id)))
+        approved = _auto_verify(c) if on else 0
+        c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
+                     values (%s,'auto_approve_switch',null,%s)""",
+                  (str(admin_id), json.dumps({"on": on, "approved_waiting": approved})))
+        return approved
+
+
+def upsert_clinician_profile(cid, p: dict) -> None:
+    with _conn() as c, c.transaction():
         c.execute(
             """insert into clinicians (id, full_name, gender, age_at_registration, role, registration_body,
                                           registration_number, consent_version, consent_at, mobile)
@@ -108,6 +151,7 @@ def upsert_clinician_profile(cid, p: dict) -> None:
                  level=null, mobile=coalesce(excluded.mobile, clinicians.mobile)""",
             (str(cid), p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"],
              p.get("registration_number"), p["consent_version"], p.get("mobile")))
+        _auto_verify(c, cid)
 
 
 def update_clinician_profile(cid, p: dict) -> dict | None:
@@ -127,6 +171,8 @@ def update_clinician_profile(cid, p: dict) -> dict | None:
                where id=%s returning verification_status""",
             (p["full_name"], p["gender"], p["age"], p["role"], p["registration_body"], p["registration_number"],
              p.get("mobile"), reverify, reverify, str(cid))).fetchone()
+        if reverify and _auto_verify(c, cid):
+            return {"verification_status": "verified", "reverify": True}
         return {"verification_status": row["verification_status"], "reverify": reverify}
 
 

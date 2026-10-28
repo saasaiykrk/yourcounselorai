@@ -87,6 +87,7 @@ Future<GoRouter> _pumpAt(
   Size size = const Size(390, 844),
   ConsultRepository? consult,
   AuthService? auth,
+  ProfileRepository? profile,
 }) async {
   tester.view.physicalSize = size * 3;
   tester.view.devicePixelRatio = 3;
@@ -98,6 +99,7 @@ Future<GoRouter> _pumpAt(
         consultRepositoryProvider.overrideWithValue(consult ?? _FakeConsult()),
         consultRecoveryProvider.overrideWithValue((within: Duration.zero, every: Duration.zero)),
         if (auth != null) authServiceProvider.overrideWithValue(auth),
+        if (profile != null) profileRepositoryProvider.overrideWithValue(profile),
       ],
       child: YourCounselorApp(router: router),
     ),
@@ -440,6 +442,24 @@ void main() {
     expect(router.state.uri.path, '/consult');
   });
 
+  testWidgets('with "Skip verification" on, a new registration goes straight to consults', (tester) async {
+    final router = await _pumpAt(tester, '/details', profile: _ApprovedAtOnce());
+    await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
+    await tester.enterText(_field('Years'), '34');
+    await tester.enterText(_field('98765 43210'), '98765 43210');
+    await tester.ensureVisible(find.text('Female'));
+    await tester.tap(find.text('Female'));
+    await tester.enterText(_field('As shown on the register'), 'A12345');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Submit for verification'));
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/consult', reason: 'no "waiting for verification" screen');
+  });
+
   testWidgets('email code field is announced to screen readers', (tester) async {
     final semantics = tester.ensureSemantics();
     await _pumpAt(tester, '/code');
@@ -454,4 +474,17 @@ void main() {
       expect(find.text(n), findsOneWidget);
     }
   });
+}
+
+/// The server approves at once (the admin's "Skip verification" switch is on).
+class _ApprovedAtOnce extends PreviewProfileRepository {
+  var _submitted = false;
+
+  @override
+  Future<void> submit(ProfileSubmission profile) async => _submitted = true;
+
+  @override
+  Future<Me> me() async => _submitted
+      ? const Me(verificationStatus: 'verified', level: 'L2', role: 'psychologist', registrationBody: 'RCI')
+      : const Me(verificationStatus: 'none');
 }

@@ -124,6 +124,16 @@
           </div>
           <button type="button" class="btn ghost" id="refresh-clinicians"><span class="ico" data-icon="refresh"></span>Refresh</button>
         </header>
+        <div class="panel auto-approve">
+          <label class="check-row">
+            <input type="checkbox" id="auto-approve">
+            <span><b>Skip verification</b>
+              <span class="muted small">New registrations are approved at once, with the level of the role they chose:
+                counsellor/trainee L1, psychologist L2, psychiatrist L3. Nobody checks the register. Every automatic
+                approval is recorded, and you can still change a level or reject someone below.</span></span>
+          </label>
+          <p class="error small" id="auto-approve-error" role="alert"></p>
+        </div>
         <div class="toolbar">
           <div class="seg" role="group" aria-label="Show" id="clinician-filter">
             <button type="button" data-value="pending" aria-pressed="true">Waiting</button>
