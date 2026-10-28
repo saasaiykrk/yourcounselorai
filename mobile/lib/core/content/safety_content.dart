@@ -90,8 +90,8 @@ const kGenders = {'female': 'Female', 'male': 'Male', 'other': 'Other', 'prefer_
 
 enum ClinicianRole {
   trainee('counsellor_trainee', 'Counsellor or trainee', 'Supervised wording, no diagnostic labels', 'none'),
-  psychologist('psychologist', 'Psychologist', 'RCI registration needed', 'RCI'),
-  psychiatrist('psychiatrist', 'Psychiatrist', 'NMC or State Medical Council', 'NMC');
+  psychologist('psychologist', 'Psychologist', 'RCI registration, if you have one', 'RCI'),
+  psychiatrist('psychiatrist', 'Psychiatrist', 'NMC or State Medical Council, if you have one', 'NMC');
 
   const ClinicianRole(this.apiValue, this.label, this.detail, this.registrationBody);
 
@@ -100,5 +100,6 @@ enum ClinicianRole {
   final String detail;
   final String registrationBody;
 
-  bool get needsRegistration => registrationBody != 'none';
+  /// Asks for a registration number (optional: verification may ask for it later).
+  bool get asksRegistration => registrationBody != 'none';
 }

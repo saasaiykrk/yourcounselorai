@@ -9,9 +9,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:your_counselor/core/api/api_client.dart';
 import 'package:your_counselor/core/api/api_exceptions.dart';
+import 'package:your_counselor/core/api/api_models.dart';
 import 'package:your_counselor/core/api/calendar_models.dart';
 import 'package:your_counselor/core/calendar/calendar_repository.dart';
 import 'package:your_counselor/core/providers.dart';
+import 'package:your_counselor/core/repositories.dart';
 import 'package:your_counselor/main.dart';
 import 'package:your_counselor/features/calendar/calendar_settings_screen.dart';
 import 'package:your_counselor/router.dart';
@@ -98,7 +100,72 @@ Future<void> _reach(WidgetTester tester, Finder f) async {
   await tester.pumpAndSettle();
 }
 
+/// A server answer that the plan lacks appointments, counting how often the calendar is asked for.
+class _CountingNoPlan extends _NoAppointmentsPlan {
+  int calls = 0;
+
+  @override
+  Future<CalendarHome> home() {
+    calls++;
+    return super.home();
+  }
+}
+
+/// `/v1/me` says what the plan unlocks (here: the library only, so no appointments).
+class _LearnOnly implements ProfileRepository {
+  @override
+  Future<Me> me() async => const Me(verificationStatus: 'verified', level: 'L2', unlocked: {'library'});
+
+  @override
+  Future<void> submit(ProfileSubmission profile) async {}
+
+  @override
+  Future<ProfileEditResult> edit(ProfileEdit profile) async =>
+      const ProfileEditResult(verificationStatus: 'verified', reverify: false);
+}
+
+/// The app as the phone runs it (main.dart's ProviderScope), without letting the test skip time.
+Future<_CountingNoPlan> _pumpRealTime(WidgetTester tester, {ProfileRepository? profile, bool appRetry = true}) async {
+  final repo = _CountingNoPlan();
+  tester.view.physicalSize = const Size(390, 844) * 3;
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      retry: appRetry ? noAutomaticRetry : null,
+      overrides: [
+        calendarRepositoryProvider.overrideWithValue(repo),
+        if (profile != null) profileRepositoryProvider.overrideWithValue(profile),
+      ],
+      child: YourCounselorApp(router: buildRouter(initialLocation: '/calendar')),
+    ),
+  );
+  await tester.pump(const Duration(milliseconds: 500));
+  await tester.pump(const Duration(milliseconds: 500));
+  return repo;
+}
+
 void main() {
+  testWidgets('the plan lock shows within a second, not after ~40 s of automatic retries', (tester) async {
+    final repo = await _pumpRealTime(tester);
+    expect(find.text('Appointments and your booking page'), findsOneWidget);
+    expect(repo.calls, 1, reason: 'the server answered: asking again would change nothing');
+  });
+
+  testWidgets("cause: Riverpod's default retry keeps the spinner up after the server answered", (tester) async {
+    final repo = await _pumpRealTime(tester, appRetry: false);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Appointments and your booking page'), findsNothing);
+    expect(repo.calls, greaterThan(1));
+    await tester.pumpWidget(const SizedBox()); // stop the pending retry timers
+  });
+
+  testWidgets('the plan from sign-in decides the lock at once, without asking for the calendar', (tester) async {
+    final repo = await _pumpRealTime(tester, profile: _LearnOnly());
+    expect(find.text('Appointments and your booking page'), findsOneWidget);
+    expect(repo.calls, 0);
+  });
+
   testWidgets('a plan without appointments shows which plans have them, and nothing to set up', (tester) async {
     await _pump(tester, repo: _NoAppointmentsPlan());
     expect(find.text('Appointments and your booking page'), findsOneWidget);

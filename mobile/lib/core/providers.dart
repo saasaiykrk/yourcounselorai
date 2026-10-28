@@ -5,6 +5,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api/api_client.dart';
+import 'api/api_exceptions.dart';
 import 'api/api_models.dart';
 import 'auth/auth_service.dart';
 import 'billing/billing_repository.dart';
@@ -101,9 +102,23 @@ final calendarRepositoryProvider = Provider<CalendarRepository>(
 );
 
 /// Settings, booking link, hours, time off and counts. Re-read after any change.
-final calendarHomeProvider = FutureProvider.autoDispose<CalendarHome>(
-  (ref) => ref.watch(calendarRepositoryProvider).home(),
-);
+/// No automatic retries. Riverpod's default retries a failed request up to 10 times over about 40 seconds
+/// and shows "loading" all that time, even when the server has answered (a plan that doesn't include
+/// something, an account still being checked). Screens show the answer at once and offer their own Retry.
+Duration? noAutomaticRetry(int retryCount, Object error) => null;
+
+/// The Calendar tab's data. The plan is decided from `/v1/me` (read at sign-in and app start), so an
+/// account without appointments is told at once, with no calendar request. It is kept for the signed-in
+/// account (signing out re-reads `meProvider`, which resets it) and loaded in the background when the
+/// home screen opens, so the tab shows at once; opening the tab refreshes it behind the scenes.
+final calendarHomeProvider = FutureProvider.autoDispose<CalendarHome>((ref) async {
+  final me = await ref.watch(meProvider.future);
+  if (!me.has('appointments')) {
+    throw const PlanRequired(feature: 'appointments', message: 'Appointments are in Practice, BYOK Scale and Scale.');
+  }
+  ref.keepAlive();
+  return ref.watch(calendarRepositoryProvider).home();
+});
 
 // --- dropped connections ---------------------------------------------------------------------
 

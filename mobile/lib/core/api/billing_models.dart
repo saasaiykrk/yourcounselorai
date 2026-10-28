@@ -9,8 +9,13 @@ DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v)?.toLocal() : nu
 
 List<String> _strings(Object? v) => [for (final x in (v as List? ?? const [])) '$x'];
 
-/// "₹1,999" / "₹199.50" (Indian digit grouping).
+/// "₹1,999" / "₹199.50" (Indian digit grouping), or "$11.99" / "$1,199" for US dollars (outside India).
 String formatMoney(int paise, [String currency = 'INR']) {
+  if (currency == 'USD') {
+    final dollars = paise ~/ 100, cents = paise % 100;
+    final grouped = '$dollars'.replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+    return cents == 0 ? '\$$grouped' : '\$$grouped.${cents.toString().padLeft(2, '0')}';
+  }
   final symbol = currency == 'INR' ? '₹' : '$currency ';
   final rupees = paise ~/ 100;
   final rest = paise % 100;

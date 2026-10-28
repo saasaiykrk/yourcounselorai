@@ -598,6 +598,44 @@ class BillingApiTests(unittest.TestCase):
         self.assertEqual(self.save_key().status_code, 409)
         self.assertEqual(self.consult(use_own_key=True).status_code, 409)
 
+    # --- dollar prices outside India ------------------------------------------------------------------
+    def mobile(self, number):
+        with psycopg.connect(URL, autocommit=True) as c:
+            c.execute("update clinicians set mobile=%s where id=%s", (number, self.cid))
+
+    def test_a_mobile_number_from_outside_india_pays_in_dollars(self):
+        self.configure({"enabled": True, "usd_rate": 85})
+        self.mobile("+447911123456")
+        plans = self.client.get("/v1/billing/plans").json()
+        practice = next(p for p in plans["plans"] if p["id"] == "practice")
+        self.assertEqual((plans["currency"], practice["price_month"]),
+                         ("USD", billing.usd_price(billing.DEFAULT_CONFIG["plans"]["practice"]["price_month"], 85)))
+        self.assertEqual(self.client.get("/v1/billing/me").json()["currency"], "USD")
+        o = self.buy("practice")
+        self.assertEqual((o["checkout"]["currency"], o["checkout"]["amount"]), ("USD", practice["price_month"]))
+        rz = self.rzp.orders[o["checkout"]["order_id"]]
+        self.assertEqual((rz["currency"], rz["amount"]), ("USD", practice["price_month"]), "Razorpay charges dollars")
+        self.assertEqual(self.verify(o, self.rzp.pay(o["checkout"]["order_id"])).status_code, 200)
+        self.assertIn("appointments", main.BILLING.features(self.cid))
+        self.assertEqual(billing_db.orders(self.cid)[0]["currency"], "USD")
+
+    def test_india_and_old_accounts_without_a_number_pay_in_rupees(self):
+        self.configure({"enabled": True, "usd_rate": 85})
+        self.assertEqual(self.client.get("/v1/billing/plans").json()["currency"], "INR", "no number: rupees")
+        self.mobile("+919876543210")
+        self.assertEqual(self.client.get("/v1/billing/plans").json()["currency"], "INR")
+        self.configure({"enabled": True})
+        self.mobile("+447911123456")
+        self.assertEqual(self.client.get("/v1/billing/plans").json()["currency"], "INR", "rate 0: dollars off")
+
+    def test_the_buy_a_report_offer_names_its_currency(self):
+        self.configure({"enabled": True, "usd_rate": 85})
+        self.mobile("+15551234567")
+        r = self.consult()
+        self.assertEqual(r.status_code, 402, r.text)
+        d = r.json()["detail"]
+        self.assertEqual((d["currency"], d["price"]), ("USD", billing.usd_price(9900, 85)))
+
     # --- plans bought outside the app (funnels) -----------------------------------------------------
     def funnel(self, secret=FUNNEL_SECRET, **body):
         sale = {"event_id": "ord_" + uuid.uuid4().hex[:10], "plan": "scale", "period": "year",

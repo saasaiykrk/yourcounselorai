@@ -158,6 +158,14 @@ function renderPricing(history) {
   const on = check("Plans and charging on", cfg.enabled,
     "When off, everything is free and unlocked, as before. When on, each clinician's plan decides what they can use, and reports need a credit or BYOK Scale's own key.");
   const monthDays = numberInput(cfg.month_days, 1, 400), yearDays = numberInput(cfg.year_days, 1, 400);
+  const usdRate = el("input", { type: "number", min: "0", max: "1000", step: "0.01", value: String(cfg.usd_rate || 0) });
+  const usdExample = el("span", { class: "muted small" });
+  const showExample = () => {
+    const r = Number(usdRate.value);
+    usdExample.textContent = r > 0 ? " Example: ₹999 → $" + (Math.ceil(999 / r) - 0.01).toFixed(2) + "." : " 0 = everyone pays in ₹.";
+  };
+  usdRate.addEventListener("input", showExample);
+  showExample();
   const general = el("section", { class: "panel" }, el("div", { class: "panel-head" }, el("h2", { text: "General" })),
     status, on.node,
     el("div", { class: "form-grid" },
@@ -165,10 +173,16 @@ function renderPricing(history) {
       field("Payment method", el("select", { disabled: "" }, el("option", { text: "Razorpay" })))),
     el("div", { class: "form-grid" },
       field("A month of a plan lasts (days)", monthDays), field("A year of a plan lasts (days)", yearDays)),
+    el("div", { class: "form-grid" },
+      field("Outside India: ₹ per $1", usdRate),
+      el("p", { class: "muted small", style: "align-self: end; margin: 0 0 10px" },
+        el("span", { text: "Clinicians whose mobile number is not +91 see every price in US dollars, converted at this rate and rounded up to the next $x.99. Razorpay must have international payments switched on." }),
+        usdExample)),
     el("p", { class: "muted small", text: "Plans are paid in advance for a month or a year. Paying again early adds the new period after the current one ends, so no days are lost." }));
   form.enabled = () => on.box.checked;
   form.month_days = () => Number(monthDays.value);
   form.year_days = () => Number(yearDays.value);
+  form.usd_rate = () => Number(usdRate.value) || 0;
 
   const cards = CARDS.map((id) => planCard(id, cfg.plans[id], form));
 
@@ -258,6 +272,7 @@ function planCard(id, p, form) {
 async function savePricing(form, errors, confirmDisable) {
   errors.replaceChildren();
   const config = { ...pricing.config, enabled: form.enabled(), month_days: form.month_days(), year_days: form.year_days(),
+                   usd_rate: form.usd_rate(),
                    plans: {} };
   delete config.rollover;
   for (const id of CARDS) config.plans[id] = form[id]();
@@ -457,14 +472,17 @@ async function loadPayments() {
 }
 
 function renderSummary(rows) {
-  const total = (k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
+  // ₹ and $ are never added together: "₹12,000 + $35.96".
+  const sum = (k) => rows.reduce((s, r) => ({ ...s, [r.currency]: (s[r.currency] || 0) + Number(r[k] || 0) }), {});
+  const money = (k) => { const s = sum(k); const cs = Object.keys(s).sort(); return cs.length ? cs.map((c) => rupees(s[c], c)).join(" + ") : rupees(0); };
+  const total = (k) => Object.values(sum(k)).reduce((a, b) => a + b, 0);
   const stat = (num, label, ico, cls) => el("div", { class: "stat " + cls },
     el("span", { class: "num", text: num }), el("span", { class: "lbl" }, icon(ico), el("span", { text: label })));
   put($("pay-stats"),
-    stat(rupees(total("collected")), "Collected (" + total("paid_count") + " paid)", "check", ""),
-    stat(rupees(total("refunded")), "Refunded", "refresh", ""),
-    stat(rupees(total("pending")), "Pending · not counted (" + total("pending_count") + ")", "warn", total("pending_count") ? "warn" : ""),
-    stat(rupees(total("failed")), "Failed · not counted (" + total("failed_count") + ")", "flag", ""));
+    stat(money("collected"), "Collected (" + total("paid_count") + " paid)", "check", ""),
+    stat(money("refunded"), "Refunded", "refresh", ""),
+    stat(money("pending"), "Pending · not counted (" + total("pending_count") + ")", "warn", total("pending_count") ? "warn" : ""),
+    stat(money("failed"), "Failed · not counted (" + total("failed_count") + ")", "flag", ""));
   put($("pay-by-plan"), table(["Plan", "Paid", "Collected", "Refunded", "Pending (not counted)", "Failed"],
     rows.map((r) => [PLAN[r.plan] || r.plan, r.paid_count, rupees(r.collected, r.currency), rupees(r.refunded, r.currency),
       rupees(r.pending, r.currency) + " · " + r.pending_count, rupees(r.failed, r.currency) + " · " + r.failed_count]))

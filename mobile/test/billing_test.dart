@@ -218,6 +218,9 @@ void main() {
     expect(formatMoney(10000000), '₹1,00,000');
     expect(formatMoney(19950), '₹199.50');
     expect(formatMoney(0), '₹0');
+    expect(formatMoney(1199, 'USD'), r'$11.99', reason: 'outside India');
+    expect(formatMoney(119900, 'USD'), r'$1,199');
+    expect(formatMoney(99, 'USD'), r'$0.99');
   });
 
   test('a consult request carries its retry id and the own-key choice', () {
@@ -355,6 +358,35 @@ void main() {
       expect(repo.createdPlan, 'scale::month', reason: 'the period chosen is the one bought');
       await tester.ensureVisible(find.text('AI-Guided report · ₹249'));
       expect(find.text('AI-Guided report · ₹249'), findsOneWidget);
+    });
+
+    testWidgets('outside India the plans are shown in US dollars, as the server priced them', (tester) async {
+      final usd = BillingPlans(
+        enabled: true,
+        currency: 'USD',
+        paymentsAvailable: true,
+        plans: const [
+          PlanOffer(
+            id: 'scale',
+            kind: 'tier',
+            name: 'Scale',
+            periods: ['month', 'year'],
+            priceMonth: 3599,
+            priceYear: 23599,
+            guidedPerMonth: 10,
+            extraPrice: 199,
+            table: {'library': 'Included', 'guided': r'10 per month · extra $1.99 each'},
+          ),
+        ],
+        rows: const [PlanRow('library', 'Full practice library'), PlanRow('guided', 'AI-Guided Case Taking')],
+      );
+      final repo = FakeBilling(plansValue: usd, statusValue: const BillingStatus(enabled: true));
+      await tester.pumpWidget(app(repo, '/pricing'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(r'$235.99'), findsWidgets);
+      expect(find.textContaining(r'or $35.99/month'), findsOneWidget);
+      expect(find.textContaining('Prices in US dollars'), findsOneWidget);
+      expect(find.textContaining('₹'), findsNothing);
     });
 
     testWidgets('the current plan, this month\'s Scale reports and the extra report', (tester) async {

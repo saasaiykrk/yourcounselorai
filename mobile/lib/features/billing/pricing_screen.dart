@@ -131,7 +131,12 @@ class _PricingScreenState extends ConsumerState<PricingScreen> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text('Prices in ₹. Paid in advance; renew any time.', style: AppText.caption),
+            Text(
+              p.currency == 'USD'
+                  ? 'Prices in US dollars (your mobile number is from outside India). Paid in advance; renew any time.'
+                  : 'Prices in ₹. Paid in advance; renew any time.',
+              style: AppText.caption,
+            ),
             const SizedBox(height: 12),
             for (final plan in tiers) ...[
               TierCard(

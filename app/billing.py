@@ -14,12 +14,16 @@ Pricing plans and report entitlements: the rules, with no web or database code.
   * A report needs a credit: Scale's monthly allowance or an extra (AI-Guided only), a per-report
     purchase of that type, or an admin grant. BYOK Scale's own-key reports use no credit and never
     fall back to the platform key. A quick (direct) consult is always bought per report.
+  * Outside India: a clinician whose registered mobile number is not +91 pays in US dollars, every price
+    converted from ₹ at the admin's rate (usd_rate, ₹ per $1) and rounded up to the next $x.99. A rate of 0
+    (the default) keeps everyone on ₹.
   * A single print ("print") unlocks Print / Save as PDF for one education page for a few hours
     (24 by default). It is bought from that page, not from the plans list, and gives no credits.
 """
 from __future__ import annotations
 
 import copy
+import math
 from dataclasses import dataclass
 
 PLANS = ("per_report", "learn", "practice", "byok_scale", "scale", "print")
@@ -33,6 +37,7 @@ CURRENCIES = ("INR",)
 MAX_PRICE = 10_000_000        # ₹1,00,000 in paise: a typo guard, not a business limit
 MAX_REPORTS = 10_000
 MAX_DAYS = 400
+USD_RATE_RANGE = (10, 1000)   # ₹ per $1 the admin may set (0 = no dollar prices)
 TEXT_LIMITS = {"name": 60, "description": 400, "feature": 120, "instructions": 1000, "badge": 30}
 
 # What each plan unlocks. Fixed in code (the admin edits names, prices and periods, not what a plan is).
@@ -61,6 +66,7 @@ DEFAULT_CONFIG: dict = {
     "renewal": "immediate",      # a renewal of the same plan starts when the current period ends
     "month_days": 30,            # how long "a month" and "a year" of a plan last
     "year_days": 365,
+    "usd_rate": 0,               # ₹ per $1 for clinicians outside India; 0 = everyone pays in ₹
     "plans": {
         "per_report": {"enabled": True, "visible": True, "order": 5,
                        "name": "Pay per report",
@@ -144,6 +150,12 @@ def validate(cfg: dict) -> dict:
     for k in ("month_days", "year_days"):
         if k in cfg:
             _positive(problems, k, cfg[k], MAX_DAYS)
+    if "usd_rate" in cfg:
+        r = cfg["usd_rate"]
+        if isinstance(r, bool) or not isinstance(r, (int, float)) or (r != 0 and not
+                                                                      USD_RATE_RANGE[0] <= r <= USD_RATE_RANGE[1]):
+            problems.append(f"usd_rate: 0 (no dollar prices) or ₹ per $1 from {USD_RATE_RANGE[0]} to "
+                            f"{USD_RATE_RANGE[1]}")
     plans = cfg.get("plans", {})
     if not isinstance(plans, dict) or set(plans) - set(PLANS):
         problems.append("plans: only " + ", ".join(PLANS))
@@ -200,7 +212,7 @@ def validate(cfg: dict) -> dict:
                 _text(problems, "byok_scale.instructions", merged["instructions"], TEXT_LIMITS["instructions"],
                       required=False)
         out["plans"][name] = merged
-    for k in ("enabled", "currency", "payment_method", "renewal", "month_days", "year_days"):
+    for k in ("enabled", "currency", "payment_method", "renewal", "month_days", "year_days", "usd_rate"):
         if k in cfg:
             out[k] = cfg[k]
     if out["enabled"] and not any(out["plans"][n]["enabled"] for n in PLANS):
@@ -242,6 +254,53 @@ def rupees(paise: int) -> str:
     return f"₹{s}" + (f".{p:02d}" if p else "")
 
 
+def money(amount: int, currency: str) -> str:
+    """₹12,999 or $11.99 (whole units unless there are paise / cents)."""
+    if currency == "USD":
+        d, c = divmod(int(amount), 100)
+        return f"${d:,}" + (f".{c:02d}" if c else "")
+    return rupees(amount)
+
+
+# --- dollar prices outside India ------------------------------------------------------------
+def usd_price(paise: int, rate: float) -> int:
+    """A ₹ price in US cents at `rate` rupees per dollar, rounded up to the next $x.99 (₹999 at 85: $11.99).
+    Free stays free."""
+    if not paise:
+        return 0
+    return math.ceil(paise / 100 / rate) * 100 - 1
+
+
+def currency_for(cfg: dict, mobile: str | None) -> str:
+    """Dollars for a clinician whose mobile number is from outside India, once the admin has set a rate."""
+    if cfg.get("usd_rate") and mobile and not mobile.startswith("+91"):
+        return "USD"
+    return cfg["currency"]
+
+
+def in_currency(cfg: dict, currency: str) -> dict:
+    """The configuration with every price in `currency` (the stored one is not changed). A struck-through
+    price that would not stay above the converted price is dropped."""
+    if currency == cfg["currency"]:
+        return cfg
+    rate = cfg["usd_rate"]
+    out = copy.deepcopy(cfg)
+    out["currency"] = currency
+    for name, p in out["plans"].items():
+        if name == "per_report":
+            p["prices"] = {t: usd_price(v, rate) for t, v in p["prices"].items()}
+        elif name == "print":
+            p["price"] = usd_price(p["price"], rate)
+        elif name in TIERS:
+            for per in PERIODS:
+                p[f"price_{per}"] = usd_price(p[f"price_{per}"], rate)
+                was = usd_price(p[f"was_{per}"], rate)
+                p[f"was_{per}"] = was if was > p[f"price_{per}"] else 0
+            if "extra_price" in p:
+                p["extra_price"] = usd_price(p["extra_price"], rate)
+    return out
+
+
 def feature_text(cfg: dict, plan: str, key: str) -> str | None:
     """One cell of the plans table: what this plan gives for this row, or None for "Not included"."""
     have = FEATURES[plan]
@@ -251,7 +310,7 @@ def feature_text(cfg: dict, plan: str, key: str) -> str | None:
         return "Unlimited, with your own AI key"
     if "guided_included" in have:
         p = cfg["plans"]["scale"]
-        return f"{p['guided_per_month']} per month · extra {rupees(p['extra_price'])} each"
+        return f"{p['guided_per_month']} per month · extra {money(p['extra_price'], cfg['currency'])} each"
     return None
 
 

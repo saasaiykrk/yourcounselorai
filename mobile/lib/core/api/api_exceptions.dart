@@ -61,7 +61,7 @@ final class PaymentRequired extends ApiException {
 /// 402 plan_required: the clinician's plan doesn't include [feature] (library, pdf, booking,
 /// appointments, guided, guided_own_key). The app offers the plans; nothing was charged.
 final class PlanRequired extends ApiException {
-  const PlanRequired({required this.feature, required this.message, this.plan, this.price});
+  const PlanRequired({required this.feature, required this.message, this.plan, this.price, this.currency = 'INR'});
 
   final String feature;
   final String message;
@@ -69,6 +69,9 @@ final class PlanRequired extends ApiException {
   /// For "guided": a single guided report on sale instead ("per_report" or "scale_extra"), and its price.
   final String? plan;
   final int? price;
+
+  /// INR, or USD for a mobile number from outside India.
+  final String currency;
 }
 
 /// 424 byok_failed: the clinician's own Anthropic key could not be used. The platform key is never

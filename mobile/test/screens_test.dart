@@ -392,7 +392,29 @@ void main() {
     expect(consult.reports, ['turn-1:unsafe']);
   });
 
-  testWidgets('professional details need name, gender, age, mobile, consent and a registration number', (tester) async {
+  testWidgets('the registration number is optional; an empty one is sent as none', (tester) async {
+    final started = <(String, ProfileSubmission)>[];
+    await _pumpAt(tester, '/sign-up', auth: _RecordingAuth(), startSignup: (e, d) async => started.add((e, d)));
+    expect(find.text('RCI registration number (optional)'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('signup-email')), 'new@clinic.in');
+    await tester.enterText(_field('As on your registration'), 'Dr New Clinician');
+    await tester.enterText(_field('Years'), '29');
+    await tester.enterText(_field('98765 43210'), '98765 43210');
+    await tester.ensureVisible(find.text('Male'));
+    await tester.tap(find.text('Male'));
+    await tester.enterText(_field('As shown on the register'), '   ');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(_onPressed(tester, 'Send code'), isNotNull, reason: 'no registration number needed');
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+    expect((started.single.$2.registrationBody, started.single.$2.registrationNumber), ('RCI', null));
+  });
+
+  testWidgets('professional details need name, gender, age, mobile and consent', (tester) async {
     await _pumpAt(tester, '/details');
     expect(_onPressed(tester, 'Submit for verification'), isNull);
 
@@ -422,7 +444,7 @@ void main() {
     await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
     await tester.enterText(_field('98765 43210'), '12345');
     await tester.pump();
-    expect(find.text('A mobile number like 98765 43210'), findsOneWidget);
+    expect(find.text('A 10-digit mobile number, like 98765 43210'), findsOneWidget);
     expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'a mobile number is required');
   });
 

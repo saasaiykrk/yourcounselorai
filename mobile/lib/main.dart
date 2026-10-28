@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/auth/auth_service.dart';
 import 'core/config.dart';
+import 'core/providers.dart';
 import 'core/theme/app_theme.dart';
 import 'router.dart';
 
@@ -13,7 +14,12 @@ Future<void> main() async {
   AppConfig.validate();
   await initAuthBackend();
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(ProviderScope(child: YourCounselorApp(router: buildRouter())));
+  runApp(
+    ProviderScope(
+      retry: noAutomaticRetry,
+      child: YourCounselorApp(router: buildRouter()),
+    ),
+  );
 }
 
 class YourCounselorApp extends StatelessWidget {

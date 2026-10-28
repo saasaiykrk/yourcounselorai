@@ -29,9 +29,14 @@ def _get_pool() -> ConnectionPool:
         if _pool is None or _pool.conninfo != _DSN:
             if _pool is not None:
                 _pool.close()
-            _pool = ConnectionPool(_DSN, min_size=1, max_size=10, max_idle=300, timeout=20,
+            # TCP keepalives and tcp_user_timeout: a connection dropped silently on the way (no reply at all)
+            # fails within seconds instead of hanging a request; connect_timeout bounds a new one.
+            _pool = ConnectionPool(_DSN, min_size=1, max_size=10, max_idle=120, max_lifetime=1800, timeout=15,
                                    check=ConnectionPool.check_connection, open=True,
-                                   kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None})
+                                   kwargs={"row_factory": dict_row, "autocommit": True, "prepare_threshold": None,
+                                           "connect_timeout": 10, "keepalives": 1, "keepalives_idle": 30,
+                                           "keepalives_interval": 10, "keepalives_count": 3,
+                                           "tcp_user_timeout": 10000})
         return _pool
 
 

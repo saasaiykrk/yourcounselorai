@@ -299,6 +299,17 @@ Unfinished sign-ups are deleted after 90 days; the DPA says so. **Sign in** is u
 1. **Database:** Supabase → SQL Editor → run `db/migrations/019_signup_leads.sql` (safe to run again), before
    deploying the backend.
 
+## Dollar prices outside India
+
+Clinicians whose registered mobile number is not +91 see and pay every price in US dollars. /admin → Pricing Plans
+→ **Outside India: ₹ per $1** sets the rate (0, the default, keeps everyone on ₹); each ₹ price is converted and
+rounded up to the next $x.99 (₹999 at 85 → $11.99). Orders, Razorpay checkout and refunds use the order's own
+currency, and /admin → Payments shows ₹ and $ totals separately. No migration.
+
+1. **Razorpay:** Dashboard → Account & Settings → **International payments** → enable (Razorpay reviews the
+   request). Until it is approved, a dollar checkout fails, so leave the rate at 0.
+2. /admin → Pricing Plans → set the rate (e.g. 85) → Save.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
