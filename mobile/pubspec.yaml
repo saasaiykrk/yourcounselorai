@@ -2,7 +2,7 @@ name: your_counselor
 description: "YourCounselor: clinical reference and documentation aid for registered mental-health professionals."
 publish_to: 'none'
 
-version: 1.0.0+3
+version: 1.0.1+3
 
 environment:
   sdk: ^3.13.4
