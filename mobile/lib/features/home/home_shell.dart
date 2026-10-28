@@ -6,7 +6,7 @@ import '../../core/providers.dart';
 import '../history/history_screen.dart';
 
 /// Bottom navigation between Consult, History, Calendar, Education and Account.
-class HomeShell extends ConsumerWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key, required this.shell});
 
   final StatefulNavigationShell shell;
@@ -16,18 +16,32 @@ class HomeShell extends ConsumerWidget {
   static const educationBranch = 3;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends ConsumerState<HomeShell> {
+  @override
+  void initState() {
+    super.initState();
+    // Load the calendar in the background as soon as the home screen opens (after the plan check), so
+    // the Calendar tab is ready when tapped. Listening keeps it loaded; errors show on the tab itself.
+    ref.listenManual(calendarHomeProvider, (_, _) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = widget.shell;
     return Scaffold(
       body: shell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: shell.currentIndex,
         onDestinationSelected: (i) {
           // History is re-read every time it is opened (a consult may have just finished).
-          if (i == historyBranch) ref.read(historyRefreshProvider.notifier).bump();
+          if (i == HomeShell.historyBranch) ref.read(historyRefreshProvider.notifier).bump();
           // The calendar too: bookings arrive from clients at any time.
-          if (i == calendarBranch) ref.invalidate(calendarHomeProvider);
+          if (i == HomeShell.calendarBranch) ref.invalidate(calendarHomeProvider);
           // Education links are signed for a few hours: fetch fresh ones each time.
-          if (i == educationBranch) ref.invalidate(educationPagesProvider);
+          if (i == HomeShell.educationBranch) ref.invalidate(educationPagesProvider);
           shell.goBranch(i, initialLocation: i == shell.currentIndex);
         },
         destinations: const [
