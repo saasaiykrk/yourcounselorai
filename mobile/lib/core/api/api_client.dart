@@ -37,6 +37,16 @@ class ApiClient {
 
   Future<void> submitProfile(ProfileSubmission profile) => _send('POST', '/v1/profile', body: profile.toJson());
 
+  /// Create account, before the email code (no sign-in yet): the server keeps the details and makes them
+  /// the registration once a code sent to [email] is verified.
+  Future<void> startSignup(String email, ProfileSubmission details) async {
+    try {
+      await _dio.post<Object?>('/v1/signup/start', data: {...details.toJson(), 'email': email});
+    } on DioException catch (e) {
+      throw mapDioException(e);
+    }
+  }
+
   Future<ProfileEditResult> editProfile(ProfileEdit profile) async =>
       ProfileEditResult.fromJson(await _send('PATCH', '/v1/profile', body: profile.toJson()));
 

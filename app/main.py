@@ -49,7 +49,10 @@ from __future__ import annotations
 import json
 import pathlib
 import re
+import threading
+import time
 import uuid
+from collections import deque
 from datetime import date
 from types import SimpleNamespace
 
@@ -279,6 +282,14 @@ class ProfileIn(BaseModel):
     mobile: Mobile = None                     # also used for offers and updates (Data Processing Agreement)
 
 
+class SignupIn(ProfileIn):
+    """Create account: the details given before the email code. No level here: that comes only from the
+    clinicians row (admin, or the skip-verification switch)."""
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(max_length=254)
+    mobile: Annotated[str, Field(max_length=30), AfterValidator(normalize_mobile)]
+
+
 class ProfileEditIn(BaseModel):
     """The clinician edits their own details. No level or status here: those come only from an admin."""
     model_config = ConfigDict(extra="forbid")
@@ -392,6 +403,8 @@ def me(user: dict = Depends(current_user)):
     if CFG.dev_mode and user["id"] == "dev-clinician":
         return {**_DEV_CLINICIAN, "features": {**features, "unlocked": sorted(BILLING.features(user["id"]))}}
     row = db.get_clinician(user["id"])
+    if not row and user.get("proven_email") and db.complete_lead(user["id"], user["proven_email"]):
+        row = db.get_clinician(user["id"])      # Create account: the details given before the code
     if not row:
         return {"id": user["id"], "verification_status": "none"}
     if user.get("proven_email"):
@@ -401,12 +414,64 @@ def me(user: dict = Depends(current_user)):
     return {**{k: v for k, v in row.items() if k != "proven_email"}, "features": {**features, "unlocked": unlocked}}
 
 
+# Create account works before sign-in, so it is limited per phone (network address) and in total.
+SIGNUP_PER_IP_HOUR = 10
+SIGNUP_TOTAL_HOUR = 500
+_signup_limits: dict[str, deque] = {}
+_signup_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    """The caller's address. Behind Google's load balancer the last two X-Forwarded-For entries are the
+    client and the balancer; anything before them was sent by the client and is not trusted."""
+    hops = [h.strip() for h in request.headers.get("x-forwarded-for", "").split(",") if h.strip()]
+    return hops[-2] if len(hops) >= 2 else (request.client.host if request.client else "unknown")
+
+
+def _signup_allowed(ip: str) -> bool:
+    now = time.monotonic()
+    with _signup_lock:
+        for key, cap in ((ip, SIGNUP_PER_IP_HOUR), ("*", SIGNUP_TOTAL_HOUR)):
+            q = _signup_limits.setdefault(key, deque())
+            while q and now - q[0] > 3600:
+                q.popleft()
+            if len(q) >= cap:
+                return False
+        for key in (ip, "*"):
+            _signup_limits[key].append(now)
+        if len(_signup_limits) > 5000:          # forget quiet addresses
+            for key in [k for k, q in _signup_limits.items() if k != "*" and (not q or now - q[-1] > 3600)]:
+                del _signup_limits[key]
+        return True
+
+
+@app.post("/v1/signup/start")
+def signup_start(body: SignupIn, request: Request):
+    """Create account, step 1 (before the email code): keeps the details so /admin sees who started, and
+    so they become the registration once a code sent to this email is verified. Always answers the same
+    way, whether or not the email already has an account."""
+    email = body.email.strip().lower()
+    if not re.fullmatch(r"[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}", email):
+        raise HTTPException(422, {"error": "invalid", "message": "email: not an email address"})
+    if not _signup_allowed(_client_ip(request)):
+        raise HTTPException(429, {"error": "too_many", "message": "Too many sign-ups from this network. Try again later."})
+    db.save_lead(email, body.model_dump(exclude={"email"}))
+    return {"ok": True}
+
+
+@app.get("/v1/admin/signup-leads")
+def admin_signup_leads(status: str = Query("started", pattern="^(started|completed)$"), a: dict = Depends(admin)):
+    """Create account sign-ups: "started" = details given, email code never entered (kept 90 days)."""
+    return {"leads": db.signup_leads(status)}
+
+
 @app.post("/v1/profile")
 def profile(body: ProfileIn, user: dict = Depends(current_user)):
     db.upsert_clinician_profile(user["id"], body.model_dump())
     if user.get("proven_email"):
         db.note_proven_email(user["id"], user["proven_email"])
-    return {"verification_status": "pending"}
+    row = db.get_clinician(user["id"])          # "verified" at once when the admin's skip-verification switch is on
+    return {"verification_status": (row or {}).get("verification_status") or "pending"}
 
 
 @app.patch("/v1/profile")
@@ -826,6 +891,27 @@ education.install(app, EDUCATION, current_user, BOOKING.base_url)
 # --- admin panel (app Admin area and /admin web page) -------------------------
 # Admin-only. Lists hold clinicians' registration details and de-identified case
 # text only; every change is written to admin_audit.
+class AutoApproveIn(BaseModel):
+    auto_approve: bool
+
+
+_dev_auto_approve = {"on": False}     # DEV_MODE: no database
+
+
+@app.get("/v1/admin/registration-settings")
+def registration_settings(a: dict = Depends(admin)):
+    """The "Skip verification" switch: on, registrations are approved at once at the level of the chosen role."""
+    return {"auto_approve": _dev_auto_approve["on"] if CFG.dev_mode else db.auto_approve()}
+
+
+@app.put("/v1/admin/registration-settings")
+def set_registration_settings(body: AutoApproveIn, a: dict = Depends(admin)):
+    if CFG.dev_mode:
+        _dev_auto_approve["on"] = body.auto_approve
+        return {"auto_approve": body.auto_approve, "approved_waiting": 0}
+    return {"auto_approve": body.auto_approve, "approved_waiting": db.set_auto_approve(body.auto_approve, a["id"])}
+
+
 @app.get("/v1/admin/clinicians")
 def admin_clinicians(status: str = Query("pending", pattern="^(pending|verified|rejected)$"),
                      a: dict = Depends(admin)):

@@ -271,7 +271,7 @@ function selectView(name, filter) {
     else tab.removeAttribute("aria-current");
     $("panel-" + v).hidden = v !== name;
   }
-  if (name === "clinicians") { if (filter != null) setSeg("clinician-filter", (clinicianStatus = filter)); loadClinicians(); }
+  if (name === "clinicians") { if (filter != null) setSeg("clinician-filter", (clinicianStatus = filter)); loadClinicians(); loadAutoApprove(); }
   else if (name === "incidents") { if (filter != null) setSeg("incident-filter", (incidentStatus = filter)); loadIncidents(); }
   else if (name === "pricing") loadPricing();
   else if (name === "subs") loadSubs(filter);
@@ -345,12 +345,52 @@ function registration(c) {
     ? c.registration_body + " " + (c.registration_number || "(no number)") : "No registration given";
 }
 
+// The "Skip verification" switch above the registrations.
+async function loadAutoApprove() {
+  const box = $("auto-approve");
+  try {
+    box.checked = (await api("GET", "/v1/admin/registration-settings")).auto_approve;
+    box.disabled = false;
+  } catch (err) {
+    if (err.message !== "signed-out") $("auto-approve-error").textContent = "Couldn't load the switch.";
+  }
+}
+
+async function setAutoApprove() {
+  const box = $("auto-approve"), on = box.checked;
+  $("auto-approve-error").textContent = "";
+  if (on && !window.confirm("Approve new registrations without checking the register?\n\nEveryone waiting now is " +
+      "approved too, with the level of the role they chose (psychiatrist = L3, the most clinical answers).")) {
+    box.checked = false;
+    return;
+  }
+  box.disabled = true;
+  try {
+    const r = await api("PUT", "/v1/admin/registration-settings", { auto_approve: on });
+    toast(on ? "Skip verification is on" + (r.approved_waiting ? " · " + r.approved_waiting + " waiting approved" : "")
+      : "Skip verification is off: new registrations wait for you");
+    loadClinicians(); loadCounts();
+  } catch (err) {
+    box.checked = !on;
+    if (err.message !== "signed-out") $("auto-approve-error").textContent = "Couldn't save: " + err.message;
+  } finally {
+    box.disabled = false;
+  }
+}
+
 async function loadClinicians() {
   const list = $("clinician-list");
   list.replaceChildren(...skeletons(4));
   try {
-    const { clinicians } = await api("GET", "/v1/admin/clinicians?status=" + encodeURIComponent(clinicianStatus));
-    clinicianRows = clinicians;
+    if (clinicianStatus === "started") {
+      // Create account sign-ups that never entered the email code: shown so the team can help them finish.
+      const { leads } = await api("GET", "/v1/admin/signup-leads?status=started");
+      clinicianRows = leads.map((l) => ({ ...l, verification_status: "started", age_at_registration: l.age,
+                                          created_at: l.updated_at }));
+    } else {
+      const { clinicians } = await api("GET", "/v1/admin/clinicians?status=" + encodeURIComponent(clinicianStatus));
+      clinicianRows = clinicians;
+    }
     renderClinicians();
   } catch (err) {
     if (err.message !== "signed-out") list.replaceChildren(el("p", { class: "error", text: "Couldn't load registrations." }));
@@ -364,7 +404,8 @@ function renderClinicians() {
     [c.full_name, c.email, c.registration_number, c.mobile].some((v) => (v || "").toLowerCase().includes(q)));
   if (!rows.length) {
     list.replaceChildren(empty(q ? "No registrations match \"" + q + "\"."
-      : clinicianStatus === "pending" ? "Nobody is waiting for approval." : "None.", q ? "search" : "inbox"));
+      : clinicianStatus === "pending" ? "Nobody is waiting for approval."
+      : clinicianStatus === "started" ? "Everyone who started signing up has finished." : "None.", q ? "search" : "inbox"));
     return;
   }
   list.replaceChildren(...rows.map(clinicianCard));
@@ -374,6 +415,7 @@ function clinicianCard(c) {
   const status = c.verification_status;
   const pill = status === "verified" ? el("span", { class: "pill ok", text: "Verified · " + c.level })
     : status === "rejected" ? el("span", { class: "pill crisis", text: "Rejected" })
+    : status === "started" ? el("span", { class: "pill grey", text: "Code not entered" })
     : el("span", { class: "pill check", text: "Waiting" });
   const regNo = c.registration_body && c.registration_body !== "none" && c.registration_number;
   const regValue = el("dd", {}, el("span", { class: regNo ? "mono" : "", text: registration(c) }),
@@ -392,7 +434,8 @@ function clinicianCard(c) {
       fact("Registration", regValue),
       fact("Gender · age", personal || "Not given"),
       fact("Mobile", c.mobile || "Not given"),
-      fact(status === "pending" ? "Registered" : "Decided", when(status === "pending" ? c.created_at : (c.verified_at || c.created_at)))),
+      fact(status === "started" ? "Started" : status === "pending" ? "Registered" : "Decided",
+        when(status === "pending" || status === "started" ? c.created_at : (c.verified_at || c.created_at)))),
     c.verification_note ? el("p", { class: "note-line", text: "How it was checked: " + c.verification_note }) : null);
   if (status === "pending") {
     card.append(el("div", { class: "actions" },
@@ -781,6 +824,7 @@ async function start() {
   wireSeg("clinician-filter", (v) => { clinicianStatus = v; loadClinicians(); });
   wireSeg("incident-filter", (v) => { incidentStatus = v; $("incident-detail").hidden = true; loadIncidents(); });
   $("clinician-search").addEventListener("input", renderClinicians);
+  $("auto-approve").addEventListener("change", setAutoApprove);
   $("refresh-overview").addEventListener("click", () => { loadOverview(); loadCounts(); });
   $("refresh-clinicians").addEventListener("click", () => { loadClinicians(); loadCounts(); });
   $("refresh-incidents").addEventListener("click", () => { loadIncidents(); loadCounts(); });

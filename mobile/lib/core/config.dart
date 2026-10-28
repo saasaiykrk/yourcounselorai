@@ -44,7 +44,8 @@ abstract final class AppConfig {
 
   /// Terms and consent version recorded at signup; the lawyer-reviewed text replaces it in Phase 4.
   // 2: names Google (Gemini), Razorpay and client bookings · 3: mobile number, offers and updates
-  static const consentVersion = '2026-10-v3';
+  // 4: details kept 90 days when a sign-up is not finished
+  static const consentVersion = '2026-10-v4';
 
   /// Throws with a readable message when a live build is missing its settings.
   static void validate() {

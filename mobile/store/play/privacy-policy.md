@@ -9,7 +9,7 @@ YourCounselor ("we", "us") is operated by [legal entity name], [registered addre
 ## 1. Information we collect
 
 **From clinicians (app users)**
-- Account details: email address, mobile number, name, gender, age, professional role, registration body and registration number, used to verify that you are a registered professional and to contact you.
+- Account details: email address, mobile number, name, gender, age, professional role, registration body and registration number, used to verify that you are a registered professional and to contact you. If you start creating an account and do not enter the email code, the details you entered are kept for 90 days so we can help you finish, then deleted.
 - Case text you write: before anything leaves your phone, the app removes names, phone numbers, email addresses, ID numbers and similar identifiers, and you confirm the text contains none. Our server checks again and refuses text with identifiers. We store de-identified case text and the replies so you can see them in History.
 - Payments for plans, single reports and single prints of education pages: plan, amount and payment status. Card, UPI and bank details are handled by Razorpay; we never see or store them.
 - Your own AI provider API key, if you choose to add one: stored encrypted, never shown again.
