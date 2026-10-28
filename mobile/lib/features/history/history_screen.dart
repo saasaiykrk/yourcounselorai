@@ -32,7 +32,7 @@ String historyWhen(DateTime? d) {
 }
 
 String _errorText(Object e) => switch (e) {
-  NetworkProblem() => "Couldn't reach Your Counselor. Check your connection.",
+  NetworkProblem() => "Couldn't reach YourCounselor. Check your connection.",
   NotFound() => 'This consult is no longer in your history.',
   Unauthorized() => 'Please sign in again.',
   NotVerified() => 'History is available once your registration is verified.',

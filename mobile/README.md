@@ -1,6 +1,6 @@
-# Your Counselor: Flutter app (Android and iPhone)
+# YourCounselor: Flutter app (Android and iPhone)
 
-The phone app for Your Counselor. It signs clinicians in, cleans case text on the phone, sends it to the Your Counselor backend, and shows the safety-checked reply.
+The phone app for YourCounselor. It signs clinicians in, cleans case text on the phone, sends it to the YourCounselor backend, and shows the safety-checked reply.
 
 ## How it's built
 

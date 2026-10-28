@@ -47,7 +47,7 @@ String _when(DateTime? d) {
 
 String _errorText(Object e) => switch (e) {
   NotVerified() || Unauthorized() => 'This account has no admin access.',
-  NetworkProblem() => "Couldn't reach Your Counselor. Check your connection.",
+  NetworkProblem() => "Couldn't reach YourCounselor. Check your connection.",
   NotFound() => 'Not found. It may have been changed by another admin.',
   _ => 'Something went wrong. Please try again.',
 };
@@ -142,7 +142,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> with SingleTickerProv
           children: [
             Text('Admin'),
             SizedBox(width: 8),
-            StatusPill('Your Counselor', tone: Tone.brand),
+            StatusPill('YourCounselor', tone: Tone.brand),
           ],
         ),
         bottom: TabBar(

@@ -219,7 +219,7 @@ class OfflineScreen extends StatelessWidget {
         'Your text is still on the consult screen. Please try again in a moment.',
       ),
       _ => (
-        "Couldn't reach Your Counselor",
+        "Couldn't reach YourCounselor",
         "Check your connection and try again. Your text is still on the consult screen and hasn't been sent.",
       ),
     };

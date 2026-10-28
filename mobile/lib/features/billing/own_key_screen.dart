@@ -44,7 +44,7 @@ class _OwnKeyScreenState extends ConsumerState<OwnKeyScreen> {
     } on BillingRefused catch (e) {
       _error = e.message;
     } on NetworkProblem {
-      _error = "Couldn't reach Your Counselor. Check your connection and try again.";
+      _error = "Couldn't reach YourCounselor. Check your connection and try again.";
     } on ApiException {
       _error = 'Something went wrong. Try again.';
     } finally {

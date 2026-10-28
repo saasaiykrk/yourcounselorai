@@ -23,7 +23,7 @@ class InfoDoc {
 
 const kPrivacyDoc = InfoDoc(
   title: 'How we protect client data',
-  intro: 'Your Counselor is built so that client identities never leave your phone.',
+  intro: 'YourCounselor is built so that client identities never leave your phone.',
   sections: [
     InfoSection('On your phone', [
       'Before anything is sent, the app removes names, phone numbers, email addresses, ID numbers and '
@@ -74,7 +74,7 @@ const kPrivacyDoc = InfoDoc(
 
 const kTermsDoc = InfoDoc(
   title: 'Clinician Terms',
-  intro: 'Your Counselor is a consultation aid for registered mental-health professionals.',
+  intro: 'YourCounselor is a consultation aid for registered mental-health professionals.',
   sections: [
     InfoSection('Who can use it', [
       'Counsellors, trainees, psychologists and psychiatrists who give accurate registration details.',
@@ -122,7 +122,7 @@ const kDpaDoc = InfoDoc(
     ]),
     InfoSection('Offers and updates', [
       'We may use your mobile number and email address to contact you about your account and to send you '
-          'offers, news and updates about Your Counselor, by WhatsApp, SMS, email or a call.',
+          'offers, news and updates about YourCounselor, by WhatsApp, SMS, email or a call.',
       'To stop offers and updates at any time, reply STOP to any message or email $kSafetyEmail. Messages about '
           'your account, payments and safety continue.',
     ]),

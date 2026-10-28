@@ -137,7 +137,7 @@ class _EditFormState extends ConsumerState<_EditForm> {
       if (mounted) {
         setState(
           () => _error = e is NetworkProblem
-              ? "Couldn't reach Your Counselor. Check your connection and try again."
+              ? "Couldn't reach YourCounselor. Check your connection and try again."
               : "Couldn't save your profile. Please try again.",
         );
       }

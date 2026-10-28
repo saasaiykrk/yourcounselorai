@@ -1,4 +1,4 @@
-/* Your Counselor web admin. Brand colours from the app (mobile/lib/core/theme/app_colors.dart);
+/* YourCounselor web admin. Brand colours from the app (mobile/lib/core/theme/app_colors.dart);
    fonts are the app's own Nunito / Nunito Sans, served from /admin (no third-party requests). */
 @font-face { font-family: "Nunito"; src: url("/admin/nunito-extrabold.ttf") format("truetype"); font-weight: 800; font-display: swap; }
 @font-face { font-family: "Nunito Sans"; src: url("/admin/nunitosans-regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }

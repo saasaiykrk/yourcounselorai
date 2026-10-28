@@ -27,7 +27,7 @@ String routeForProfile(Me me) {
 
 String _messageFor(Object error) => switch (error) {
   AuthFailure(:final message) => message,
-  NetworkProblem() => "Couldn't reach Your Counselor. Check your connection and try again.",
+  NetworkProblem() => "Couldn't reach YourCounselor. Check your connection and try again.",
   _ => 'Something went wrong. Please try again. (${error.runtimeType})',
 };
 
@@ -270,7 +270,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
         children: [
           const Align(
             alignment: Alignment.centerLeft,
-            child: BrandMark(size: 72, semanticLabel: 'Your Counselor'),
+            child: BrandMark(size: 72, semanticLabel: 'YourCounselor'),
           ),
           const PageHeading('Sign in', message: "We'll email you a 6-digit code. No password to remember."),
           Column(
@@ -742,7 +742,7 @@ class _PendingScreenState extends ConsumerState<PendingScreen> {
       tone: Tone.check,
       title: rejected ? "We couldn't verify you" : "We're verifying you",
       message: rejected
-          ? 'The registration number did not match the official register. Contact the Your Counselor team to fix it.'
+          ? 'The registration number did not match the official register. Contact the YourCounselor team to fix it.'
           : "We check every registration on the official register by hand. We'll email you the moment you can start.",
       actions: [
         OutlinedButton(
