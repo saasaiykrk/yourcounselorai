@@ -77,7 +77,7 @@ Future<void> contactSafetyTeam(BuildContext context) async {
     scheme: 'mailto',
     path: kSafetyEmail,
     query:
-        'subject=${Uri.encodeComponent('Your Counselor: clinical safety')}'
+        'subject=${Uri.encodeComponent('YourCounselor: clinical safety')}'
         '&body=${Uri.encodeComponent('(Please do not include client names or other identifiers.)\n\n')}',
   );
   var opened = false;

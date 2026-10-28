@@ -46,7 +46,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
           _busy = false;
           _error = switch (e) {
             BillingRefused(:final message) => message,
-            NetworkProblem() => "Couldn't reach Your Counselor. Check your connection and try again.",
+            NetworkProblem() => "Couldn't reach YourCounselor. Check your connection and try again.",
             _ => "Couldn't delete your account. Please try again.",
           };
         });

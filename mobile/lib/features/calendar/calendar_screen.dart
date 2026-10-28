@@ -16,7 +16,7 @@ import 'appointment_sheet.dart';
 String calendarErrorText(Object e) => switch (e) {
   PlanRequired(:final message) => message,
   BillingRefused(:final message) => message,
-  NetworkProblem() => "Couldn't reach Your Counselor. Check your connection.",
+  NetworkProblem() => "Couldn't reach YourCounselor. Check your connection.",
   NotFound() => 'This appointment no longer exists.',
   Unauthorized() => 'Please sign in again.',
   NotVerified() => 'The calendar is available once your registration is verified.',

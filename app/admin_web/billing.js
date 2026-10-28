@@ -1,4 +1,4 @@
-// Your Counselor web admin: Pricing Plans, Subscriptions & Users, Payments & Transactions.
+// YourCounselor web admin: Pricing Plans, Subscriptions & Users, Payments & Transactions.
 // Uses admin.js's helpers (el, put, api, icon, empty, skeletons, toast, busy, when, wireSeg, setSeg).
 // Money is in paise on the server; shown and typed here in rupees. Every change goes through the
 // backend, which validates it, needs a reason where it touches a clinician, and records it.

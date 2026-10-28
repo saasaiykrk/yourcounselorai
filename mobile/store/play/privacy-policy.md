@@ -30,7 +30,7 @@ YourCounselor ("we", "us") is operated by [legal entity name], [registered addre
 - To manage appointments and send booking emails.
 - To review safety reports and improve safety.
 
-- To send you offers, news and updates about Your Counselor at your mobile number or email address (WhatsApp, SMS, email or a call). Reply STOP to any message, or email us, to stop them at any time.
+- To send you offers, news and updates about YourCounselor at your mobile number or email address (WhatsApp, SMS, email or a call). Reply STOP to any message, or email us, to stop them at any time.
 
 We do not sell personal data. We do not show advertising in the app, and case information is never used for marketing.
 

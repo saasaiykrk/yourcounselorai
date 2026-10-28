@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Brand and UI colours for Your Counselor.
+/// Brand and UI colours for YourCounselor.
 ///
 /// Brand values were measured from the approved logo. Safety colours are
 /// deliberately kept away from the brand pink so a crisis state is never

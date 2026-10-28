@@ -136,10 +136,10 @@ String friendlyAuthError(sb.AuthException e, {required bool sendingCode}) {
     return "That email address wasn't accepted. Check it and try again.";
   }
   if (code == 'email_address_not_authorized' || m.contains('not authorized')) {
-    return "Sign-in emails can't be sent to this address yet. Ask the Your Counselor team to enable it.";
+    return "Sign-in emails can't be sent to this address yet. Ask the YourCounselor team to enable it.";
   }
   if (code == 'signup_disabled' || code == 'otp_disabled' || code == 'email_provider_disabled') {
-    return 'Email sign-in is switched off for Your Counselor right now. Please contact the team.';
+    return 'Email sign-in is switched off for YourCounselor right now. Please contact the team.';
   }
   if (!sendingCode && (code == 'otp_expired' || m.contains('expired') || m.contains('invalid'))) {
     return 'That code is wrong or has expired. Try again or resend it.';

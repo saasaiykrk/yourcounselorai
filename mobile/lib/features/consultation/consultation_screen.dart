@@ -702,7 +702,7 @@ class _ErrorCard extends StatelessWidget {
       Conflict() => ('Still working on your last step. Try again in a moment.', true),
       DailyLimitReached() => ("You've reached today's consult limit. You can continue tomorrow.", false),
       NetworkProblem(timedOut: true) => ('This is taking too long. Try again.', true),
-      NetworkProblem() => ("Couldn't reach Your Counselor. Check your connection and try again.", true),
+      NetworkProblem() => ("Couldn't reach YourCounselor. Check your connection and try again.", true),
       Unauthorized() => ('Please sign in again.', false),
       NotVerified() => ('Your registration is not verified yet.', false),
       NotFound() => ('This consultation is no longer available.', false),

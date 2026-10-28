@@ -12,7 +12,7 @@ import '../education/education_repository.dart';
 /// Returns the bearer token for the signed-in clinician, or null.
 typedef TokenProvider = Future<String?> Function();
 
-/// The only way the app talks to the Your Counselor backend.
+/// The only way the app talks to the YourCounselor backend.
 ///
 /// Never logs request or response bodies: they carry case text (CLAUDE.md rule 5).
 class ApiClient {

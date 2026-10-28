@@ -24,7 +24,7 @@ class YourCounselorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Your Counselor',
+      title: 'YourCounselor',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       routerConfig: router,

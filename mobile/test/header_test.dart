@@ -43,7 +43,7 @@ void main() {
 
         expect(tester.takeException(), isNull);
         final wordmark = tester.getSize(find.byType(BrandWordmark));
-        expect(wordmark.height, lessThan(40), reason: '"Your Counselor" must not wrap to two lines');
+        expect(wordmark.height, lessThan(40), reason: '"YourCounselor" must not wrap to two lines');
         expect(find.text('L3'), findsOneWidget, reason: 'server-verified level is shown');
       });
     }

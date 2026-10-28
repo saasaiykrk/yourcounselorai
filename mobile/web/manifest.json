@@ -1,11 +1,11 @@
 {
-    "name": "Your Counselor",
-    "short_name": "Your Counselor",
+    "name": "YourCounselor",
+    "short_name": "YourCounselor",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#FFFFFF",
     "theme_color": "#6A11BA",
-    "description": "Your Counselor: clinical reference and documentation aid for registered mental-health professionals.",
+    "description": "YourCounselor: clinical reference and documentation aid for registered mental-health professionals.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

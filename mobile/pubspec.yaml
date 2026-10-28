@@ -1,5 +1,5 @@
 name: your_counselor
-description: "Your Counselor: clinical reference and documentation aid for registered mental-health professionals."
+description: "YourCounselor: clinical reference and documentation aid for registered mental-health professionals."
 publish_to: 'none'
 
 version: 1.0.0+3

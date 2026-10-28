@@ -34,7 +34,7 @@ class BrandLogo extends StatelessWidget {
       'assets/brand/logo_splash.png',
       width: width,
       fit: BoxFit.contain,
-      semanticLabel: 'Your Counselor: where counseling meets technology',
+      semanticLabel: 'YourCounselor: where counseling meets technology',
     );
   }
 }
@@ -53,7 +53,7 @@ class BrandWordmark extends StatelessWidget {
       TextSpan(
         children: [
           TextSpan(
-            text: 'Your ',
+            text: 'Your',
             style: base.copyWith(color: AppColors.brandPink),
           ),
           TextSpan(
@@ -62,7 +62,7 @@ class BrandWordmark extends StatelessWidget {
           ),
         ],
       ),
-      semanticsLabel: 'Your Counselor',
+      semanticsLabel: 'YourCounselor',
       maxLines: 1,
       softWrap: false,
     );

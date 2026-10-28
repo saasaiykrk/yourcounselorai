@@ -1,4 +1,4 @@
-// Your Counselor web admin. Talks only to this backend (/v1/admin/*) and to
+// YourCounselor web admin. Talks only to this backend (/v1/admin/*) and to
 // Supabase Auth for the email code. No third-party scripts. All data is shown
 // with textContent, never as HTML. The session lives in sessionStorage (gone
 // when the tab closes) and ends when the admin signs out.
@@ -608,7 +608,7 @@ async function downloadPdf(convId, turn, button) {
     const area = $("print-area");
     put(area,
       el("div", { class: "pr-top" }, el("img", { src: "/admin/logo.png", alt: "", width: "44", height: "44" }),
-        el("span", { class: "pr-wordmark" }, el("span", { class: "your", text: "Your" }), " ",
+        el("span", { class: "pr-wordmark" }, el("span", { class: "your", text: "Your" }),
           el("span", { class: "counselor", text: "Counselor" })),
         el("span", { class: "pr-conf", text: "CONFIDENTIAL" })),
       el("h1", { text: report ? "Consultation report" : "Clinical work-up" }),
@@ -621,7 +621,7 @@ async function downloadPdf(convId, turn, button) {
       el("div", { class: "pr-disclaimer", text: n.disclaimer }),
       el("div", { class: "pr-footer", text: n.footer }));
     document.title = "YourCounselor-report-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    const done = () => { area.replaceChildren(); document.title = "Your Counselor Admin"; };
+    const done = () => { area.replaceChildren(); document.title = "YourCounselor Admin"; };
     window.addEventListener("afterprint", done, { once: true });
     window.print();
   });

@@ -1,4 +1,4 @@
-// Your Counselor web admin: AI Model (which approved model writes replies, and provider API keys).
+// YourCounselor web admin: AI Model (which approved model writes replies, and provider API keys).
 // Uses admin.js and billing.js helpers (el, put, api, icon, empty, skeletons, toast, busy, when,
 // field, formDialog). Keys are sent once to the server, which checks and encrypts them; the page
 // only ever shows the last 4 characters.

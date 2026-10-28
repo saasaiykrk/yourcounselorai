@@ -49,7 +49,7 @@ class PurchaseFlow {
     } on BillingRefused catch (e) {
       return PurchaseFailed(e.message);
     } on NetworkProblem {
-      return const PurchaseFailed("Couldn't reach Your Counselor. Check your connection and try again.");
+      return const PurchaseFailed("Couldn't reach YourCounselor. Check your connection and try again.");
     } on ApiException {
       return const PurchaseFailed("Couldn't start the payment. Try again.");
     }
