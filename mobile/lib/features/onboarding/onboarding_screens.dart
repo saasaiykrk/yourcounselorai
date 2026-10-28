@@ -697,9 +697,10 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+ ()-]'))],
                 decoration: InputDecoration(
                   hintText: '98765 43210',
+                  helperText: 'Outside India? Start with + and your country code.',
                   counterText: '',
                   errorText: _mobile.text.trim().isNotEmpty && _mobileValue == null
-                      ? 'A mobile number like 98765 43210'
+                      ? 'A mobile number like 98765 43210, or +44 7911 123456'
                       : null,
                 ),
                 onChanged: (_) => setState(() {}),

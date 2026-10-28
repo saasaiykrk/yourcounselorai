@@ -444,7 +444,7 @@ void main() {
     await tester.enterText(_field('As on your registration'), 'Dr Sample Clinician');
     await tester.enterText(_field('98765 43210'), '12345');
     await tester.pump();
-    expect(find.text('A mobile number like 98765 43210'), findsOneWidget);
+    expect(find.text('A mobile number like 98765 43210, or +44 7911 123456'), findsOneWidget);
     expect(_onPressed(tester, 'Submit for verification'), isNull, reason: 'a mobile number is required');
   });
 

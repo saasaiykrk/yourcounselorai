@@ -165,6 +165,20 @@ class BillingService:
     def enabled(self) -> bool:
         return self.config()[1]["enabled"]
 
+    def priced(self, c) -> dict:
+        """The configuration with prices in this clinician's currency: US dollars when their mobile number
+        is from outside India and the admin has set a rate, otherwise ₹. `c` is the clinician row or an id."""
+        _, cfg = self.config()
+        if not cfg.get("usd_rate"):
+            return cfg
+        if isinstance(c, dict) and "mobile" in c:
+            mobile = c["mobile"]
+        else:
+            cid = c["id"] if isinstance(c, dict) else c
+            lookup = getattr(self.store, "clinician_mobile", None) if self.store_on() else None
+            mobile = lookup(cid) if lookup else None
+        return billing.in_currency(cfg, billing.currency_for(cfg, mobile))
+
     # --- what the clinician's plan unlocks ------------------------------------------------
     def features(self, cid) -> frozenset:
         """Pricing off (or no database): everything. Otherwise what the running plans unlock; the
@@ -186,7 +200,7 @@ class BillingService:
             return
         if self.store.balance(c["id"])["guided"] > 0:
             return
-        raise HTTPException(402, plan_required("guided", self._report_price(c, self.config()[1], "guided")))
+        raise HTTPException(402, plan_required("guided", self._report_price(c, self.priced(c), "guided")))
 
     # --- the check before every report ---------------------------------------------------
     def authorize(self, c: dict, report_type: str, request_key: str, use_own_key: bool) -> Funding:
@@ -201,14 +215,16 @@ class BillingService:
     def _report_price(self, c, cfg, report_type) -> dict:
         """What one more report of this type costs this clinician: a Scale extra, or per report."""
         if report_type == "guided" and cfg["plans"]["scale"]["enabled"] and self.store.scale_active(c["id"]):
-            return {"plan": "scale_extra", "price": cfg["plans"]["scale"]["extra_price"]}
+            return {"plan": "scale_extra", "price": cfg["plans"]["scale"]["extra_price"], "currency": cfg["currency"]}
         p = cfg["plans"]["per_report"]
-        return {"plan": "per_report", "price": p["prices"][report_type] if p["enabled"] else None}
+        return {"plan": "per_report", "price": p["prices"][report_type] if p["enabled"] else None,
+                "currency": cfg["currency"]}
 
     def _reserve(self, c, cfg, report_type, request_key):
         try:
             self.store.reserve(c["id"], report_type, request_key)
         except billing.NoCredit:
+            cfg = self.priced(c)
             offer = self._report_price(c, cfg, report_type)
             message = ("You have used this month's AI-Guided reports. Buy an extra report to continue."
                        if offer["plan"] == "scale_extra" else
@@ -300,7 +316,8 @@ def plan_required(feature: str, offer: dict | None = None) -> dict:
     """The 402 body when the clinician's plan doesn't include something: the app opens Plans."""
     out = {"error": "plan_required", "feature": feature, "message": PLAN_MESSAGES[feature]}
     if offer and offer.get("price") is not None:
-        out.update(plan=offer["plan"], price=offer["price"], report_type="guided")
+        out.update(plan=offer["plan"], price=offer["price"], report_type="guided",
+                   currency=offer.get("currency", "INR"))
     return out
 
 
@@ -313,12 +330,12 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
     # --- clinician ---------------------------------------------------------------------
     @app.get("/v1/billing/plans")
     def billing_plans(user: dict = Depends(current_user)):
-        _, cfg = svc.config()
+        cfg = svc.priced(user["id"])
         return {**billing.public_plans(cfg), "payments_available": svc.razorpay is not None}
 
     @app.get("/v1/billing/me")
     def billing_me(c: dict = Depends(verified_clinician)):
-        _, cfg = svc.config()
+        cfg = svc.priced(c)
         out = {"enabled": cfg["enabled"], "currency": cfg["currency"], "prices": cfg["plans"]["per_report"]["prices"]
                if cfg["plans"]["per_report"]["enabled"] else None}
         if not svc.store_on():
@@ -388,6 +405,7 @@ def install(app: FastAPI, svc: BillingService, current_user, verified_clinician,
                                           "message": "Your plan already includes PDF downloads."})
         if body.plan == "scale_extra" and not svc.store.scale_active(c["id"]):
             raise HTTPException(409, {"error": "not_purchasable", "message": "Extra reports are for the Scale plan."})
+        cfg = svc.priced(c)          # ₹, or US dollars for a mobile number from outside India
         try:
             price = billing.price_for(cfg, body.plan, body.report_type, item=body.item, period=body.period)
         except billing.NotPurchasable as e:

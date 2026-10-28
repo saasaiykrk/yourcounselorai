@@ -148,7 +148,7 @@ void main() {
     expect(tester.widget<TextField>(_field('mobile')).controller!.text, '+919876543210');
     await tester.enterText(_field('mobile'), '12345');
     await tester.pump();
-    expect(find.text('A mobile number like 98765 43210'), findsOneWidget);
+    expect(find.text('A mobile number like 98765 43210, or +44 7911 123456'), findsOneWidget);
     await tester.ensureVisible(find.text('Save changes'));
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save changes')).onPressed, isNull);
     await tester.enterText(_field('mobile'), '091234 56789');

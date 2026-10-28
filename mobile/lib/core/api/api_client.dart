@@ -463,6 +463,7 @@ ApiException mapStatus(int? status, Object? body) {
       message: message ?? 'Your plan does not include this. See the plans.',
       plan: detail['plan'] as String?,
       price: (detail['price'] as num?)?.toInt(),
+      currency: detail['currency'] as String? ?? 'INR',
     );
   }
   if (status == 424 && error == 'byok_failed') {

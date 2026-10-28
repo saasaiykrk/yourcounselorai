@@ -877,6 +877,7 @@ def _print_access(user_id: str) -> education.PrintAccess:
         return education.PrintAccess(library=False)
     if "pdf" in features:
         return education.PrintAccess(everything=True)
+    cfg = BILLING.priced(user_id)
     p = cfg["plans"]["print"]
     offer = ({"price": p["price"], "currency": cfg["currency"], "hours": p["hours"], "name": p["name"]}
              if p["enabled"] and BILLING.razorpay is not None else None)

@@ -296,6 +296,17 @@ def cancel_external(pid: int, admin_id, reason: str) -> bool:
         return row is not None
 
 
+def clinician_mobile(cid) -> str | None:
+    """The registered mobile number: its country decides ₹ or $ prices (billing.currency_for)."""
+    try:
+        uuid.UUID(str(cid))
+    except ValueError:
+        return None
+    with _conn() as c:
+        row = c.execute("select mobile from clinicians where id=%s", (str(cid),)).fetchone()
+    return row["mobile"] if row else None
+
+
 # --- what a clinician's plan unlocks --------------------------------------------------------
 def plan_features(cid, cfg: dict) -> dict:
     """{"features": set, "plans": [running plan rows, latest end first]}. Gives Learn's free months the
