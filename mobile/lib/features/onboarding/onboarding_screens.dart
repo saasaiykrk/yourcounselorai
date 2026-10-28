@@ -87,7 +87,11 @@ class WelcomeScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
         gap: 22,
         actions: [
-          FilledButton(onPressed: () => context.push('/sign-in'), child: const Text('Get started')),
+          FilledButton(onPressed: () => context.push('/sign-up'), child: const Text('Create account')),
+          TextButton(
+            onPressed: () => context.push('/sign-in'),
+            child: const Text('I already have an account · Sign in'),
+          ),
           const Text(
             'For registered professionals only. Not for clients or the public.',
             textAlign: TextAlign.center,
@@ -472,8 +476,13 @@ class _CodeBox extends StatelessWidget {
   }
 }
 
+/// The registration form. [signUp] (Create account, before signing in): also asks the email, saves the
+/// details on the server and emails the code; they become the registration once the code is verified.
+/// Otherwise (signed in, no registration yet): submits them for verification.
 class DetailsScreen extends ConsumerStatefulWidget {
-  const DetailsScreen({super.key});
+  const DetailsScreen({super.key, this.signUp = false});
+
+  final bool signUp;
 
   @override
   ConsumerState<DetailsScreen> createState() => _DetailsScreenState();
@@ -486,6 +495,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
   String? _gender;
   final _registration = TextEditingController();
   final _mobile = TextEditingController();
+  final _email = TextEditingController();
   bool _consent = false;
   bool _busy = false;
   String? _error;
@@ -497,7 +507,10 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
 
   String? get _mobileValue => normalizeMobile(_mobile.text);
 
+  bool get _emailValid => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(_email.text.trim());
+
   bool get _valid =>
+      (!widget.signUp || _emailValid) &&
       _consent &&
       _name.text.trim().length >= 2 &&
       _gender != null &&
@@ -505,32 +518,46 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
       _mobileValue != null &&
       (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
 
+  ProfileSubmission get _submission => ProfileSubmission(
+    fullName: _name.text.trim(),
+    gender: _gender!,
+    age: _ageValue!,
+    role: _role.apiValue,
+    registrationBody: _role.registrationBody,
+    registrationNumber: _role.needsRegistration ? _registration.text.trim() : null,
+    consentVersion: AppConfig.consentVersion,
+    mobile: _mobileValue!,
+  );
+
   Future<void> _submit() async {
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await ref
-          .read(profileRepositoryProvider)
-          .submit(
-            ProfileSubmission(
-              fullName: _name.text.trim(),
-              gender: _gender!,
-              age: _ageValue!,
-              role: _role.apiValue,
-              registrationBody: _role.registrationBody,
-              registrationNumber: _role.needsRegistration ? _registration.text.trim() : null,
-              consentVersion: AppConfig.consentVersion,
-              mobile: _mobileValue!,
-            ),
-          );
+      if (widget.signUp) {
+        final email = _email.text.trim();
+        // The store reviewer can't receive emails: they type their fixed code instead.
+        if (!AppConfig.isReviewEmail(email)) {
+          await ref.read(startSignupProvider)(email, _submission);
+          await ref.read(authServiceProvider).requestCode(email);
+        }
+        if (mounted) context.push('/code', extra: email);
+        return;
+      }
+      await ref.read(profileRepositoryProvider).submit(_submission);
       ref.invalidate(meProvider);
       // Approved at once when the admin's "Skip verification" switch is on; otherwise waiting.
       final me = await ref.read(meProvider.future).catchError((_) => const Me(verificationStatus: 'pending'));
       if (mounted) context.go(me.isVerified ? '/consult' : '/pending');
     } catch (e) {
-      if (mounted) setState(() => _error = _messageFor(e));
+      if (mounted) {
+        setState(
+          () => _error = e is DailyLimitReached
+              ? 'Too many sign-ups from this network. Please try again in an hour.'
+              : _messageFor(e),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -542,15 +569,31 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     _age.dispose();
     _registration.dispose();
     _mobile.dispose();
+    _email.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final signUp = widget.signUp;
     return Scaffold(
+      appBar: signUp ? AppBar() : null,
       body: PageBody(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-        actions: [_BusyButton(label: 'Submit for verification', busy: _busy, onPressed: _valid ? _submit : null)],
+        padding: EdgeInsets.fromLTRB(20, signUp ? 0 : 20, 20, 0),
+        actions: [
+          _BusyButton(
+            label: signUp ? 'Send code' : 'Submit for verification',
+            busy: _busy,
+            onPressed: _valid ? _submit : null,
+          ),
+          if (signUp)
+            Center(
+              child: TextButton(
+                onPressed: () => context.pushReplacement('/sign-in'),
+                child: const Text('Already have an account? Sign in'),
+              ),
+            ),
+        ],
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,13 +606,37 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              const Text('Step 1 of 2 · Your registration', style: AppText.overline),
+              Text(signUp ? 'Step 1 of 2 · Your details' : 'Step 1 of 2 · Your registration', style: AppText.overline),
             ],
           ),
-          const PageHeading(
-            'Your professional details',
-            message: 'Your registration decides how the assistant writes for you. We verify it before you start.',
+          PageHeading(
+            signUp ? 'Create your account' : 'Your professional details',
+            message: signUp
+                ? "Tell us about you, then we'll email you a 6-digit code to finish. No password to remember."
+                : 'Your registration decides how the assistant writes for you. We verify it before you start.',
           ),
+          if (signUp)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Work email', style: AppText.label),
+                const SizedBox(height: 8),
+                TextField(
+                  key: const ValueKey('signup-email'),
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    hintText: 'name@clinic.in',
+                    errorText: _email.text.trim().isNotEmpty && !_emailValid ? 'An email like name@clinic.in' : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 6),
+                const Text('We send the 6-digit code here. Check that it is right.', style: AppText.caption),
+              ],
+            ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

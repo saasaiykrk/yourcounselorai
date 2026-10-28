@@ -35,6 +35,7 @@ GoRouter buildRouter({String initialLocation = '/'}) {
         builder: (_, state) => CodeScreen(email: state.extra as String?),
       ),
       GoRoute(path: '/details', builder: (_, _) => const DetailsScreen()),
+      GoRoute(path: '/sign-up', builder: (_, _) => const DetailsScreen(signUp: true)),
       GoRoute(path: '/pending', builder: (_, _) => const PendingScreen()),
       StatefulShellRoute.indexedStack(
         builder: (_, _, shell) => HomeShell(shell: shell),

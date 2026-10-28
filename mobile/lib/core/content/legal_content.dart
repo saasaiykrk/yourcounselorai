@@ -107,6 +107,8 @@ const kDpaDoc = InfoDoc(
     InfoSection('What is processed', [
       'Your account details: name, gender, age, email address, mobile number, role, registration body and '
           'number, and the date you accepted these terms. These are about you, never a client, and are not sent to the AI.',
+      'If you start creating an account and do not enter the email code, the details you entered are kept for '
+          '90 days so our team can help you finish, then deleted.',
       'If you use online booking: each client\'s first name, email address and appointment time, which they '
           'enter on your booking page. These are stored encrypted, are not sent to the AI, and are deleted 90 '
           'days after the appointment.',

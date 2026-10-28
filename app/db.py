@@ -76,6 +76,8 @@ def delete_account(cid) -> str:
                       (str(cid),))
             c.execute("""insert into admin_audit (actor_id, action, target_id, detail)
                          values (%s, 'account_deleted', %s, '{}'::jsonb)""", (str(cid), str(cid)))
+        c.execute("""delete from signup_leads where clinician_id=%s
+                       or email = (select lower(email) from auth.users where id=%s)""", (str(cid), str(cid)))
         # Funnel purchases keep their payment record, without the email.
         c.execute("""update external_purchases set email='' where clinician_id=%s
                        or lower(email) = (select lower(email) from auth.users where id=%s)""", (str(cid), str(cid)))
@@ -136,6 +138,60 @@ def set_auto_approve(on: bool, admin_id) -> int:
                      values (%s,'auto_approve_switch',null,%s)""",
                   (str(admin_id), json.dumps({"on": on, "approved_waiting": approved})))
         return approved
+
+
+# --- sign-ups started before the email code (migration 019) -----------------------------------------
+_LEAD_COLS = ("full_name", "gender", "age", "role", "registration_body", "registration_number", "mobile",
+              "consent_version")
+
+
+def save_lead(email: str, p: dict) -> None:
+    """Keeps the details someone entered before their email code. Nothing is stored for an email that already
+    has a registration (they only need to sign in), and a finished sign-up is never overwritten."""
+    email = email.strip().lower()
+    vals = [p.get(k) for k in _LEAD_COLS]
+    with _conn() as c:
+        c.execute(
+            f"""insert into signup_leads (email, {', '.join(_LEAD_COLS)})
+                select %s, {', '.join(['%s'] * len(_LEAD_COLS))}
+                where not exists (select 1 from auth.users u join clinicians cl on cl.id = u.id
+                                  where lower(u.email) = %s)
+                on conflict (email) do update set {', '.join(f'{k}=excluded.{k}' for k in _LEAD_COLS)},
+                  updated_at=now()
+                where signup_leads.status = 'started'""", (email, *vals, email))
+
+
+def complete_lead(cid, email: str) -> bool:
+    """A code sent to this email was just verified: the details given before it become this account's
+    registration (only if it has none yet), under the skip-verification switch like any registration.
+    Returns True if a registration was created."""
+    with _conn() as c, c.transaction():
+        lead = c.execute("select * from signup_leads where email=%s and status='started' for update",
+                         (email.strip().lower(),)).fetchone()
+        if not lead:
+            return False
+        created = c.execute(
+            """insert into clinicians (id, full_name, gender, age_at_registration, role, registration_body,
+                                       registration_number, mobile, consent_version, consent_at)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, now())
+                on conflict (id) do nothing returning id""",
+            (str(cid), lead["full_name"], lead["gender"], lead["age"], lead["role"], lead["registration_body"],
+             lead["registration_number"], lead["mobile"], lead["consent_version"])).fetchone() is not None
+        c.execute("""update signup_leads set status='completed', clinician_id=%s, completed_at=now(), updated_at=now()
+                     where id=%s""", (str(cid), lead["id"]))
+        if created:
+            _auto_verify(c, cid)
+        return created
+
+
+def signup_leads(status: str = "started", limit: int = 300) -> list[dict]:
+    """Sign-ups for /admin, newest first. Unfinished ones older than 90 days are deleted first."""
+    with _conn() as c:
+        c.execute("delete from signup_leads where status='started' and updated_at < now() - interval '90 days'")
+        return c.execute("""select id, email, full_name, gender, age, role, registration_body, registration_number,
+                                   mobile, status, clinician_id, created_at, updated_at, completed_at
+                            from signup_leads where status=%s order by updated_at desc limit %s""",
+                         (status, limit)).fetchall()
 
 
 def upsert_clinician_profile(cid, p: dict) -> None:

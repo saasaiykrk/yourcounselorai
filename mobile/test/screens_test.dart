@@ -22,6 +22,7 @@ const _routes = [
   '/sign-in',
   '/code',
   '/details',
+  '/sign-up',
   '/pending',
   '/consult',
   '/reply',
@@ -88,6 +89,7 @@ Future<GoRouter> _pumpAt(
   ConsultRepository? consult,
   AuthService? auth,
   ProfileRepository? profile,
+  Future<void> Function(String email, ProfileSubmission details)? startSignup,
 }) async {
   tester.view.physicalSize = size * 3;
   tester.view.devicePixelRatio = 3;
@@ -100,6 +102,7 @@ Future<GoRouter> _pumpAt(
         consultRecoveryProvider.overrideWithValue((within: Duration.zero, every: Duration.zero)),
         if (auth != null) authServiceProvider.overrideWithValue(auth),
         if (profile != null) profileRepositoryProvider.overrideWithValue(profile),
+        if (startSignup != null) startSignupProvider.overrideWithValue(startSignup),
       ],
       child: YourCounselorApp(router: router),
     ),
@@ -169,7 +172,71 @@ void main() {
     await _pumpAt(tester, '/');
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
-    expect(find.text('Get started'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    expect(find.text('I already have an account · Sign in'), findsOneWidget);
+  });
+
+  testWidgets('create account: details first, then the code, nothing sent before Send code', (tester) async {
+    final auth = _RecordingAuth();
+    final started = <(String, ProfileSubmission)>[];
+    final router = await _pumpAt(tester, '/', auth: auth, startSignup: (e, d) async => started.add((e, d)));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create account'));
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/sign-up');
+    expect(find.text('Create your account'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('signup-email')), 'new@clinic');
+    await tester.pump();
+    expect(find.text('An email like name@clinic.in'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('signup-email')), ' new@clinic.in ');
+    await tester.enterText(_field('As on your registration'), 'Dr New Clinician');
+    await tester.enterText(_field('Years'), '29');
+    await tester.enterText(_field('98765 43210'), '98765 43210');
+    await tester.ensureVisible(find.text('Male'));
+    await tester.tap(find.text('Male'));
+    await tester.enterText(_field('As shown on the register'), 'B4567');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    expect(_onPressed(tester, 'Send code'), isNull, reason: 'consent still missing');
+    expect(started, isEmpty);
+    expect(auth.codesRequested, isEmpty);
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+
+    expect(started.single.$1, 'new@clinic.in');
+    expect(
+      (started.single.$2.fullName, started.single.$2.mobile, started.single.$2.registrationNumber),
+      ('Dr New Clinician', '+919876543210', 'B4567'),
+    );
+    expect(auth.codesRequested, ['new@clinic.in'], reason: 'the code is sent after the details are saved');
+    expect(router.state.uri.path, '/code');
+    expect(find.textContaining('new@clinic.in'), findsOneWidget);
+  });
+
+  testWidgets('create account: no code is sent if the details could not be saved', (tester) async {
+    final auth = _RecordingAuth();
+    await _pumpAt(tester, '/sign-up', auth: auth, startSignup: (_, _) async => throw const DailyLimitReached());
+    await tester.enterText(find.byKey(const ValueKey('signup-email')), 'new@clinic.in');
+    await tester.enterText(_field('As on your registration'), 'Dr New Clinician');
+    await tester.enterText(_field('Years'), '29');
+    await tester.enterText(_field('98765 43210'), '98765 43210');
+    await tester.ensureVisible(find.text('Male'));
+    await tester.tap(find.text('Male'));
+    await tester.enterText(_field('As shown on the register'), 'B4567');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    await tester.tap(find.text('Send code'));
+    await tester.pumpAndSettle();
+    expect(find.text('Too many sign-ups from this network. Please try again in an hour.'), findsOneWidget);
+    expect(auth.codesRequested, isEmpty);
   });
 
   testWidgets('send stays disabled until the clinician attests "no identifiers"', (tester) async {

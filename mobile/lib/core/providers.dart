@@ -25,6 +25,13 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(baseUrl: AppConfig.backendUrl, token: auth.accessToken, timeout: AppConfig.consultTimeout);
 });
 
+/// Create account: sends the details before the email code. Preview builds send nothing.
+final startSignupProvider = Provider<Future<void> Function(String email, ProfileSubmission details)>(
+  (ref) => AppConfig.previewMode
+      ? (_, _) => Future<void>.delayed(const Duration(milliseconds: 300))
+      : (email, details) => ref.read(apiClientProvider).startSignup(email, details),
+);
+
 /// Account → Delete account. Preview builds delete nothing.
 final deleteAccountProvider = Provider<Future<void> Function()>(
   (ref) => AppConfig.previewMode

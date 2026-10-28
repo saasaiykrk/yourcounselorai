@@ -152,3 +152,70 @@ class ProfileApiTests(unittest.TestCase):
         main._dev_admin = main.DevAdminStore()
         rows = self.client.get("/v1/admin/clinicians", headers=ME, params={"status": "pending"}).json()["clinicians"]
         self.assertTrue(all({"full_name", "gender", "age_at_registration"} <= set(r) for r in rows))
+
+
+@unittest.skipUnless(HAVE_DEPS, "fastapi/httpx/psycopg not installed")
+class SignupStartTests(unittest.TestCase):
+    """Create account: the details come before the email code (POST /v1/signup/start, no sign-in)."""
+
+    BODY = {**GOOD, "email": " New.Doctor@Clinic.in ", "mobile": "98765 43210"}
+
+    def setUp(self):
+        self.client = TestClient(main.app)
+        main._signup_limits.clear()
+
+    def start(self, body=None, ip="203.0.113.7"):
+        with mock.patch.object(main.db, "save_lead") as save:
+            r = self.client.post("/v1/signup/start", json=body or self.BODY,
+                                 headers={"X-Forwarded-For": f"{ip}, 34.111.0.1"})
+        return r, save
+
+    def test_details_are_saved_without_signing_in(self):
+        r, save = self.start()
+        self.assertEqual((r.status_code, r.json()), (200, {"ok": True}), r.text)
+        email, details = save.call_args.args
+        self.assertEqual(email, "new.doctor@clinic.in")
+        self.assertEqual((details["full_name"], details["mobile"], details["role"]),
+                         ("Dr Sample Clinician", "+919876543210", "psychologist"))
+        self.assertNotIn("level", details)
+
+    def test_everything_is_checked_and_the_mobile_number_is_required(self):
+        for bad in ({"email": "not-an-email"}, {"mobile": None}, {"mobile": "123"}, {"age": 15},
+                    {"full_name": " "}, {"role": "admin"}, {"level": "L3", "email": "x"}):
+            r, save = self.start({**self.BODY, **bad})
+            self.assertEqual(r.status_code, 422, bad)
+            save.assert_not_called()
+
+    def test_too_many_from_one_address_are_refused(self):
+        for _ in range(main.SIGNUP_PER_IP_HOUR):
+            self.assertEqual(self.start()[0].status_code, 200)
+        r, save = self.start()
+        self.assertEqual(r.status_code, 429)
+        save.assert_not_called()
+        self.assertEqual(self.start(ip="198.51.100.9")[0].status_code, 200, "another phone is not blocked")
+
+    def test_the_first_verified_visit_turns_the_details_into_the_registration(self):
+        cid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        rows = [None, {"id": cid, "verification_status": "pending", "proven_email": "a@b.in"}]
+        main.app.dependency_overrides[main.current_user] = lambda: {"id": cid, "proven_email": "a@b.in"}
+        try:
+            with mock.patch.object(main.db, "get_clinician", side_effect=lambda _: rows.pop(0)), \
+                    mock.patch.object(main.db, "complete_lead", return_value=True) as done, \
+                    mock.patch.object(main.db, "note_proven_email"):
+                me = self.client.get("/v1/me", headers=ME).json()
+            done.assert_called_once_with(cid, "a@b.in")
+            self.assertEqual(me["verification_status"], "pending")
+            self.assertNotIn("proven_email", me)
+            with mock.patch.object(main.db, "get_clinician", return_value=None), \
+                    mock.patch.object(main.db, "complete_lead") as done:
+                main.app.dependency_overrides[main.current_user] = lambda: {"id": cid, "proven_email": None}
+                self.assertEqual(self.client.get("/v1/me", headers=ME).json()["verification_status"], "none")
+                done.assert_not_called()   # a password sign-in proves no email: no registration from details
+        finally:
+            main.app.dependency_overrides.clear()
+
+    def test_admins_see_sign_ups_that_never_finished(self):
+        with mock.patch.object(main.db, "signup_leads", return_value=[{"email": "a@b.in"}]) as leads:
+            r = self.client.get("/v1/admin/signup-leads?status=started", headers=ME)
+        self.assertEqual(r.json(), {"leads": [{"email": "a@b.in"}]})
+        leads.assert_called_once_with("started")

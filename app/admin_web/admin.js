@@ -382,8 +382,15 @@ async function loadClinicians() {
   const list = $("clinician-list");
   list.replaceChildren(...skeletons(4));
   try {
-    const { clinicians } = await api("GET", "/v1/admin/clinicians?status=" + encodeURIComponent(clinicianStatus));
-    clinicianRows = clinicians;
+    if (clinicianStatus === "started") {
+      // Create account sign-ups that never entered the email code: shown so the team can help them finish.
+      const { leads } = await api("GET", "/v1/admin/signup-leads?status=started");
+      clinicianRows = leads.map((l) => ({ ...l, verification_status: "started", age_at_registration: l.age,
+                                          created_at: l.updated_at }));
+    } else {
+      const { clinicians } = await api("GET", "/v1/admin/clinicians?status=" + encodeURIComponent(clinicianStatus));
+      clinicianRows = clinicians;
+    }
     renderClinicians();
   } catch (err) {
     if (err.message !== "signed-out") list.replaceChildren(el("p", { class: "error", text: "Couldn't load registrations." }));
@@ -397,7 +404,8 @@ function renderClinicians() {
     [c.full_name, c.email, c.registration_number, c.mobile].some((v) => (v || "").toLowerCase().includes(q)));
   if (!rows.length) {
     list.replaceChildren(empty(q ? "No registrations match \"" + q + "\"."
-      : clinicianStatus === "pending" ? "Nobody is waiting for approval." : "None.", q ? "search" : "inbox"));
+      : clinicianStatus === "pending" ? "Nobody is waiting for approval."
+      : clinicianStatus === "started" ? "Everyone who started signing up has finished." : "None.", q ? "search" : "inbox"));
     return;
   }
   list.replaceChildren(...rows.map(clinicianCard));
@@ -407,6 +415,7 @@ function clinicianCard(c) {
   const status = c.verification_status;
   const pill = status === "verified" ? el("span", { class: "pill ok", text: "Verified · " + c.level })
     : status === "rejected" ? el("span", { class: "pill crisis", text: "Rejected" })
+    : status === "started" ? el("span", { class: "pill grey", text: "Code not entered" })
     : el("span", { class: "pill check", text: "Waiting" });
   const regNo = c.registration_body && c.registration_body !== "none" && c.registration_number;
   const regValue = el("dd", {}, el("span", { class: regNo ? "mono" : "", text: registration(c) }),
@@ -425,7 +434,8 @@ function clinicianCard(c) {
       fact("Registration", regValue),
       fact("Gender · age", personal || "Not given"),
       fact("Mobile", c.mobile || "Not given"),
-      fact(status === "pending" ? "Registered" : "Decided", when(status === "pending" ? c.created_at : (c.verified_at || c.created_at)))),
+      fact(status === "started" ? "Started" : status === "pending" ? "Registered" : "Decided",
+        when(status === "pending" || status === "started" ? c.created_at : (c.verified_at || c.created_at)))),
     c.verification_note ? el("p", { class: "note-line", text: "How it was checked: " + c.verification_note }) : null);
   if (status === "pending") {
     card.append(el("div", { class: "actions" },

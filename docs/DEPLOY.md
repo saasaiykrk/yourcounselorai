@@ -287,6 +287,18 @@ level or reject someone.
 1. **Database:** Supabase → SQL Editor → run `db/migrations/018_auto_approve.sql` (safe to run again), before
    deploying the backend.
 
+## Create account (details before the email code): run migration 019 first
+
+The app's welcome screen has **Create account**: the clinician fills in their details (with email and mobile),
+then gets the 6-digit code. The details are saved the moment they press Send code (`POST /v1/signup/start`, no
+sign-in; at most 10 an hour per network address and 500 an hour in total), so /admin → Registrations →
+**Not finished** lists people who never entered the code. When a code sent to that email is verified, the server
+makes the details their registration (then the usual verification, or the Skip verification switch).
+Unfinished sign-ups are deleted after 90 days; the DPA says so. **Sign in** is unchanged for existing accounts.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/019_signup_leads.sql` (safe to run again), before
+   deploying the backend.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,
