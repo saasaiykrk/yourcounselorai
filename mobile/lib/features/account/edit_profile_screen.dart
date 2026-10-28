@@ -64,14 +64,10 @@ class _EditFormState extends ConsumerState<_EditForm> {
 
   String? get _mobileValue => normalizeMobile(_mobile.text);
 
-  String? get _registrationValue => _role.needsRegistration ? _registration.text.trim() : null;
+  String? get _registrationValue =>
+      _role.asksRegistration && _registration.text.trim().isNotEmpty ? _registration.text.trim() : null;
 
-  bool get _valid =>
-      _name.text.trim().length >= 2 &&
-      _gender != null &&
-      _ageValue != null &&
-      _mobileValue != null &&
-      (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
+  bool get _valid => _name.text.trim().length >= 2 && _gender != null && _ageValue != null && _mobileValue != null;
 
   /// Role or registration differ from what was verified.
   bool get _professionalChange =>
@@ -241,11 +237,11 @@ class _EditFormState extends ConsumerState<_EditForm> {
             ],
           ],
         ),
-        if (_role.needsRegistration)
+        if (_role.asksRegistration)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('${_role.registrationBody} registration number', style: AppText.label),
+              Text('${_role.registrationBody} registration number (optional)', style: AppText.label),
               const SizedBox(height: 8),
               TextField(
                 key: const ValueKey('profile-registration'),

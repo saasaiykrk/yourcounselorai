@@ -515,8 +515,7 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
       _name.text.trim().length >= 2 &&
       _gender != null &&
       _ageValue != null &&
-      _mobileValue != null &&
-      (!_role.needsRegistration || _registration.text.trim().isNotEmpty);
+      _mobileValue != null;
 
   ProfileSubmission get _submission => ProfileSubmission(
     fullName: _name.text.trim(),
@@ -524,7 +523,9 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
     age: _ageValue!,
     role: _role.apiValue,
     registrationBody: _role.registrationBody,
-    registrationNumber: _role.needsRegistration ? _registration.text.trim() : null,
+    registrationNumber: _role.asksRegistration && _registration.text.trim().isNotEmpty
+        ? _registration.text.trim()
+        : null,
     consentVersion: AppConfig.consentVersion,
     mobile: _mobileValue!,
   );
@@ -723,11 +724,11 @@ class _DetailsScreenState extends ConsumerState<DetailsScreen> {
               ],
             ],
           ),
-          if (_role.needsRegistration)
+          if (_role.asksRegistration)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${_role.registrationBody} registration number', style: AppText.label),
+                Text('${_role.registrationBody} registration number (optional)', style: AppText.label),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _registration,

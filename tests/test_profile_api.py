@@ -29,6 +29,11 @@ class ProfileApiTests(unittest.TestCase):
             r = self.client.post("/v1/profile", headers=ME, json=body)
         return r, save
 
+    def test_the_registration_number_is_optional(self):
+        r, save = self.post({k: v for k, v in GOOD.items() if k != "registration_number"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertIsNone(save.call_args.args[1]["registration_number"])
+
     def test_registration_answers_with_the_real_status(self):
         self.assertEqual(self.post(GOOD)[0].json(), {"verification_status": "pending"})
         self.assertEqual(self.post(GOOD, status="verified")[0].json(), {"verification_status": "verified"},
