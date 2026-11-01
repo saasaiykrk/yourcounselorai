@@ -320,7 +320,8 @@ void main() {
     });
 
     testWidgets('rescheduling moves an appointment and leaves exactly one active', (tester) async {
-      final repo = await _pump(tester);
+      // A Wednesday, so tomorrow's appointment is in this week's view whatever day the test runs.
+      final repo = await _pump(tester, repo: PreviewCalendarRepository(now: DateTime(2026, 10, 14, 9)));
       await tester.tap(find.text('Week'));
       await tester.pumpAndSettle();
       await _reach(tester, find.text('Kavya'));
