@@ -47,6 +47,13 @@ abstract final class AppConfig {
   // 4: details kept 90 days when a sign-up is not finished
   static const consentVersion = '2026-10-v4';
 
+  /// Shown in Account; must match `version:` in pubspec.yaml (a test checks it).
+  static const appVersion = '1.0.1';
+
+  /// Demo builds only (--dart-define=ALLOW_SCREEN_CAPTURE=true, CI's "allow_screen_capture"): case screens
+  /// no longer block screenshots and screen recording, for making demo videos. Never in a Play build.
+  static const allowScreenCapture = bool.fromEnvironment('ALLOW_SCREEN_CAPTURE');
+
   /// Throws with a readable message when a live build is missing its settings.
   static void validate() {
     if (mode != AppMode.live) return;

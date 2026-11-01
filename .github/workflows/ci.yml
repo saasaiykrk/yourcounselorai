@@ -10,6 +10,10 @@ on:
         description: "With android_only: also build the signed Play Store bundle (.aab). Needs the ANDROID_UPLOAD_* secrets"
         type: boolean
         default: false
+      allow_screen_capture:
+        description: "With android_only: a demo APK that allows screenshots and screen recording on case screens (for demo videos; never for Play)"
+        type: boolean
+        default: false
       run_evals:
         description: "Also run the clinical evals (real model, costs money; needs the eval secrets in GitHub)"
         type: boolean
@@ -115,10 +119,19 @@ jobs:
       # Live release build (real sign-in + Cloud Run backend from config/live.json), one
       # small APK per CPU type, signed with the debug key for test phones until the Play
       # upload key exists. Download from the run's Artifacts section.
-      - run: flutter build apk --release --split-per-abi --dart-define-from-file=config/live.json
+      - name: Build the APKs
+        env:
+          CAPTURE: ${{ inputs.allow_screen_capture }}
+          BUNDLE: ${{ inputs.play_bundle }}
+        run: |
+          if [ "$CAPTURE" = "true" ] && [ "$BUNDLE" = "true" ]; then
+            echo "::error::A screen-capture demo build is never a Play build: untick play_bundle."; exit 1
+          fi
+          flutter build apk --release --split-per-abi --dart-define-from-file=config/live.json \
+            --dart-define=ALLOW_SCREEN_CAPTURE=${CAPTURE:-false}
       - uses: actions/upload-artifact@v4
         with:
-          name: yourcounselor-live-android
+          name: ${{ inputs.allow_screen_capture && 'yourcounselor-DEMO-screen-capture-android' || 'yourcounselor-live-android' }}
           path: |
             mobile/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             mobile/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk

@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../config.dart';
+
 /// Blocks screenshots, screen recording and the recent-apps preview on
 /// Android while a case screen is open (FLAG_SECURE, see MainActivity.kt).
 /// iPhone can't block screenshots; instead the app is blurred in the app
@@ -9,7 +11,11 @@ class ScreenProtection {
   static const _channel = MethodChannel('yourcounselor/screen_protection');
   static int _holders = 0;
 
+  /// A demo build that allows screenshots and recording ([AppConfig.allowScreenCapture]). Settable in tests.
+  static bool captureAllowed = AppConfig.allowScreenCapture;
+
   static Future<void> _apply(bool on) async {
+    if (captureAllowed) return;
     try {
       await _channel.invokeMethod<void>(on ? 'enable' : 'disable');
     } on MissingPluginException {
