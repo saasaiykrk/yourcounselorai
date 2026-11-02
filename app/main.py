@@ -499,10 +499,12 @@ def delete_account(body: DeleteAccountIn, user: dict = Depends(current_user)):
     """The clinician deletes their own account (db.delete_account says what goes and what stays)."""
     if CFG.dev_mode and user["id"] == "dev-clinician":
         return {"deleted": True}            # DEV_MODE: nothing stored, nothing to delete
+    google = BOOKING.store.google_connection(user["id"]) if BOOKING.store_on() and BOOKING.google_ready() else None
     if db.delete_account(user["id"]) == "admin":
         raise HTTPException(409, {"error": "admin_account",
                                   "message": "Admin accounts can't be deleted from the app. Ask another admin "
                                              "to remove admin access first."})
+    BOOKING.revoke_google(user["id"], google)       # their Google Calendar permission is withdrawn too
     return {"deleted": True}
 
 

@@ -2,8 +2,8 @@
 Booking emails. Sent only when SMTP is configured (SMTP_HOST, SMTP_FROM, …); otherwise every queued
 notice is marked not_configured and booking works exactly the same.
 
-What emails say: the consultant's display name, the date and time, the status, and (to the client)
-their own manage/cancel link. Never anything clinical. Emails to the consultant do not name the
+What emails say: the consultant's display name, the date and time, the status, the Google Meet link when the
+consultant uses Google Calendar, and (to the client) their own manage/cancel link. Never anything clinical. Emails to the consultant do not name the
 client: they say to open the app. Nothing here logs an address or a name.
 """
 from __future__ import annotations
@@ -37,6 +37,7 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
     name = n["display_name"]
     kind = booking.TAGS.get(n.get("tag") or "")
     session = f"\nSession: {kind}\n" if kind else ""
+    meet = n.get("meet_url") if n.get("status") == "confirmed" else None
     if n["recipient"] == "consultant":
         to = n.get("clinician_email")
         if not to:
@@ -47,7 +48,7 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
         else:
             body = f"A new appointment {'request ' if n['status'] == 'pending' else ''}for {at}.\n\n" \
                    "Open YourCounselor → Calendar to see it" + (" and accept or decline it." if n["status"] == "pending" else ".") \
-                   + session.rstrip("\n")
+                   + session.rstrip("\n") + (f"\n\nGoogle Meet: {meet}" if meet else "")
             subject = SUBJECTS["new_booking"]
         return to, subject, body + "\n\n— YourCounselor"
     if not details or not details.get("email"):
@@ -66,6 +67,8 @@ def compose(n: dict, details: dict | None, base_url: str) -> tuple[str, str, str
     if n["kind"] not in lines:
         return None
     body = f"{hello}\n\n{lines[n['kind']]}\n" + (session if n["kind"] not in ("rejected", "cancelled") else "")
+    if meet and n["kind"] in ("confirmed", "rescheduled", "reminder"):
+        body += f"\nJoin on Google Meet: {meet}\n(Google Calendar also sends you an invitation.)\n"
     if manage and n["kind"] in ("requested", "confirmed", "rescheduled", "reminder"):
         body += f"\nTo see or cancel your appointment: {manage}\n"
     if n["kind"] == "rejected":

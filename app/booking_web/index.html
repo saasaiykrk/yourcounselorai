@@ -77,7 +77,8 @@
         </div>
         <label class="check"><input type="checkbox" id="consent" required>
           <span>I agree to share my first name and email with this consultant so they can manage this appointment.
-            They are stored encrypted and deleted 90 days after the appointment.</span></label>
+            They are stored encrypted and deleted 90 days after the appointment. If the consultant uses Google
+            Calendar, my email and the appointment time also go to Google to send me the invitation and video link.</span></label>
         <p class="error" id="form-error" role="alert"></p>
         <div class="row gap">
           <button class="btn ghost" type="button" id="back">Back</button>
@@ -105,6 +106,7 @@
       <p class="pill" id="m-status"></p>
       <p class="when" id="m-when"></p>
       <p class="pill tag" id="m-tag" hidden></p>
+      <a class="btn primary" id="m-meet" target="_blank" rel="noopener noreferrer" hidden>Join Google Meet</a>
       <p class="muted" id="m-with"></p>
       <p class="error" id="m-error" role="alert"></p>
       <button class="btn danger" id="m-cancel" type="button" hidden>Cancel appointment</button>

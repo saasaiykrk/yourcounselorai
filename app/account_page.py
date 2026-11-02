@@ -52,7 +52,7 @@ you sign in with, and ask us to delete your account.</p>
 <ul>
 <li>Your sign-in and email address.</li>
 <li>Your name, mobile number, gender, age, registration number and verification level.</li>
-<li>Your own AI key, if you added one.</li>
+<li>Your own AI key, if you added one, and your Google Calendar connection (the permission is withdrawn at Google).</li>
 <li>Your booking page, working hours, time off and appointments, including your clients' names and emails.</li>
 <li>Your consult history leaves your account.</li>
 </ul>

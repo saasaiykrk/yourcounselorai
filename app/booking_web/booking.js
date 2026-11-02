@@ -247,6 +247,9 @@
     $("m-with").textContent = `with ${a.display_name}`;
     $("m-tag").hidden = !a.tag_label;
     $("m-tag").textContent = a.tag_label || "";
+    const meet = a.meet_url && /^https:\/\/meet\.google\.com\//.test(a.meet_url) ? a.meet_url : null;
+    $("m-meet").hidden = !meet;
+    if (meet) $("m-meet").href = meet;
     $("m-cancel").hidden = !a.can_cancel;
     $("m-confirm").hidden = true;
     $("m-rebook").hidden = !(a.slug && !a.can_cancel);

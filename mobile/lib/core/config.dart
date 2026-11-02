@@ -44,8 +44,8 @@ abstract final class AppConfig {
 
   /// Terms and consent version recorded at signup; the lawyer-reviewed text replaces it in Phase 4.
   // 2: names Google (Gemini), Razorpay and client bookings · 3: mobile number, offers and updates
-  // 4: details kept 90 days when a sign-up is not finished
-  static const consentVersion = '2026-10-v4';
+  // 4: details kept 90 days when a sign-up is not finished · 5: Google Calendar and Meet for bookings
+  static const consentVersion = '2026-11-v5';
 
   /// Shown in Account; must match `version:` in pubspec.yaml (a test checks it).
   static const appVersion = '1.0.1';

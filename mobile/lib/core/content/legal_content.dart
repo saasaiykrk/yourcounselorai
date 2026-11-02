@@ -55,6 +55,9 @@ const kPrivacyDoc = InfoDoc(
     InfoSection('Clients who book with you', [
       'If you use online booking, a client gives their first name and email address and picks a time on your '
           'booking page. Nothing else is asked.',
+      'If you connect Google Calendar, each confirmed appointment is added to your Google Calendar with the time '
+          'and the client\'s email (so Google can send them the invitation and a Google Meet link). Nothing '
+          'clinical is sent. You can disconnect at any time in Booking settings.',
       'These details are stored encrypted, used only for that appointment and its emails, and deleted 90 days '
           'after the appointment. They are never sent to the AI.',
       'A client can cancel with the link in their confirmation email, or write to us to have their details '
@@ -135,6 +138,8 @@ const kDpaDoc = InfoDoc(
           'writes the replies. Each processes de-identified text only, outside India.',
       'Razorpay: payments.',
       'Our email service: booking confirmations and reminders to clients.',
+      'Google (Calendar and Meet), only if you connect it: the appointment time, your display name and the '
+          'client\'s email, to create the calendar event, the Meet link and the invitation.',
       'World Health Organization ICD-11 service: receives short diagnostic search terms only.',
     ]),
     InfoSection('Safeguards', [

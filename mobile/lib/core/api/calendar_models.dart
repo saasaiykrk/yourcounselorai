@@ -309,6 +309,7 @@ class Appointment {
     this.rescheduledFrom,
     this.rescheduledTo,
     this.tag,
+    this.meetUrl,
   });
 
   factory Appointment.fromJson(Map<String, dynamic> j) {
@@ -326,10 +327,14 @@ class Appointment {
       rescheduledFrom: j['rescheduled_from'] as String?,
       rescheduledTo: j['rescheduled_to'] as String?,
       tag: j['tag'] as String?,
+      meetUrl: j['meet_url'] as String?,
     );
   }
 
   final String id;
+
+  /// The Google Meet link, when the consultant uses Google Calendar and this appointment has one.
+  final String? meetUrl;
 
   /// Wall-clock times in the consultant's timezone.
   final DateTime start;
@@ -390,4 +395,37 @@ class FreeDay {
 
   final DateTime date;
   final List<FreeSlot> slots;
+}
+
+/// Google Calendar + Meet for bookings (`GET /v1/calendar/google`). The consultant connects their own Google
+/// account; every confirmed appointment then gets an event, with a Meet link per [meetFor].
+class GoogleConnection {
+  const GoogleConnection({
+    this.available = false,
+    this.connected = false,
+    this.status,
+    this.email,
+    this.meetFor = 'online',
+  });
+
+  factory GoogleConnection.fromJson(Map<String, dynamic> j) => GoogleConnection(
+    available: j['available'] == true,
+    connected: j['connected'] == true,
+    status: j['status'] as String?,
+    email: j['email'] as String?,
+    meetFor: j['meet_for'] as String? ?? 'online',
+  );
+
+  /// The server has the Google sign-in set up.
+  final bool available;
+  final bool connected;
+
+  /// ok · revoked (the permission was removed at Google: reconnect).
+  final String? status;
+  final String? email;
+
+  /// online: Meet only for appointments tagged Online · all: every appointment.
+  final String meetFor;
+
+  bool get needsReconnect => connected && status == 'revoked';
 }

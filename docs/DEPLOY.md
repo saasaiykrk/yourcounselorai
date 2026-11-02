@@ -310,6 +310,45 @@ currency, and /admin → Payments shows ₹ and $ totals separately. No migratio
    request). Until it is approved, a dollar checkout fails, so leave the rate at 0.
 2. /admin → Pricing Plans → set the rate (e.g. 85) → Save.
 
+## Google Calendar + Google Meet for bookings: run migration 020 first
+
+Each consultant connects their own Google account in the app (Calendar → Booking settings → **Connect Google
+Calendar**). Every confirmed appointment then gets an event on their Google Calendar, with a Google Meet link for
+appointments tagged Online (or for all, as they choose), and the client is invited by Google. Moving an
+appointment moves the event; cancelling or declining deletes it. It happens right after each booking and is
+retried by the scheduled delivery (every 15 minutes) if Google was unreachable. If a consultant removes the
+permission at Google, the app asks them to reconnect, and reconnecting adds the missing events.
+
+**Cost:** the Google Calendar API and Meet links are free; no Google Workspace plan is needed (free Gmail: 1:1
+calls up to 24 hours). The `calendar.events` scope is "sensitive": Google's app verification is free, with no paid
+security assessment.
+
+1. **Database:** Supabase → SQL Editor → run `db/migrations/020_google_calendar.sql` (safe to run again).
+2. **Google Cloud console** (project `yourcounselor-beta`):
+   - APIs & Services → Library → **Google Calendar API** → Enable.
+   - **OAuth consent screen** (Google Auth Platform → Branding): External; app name YourCounselor; support email;
+     app home page `https://yourcounselor.in`; privacy policy URL; authorised domain `yourcounselor.in`.
+     Data access → add scopes `.../auth/calendar.events`, `openid`, `.../auth/userinfo.email`.
+     Audience → while testing, add each consultant's Gmail as a test user (up to 100).
+   - **Clients → Create client → Web application**: authorised redirect URI
+     `https://app.yourcounselor.in/v1/google/callback`. Copy the client ID and secret (never into chat or git).
+3. **Secrets and Cloud Run** (Cloud Shell):
+   ```bash
+   read -rsp "Google client secret: " v; echo; printf '%s' "$v" | gcloud secrets create google-oauth-client-secret \
+     --data-file=- --project yourcounselor-beta
+   gcloud run services update yourcounselor-api --region asia-south1 --project yourcounselor-beta \
+     --update-env-vars GOOGLE_OAUTH_CLIENT_ID=<the client id> \
+     --update-secrets GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:latest
+   ```
+   `BYOK_ENCRYPTION_KEY` must be set (it seals each consultant's Google permission). Without the client ID or
+   secret the app simply doesn't show the Google section.
+4. **Booking emails need SMTP** (the confirmation with the Meet link): e.g. Resend — `SMTP_HOST=smtp.resend.com`,
+   `SMTP_PORT=465`, `SMTP_USERNAME=resend`, `SMTP_FROM=YourCounselor <noreply@yourcounselor.in>`, and the Resend API
+   key as the `smtp-password` secret (see "Emails" above).
+5. **Verification** (to remove the "unverified app" screen and the 100-user limit): Google Auth Platform →
+   Verification centre → submit. Google asks for the home page, privacy policy and a short screen recording of
+   connecting and an appointment appearing with a Meet link. Review takes from days to a few weeks.
+
 ## Calendar and online booking (each consultant switches it on for themselves)
 
 Consultants get a **Calendar** tab in the app: working hours (with breaks), time off, appointment length,

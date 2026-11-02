@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
 import 'calendar_screen.dart';
+import 'google_calendar_card.dart';
 
 /// Details of one appointment and what can be done with it now. Returns true if it changed.
 Future<bool?> showAppointmentSheet(BuildContext context, Appointment a) async {
@@ -207,6 +208,7 @@ class _AppointmentSheetState extends ConsumerState<AppointmentSheet> {
               ),
               TextButton(onPressed: busy ? null : () => setState(() => _moving = false), child: const Text('Back')),
             ] else ...[
+              if (a.meetUrl != null && a.status.active) ...[JoinMeetButton(appointment: a), const SizedBox(height: 8)],
               if (a.status == AppointmentStatus.pending) ...[
                 FilledButton.icon(
                   onPressed: busy ? null : () => _act('confirm'),
