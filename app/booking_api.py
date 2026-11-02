@@ -31,10 +31,11 @@ from collections import defaultdict, deque
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import booking, notify
+from . import booking, byok, notify
+from .google_calendar import GoogleCalendar, GoogleError
 
 UTC = timezone.utc
 WEB = pathlib.Path(__file__).parent / "booking_web"
@@ -62,6 +63,10 @@ class SettingsIn(BaseModel):
 
 class PhotoIn(BaseModel):
     image: str = Field(max_length=600_000)          # base64 of a JPEG, PNG or WebP, at most 400 KB
+
+
+class GoogleIn(BaseModel):
+    meet_for: str = Field(pattern="^(online|all)$")     # Google Meet for appointments tagged Online, or for all
 
 
 class WindowIn(BaseModel):
@@ -147,6 +152,12 @@ class BookingService:
         self.sealer = booking.Sealer.from_secret(cfg.booking_encryption_key)
         self.mailer = mailer if mailer is not None else notify.Mailer.from_config(cfg)
         self.limit = _RateLimit(8, 600)
+        # Google Calendar + Meet: offered when the OAuth client is configured and tokens can be sealed.
+        cid_, secret_ = getattr(cfg, "google_oauth_client_id", ""), getattr(cfg, "google_oauth_client_secret", "")
+        self.google = GoogleCalendar(cid_, secret_) if cid_ and secret_ else None
+        self.vault = byok.Vault.from_secrets(getattr(cfg, "byok_encryption_key", ""),
+                                             getattr(cfg, "byok_encryption_key_previous", ""),
+                                             getattr(cfg, "byok_key_version", 1))
 
     def base_url(self, request: Request) -> str:
         if self.cfg.public_base_url:
@@ -175,7 +186,106 @@ class BookingService:
                 "pending_until": _iso(row["pending_until"]), "cancelled_by": row["cancelled_by"],
                 "rescheduled_from": str(row["rescheduled_from"]) if row["rescheduled_from"] else None,
                 "rescheduled_to": str(row["rescheduled_to"]) if row["rescheduled_to"] else None,
-                "created_at": _iso(row["created_at"])}
+                "meet_url": row.get("meet_url"), "created_at": _iso(row["created_at"])}
+
+    # --- Google Calendar + Meet ----------------------------------------------------------------------
+    GOOGLE_STATE_SECONDS = 600
+
+    def google_ready(self) -> bool:
+        return self.google is not None and self.vault is not None
+
+    def google_state(self, cid) -> str:
+        """The OAuth `state`: which consultant is connecting, signed with the OAuth client secret, 10 minutes."""
+        import hashlib
+        import hmac
+        exp = int(_time.time()) + self.GOOGLE_STATE_SECONDS
+        msg = f"{cid}.{exp}"
+        sig = hmac.new(self.cfg.google_oauth_client_secret.encode(), msg.encode(), hashlib.sha256).hexdigest()[:32]
+        return f"{msg}.{sig}"
+
+    def google_state_owner(self, state: str) -> str | None:
+        import hashlib
+        import hmac
+        try:
+            cid, exp, sig = state.split(".")
+            uuid.UUID(cid)
+            if int(exp) < _time.time():
+                return None
+        except (ValueError, AttributeError):
+            return None
+        good = hmac.new(self.cfg.google_oauth_client_secret.encode(), f"{cid}.{exp}".encode(),
+                        hashlib.sha256).hexdigest()[:32]
+        return cid if hmac.compare_digest(good, sig) else None
+
+    def sync_google(self, limit: int = 50) -> dict:
+        """Creates, moves or deletes the Google event of each changed appointment (right after a booking, and
+        again from the scheduled delivery). A failed booking sync never touches the booking itself; a removed
+        permission marks the connection 'revoked' and leaves its appointments waiting for a reconnect. Never
+        raises; logs nothing about clients."""
+        counts = {"created": 0, "moved": 0, "deleted": 0, "failed": 0}
+        if not self.google_ready():
+            return counts
+        tokens: dict[str, str | None] = {}
+        try:
+            for r in self.store.google_due(limit):
+                cid = str(r["clinician_id"])
+                if tokens.get(cid, "") is None:
+                    continue                                        # permission just found removed
+                try:
+                    if cid not in tokens:
+                        refresh = self.vault.open(cid, bytes(r["ciphertext"]), bytes(r["token_nonce"]), r["key_version"])
+                        tokens[cid] = self.google.access_token(refresh)
+                    token = tokens[cid]
+                    tz = r["timezone"]
+                    if r["status"] == "confirmed" and not r["google_event_id"]:
+                        d = self.details({"id": r["id"], "client_ct": r["client_ct"], "client_nonce": r["client_nonce"]})
+                        kind = booking.tag_label(r.get("tag"))
+                        event_id, url = self.google.create_event(
+                            token, appointment_id=str(r["id"]), summary=f"Appointment with {r['display_name']}",
+                            description=(f"Session: {kind}\n" if kind else "") + "Booked with YourCounselor.",
+                            start=r["starts_at"], end=r["ends_at"], tz=tz,
+                            attendee=(d or {}).get("email"), meet=r["meet_for"] == "all" or r.get("tag") == "online")
+                        self.store.google_done(r["id"], event_id, url)
+                        counts["created"] += 1
+                    elif r["status"] == "confirmed":
+                        url = self.google.move_event(token, r["google_event_id"], start=r["starts_at"],
+                                                     end=r["ends_at"], tz=tz)
+                        self.store.google_done(r["id"], r["google_event_id"], url or r["meet_url"])
+                        counts["moved"] += 1
+                    elif r["google_event_id"]:
+                        self.google.delete_event(token, r["google_event_id"])
+                        self.store.google_done(r["id"], None, None)
+                        counts["deleted"] += 1
+                    else:
+                        self.store.google_done(r["id"], None, None)    # nothing at Google to change
+                except GoogleError as e:
+                    if e.revoked:
+                        tokens[cid] = None
+                        self.store.set_google_status(cid, "revoked", "Google permission was removed: reconnect")
+                    else:
+                        self.store.google_failed(r["id"])
+                    counts["failed"] += 1
+                except Exception:     # noqa: BLE001 - one bad row must not stop the rest; no details logged
+                    self.store.google_failed(r["id"])
+                    counts["failed"] += 1
+        except Exception:             # noqa: BLE001 - best effort; the booking already succeeded
+            pass
+        return counts
+
+    def revoke_google(self, cid, row: dict | None) -> None:
+        """Best effort: withdraw a forgotten connection's permission at Google."""
+        if not row or not self.google_ready():
+            return
+        try:
+            self.google.revoke(self.vault.open(str(cid), bytes(row["ciphertext"]), bytes(row["nonce"]),
+                                               row["key_version"]))
+        except Exception:     # noqa: BLE001 - forgotten here either way
+            pass
+
+    def after_change(self, base_url: str) -> None:
+        """After a booking change: the Google event first (so the emails carry the Meet link), then the emails."""
+        self.sync_google()
+        self.deliver(base_url)
 
     def deliver(self, base_url: str, limit: int = 50) -> dict:
         """Sends due notices; without SMTP they are marked not_configured. Never raises."""
@@ -274,7 +384,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         return HTTPException(status, {"error": "invalid", "problems": e.problems, "message": e.problems[0]})
 
     def deliver_later(bg: BackgroundTasks, request: Request):
-        bg.add_task(svc.deliver, svc.base_url(request))
+        bg.add_task(svc.after_change, svc.base_url(request))
 
     # --- consultant -------------------------------------------------------------------------------
     @app.get("/v1/calendar")
@@ -320,6 +430,73 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         except svc.store.SlugTaken:
             raise HTTPException(409, {"error": "slug_taken", "message": "That link name is taken. Try another."})
         return {"settings": s, "booking_url": f"{svc.base_url(request)}/{s['slug']}"}
+
+    # --- Google Calendar + Meet (each consultant connects their own Google account) ----------------------
+    def google_view(c) -> dict:
+        g = svc.store.google_connection(c["id"])
+        return {"available": svc.google_ready(), "connected": g is not None, "status": g["status"] if g else None,
+                "email": g["google_email"] if g else None, "meet_for": g["meet_for"] if g else "online"}
+
+    def google_callback_url(request: Request) -> str:
+        return f"{svc.base_url(request)}/v1/google/callback"
+
+    @app.get("/v1/calendar/google")
+    def calendar_google(c: dict = Depends(consultant)):
+        need_store()
+        return google_view(c)
+
+    @app.post("/v1/calendar/google/connect")
+    def calendar_google_connect(request: Request, c: dict = Depends(consultant)):
+        """Google's consent page for this consultant (the app opens it in the browser)."""
+        need_store()
+        if not svc.google_ready():
+            raise HTTPException(503, {"error": "google_unavailable", "message": "Google Calendar isn't set up yet."})
+        return {"url": svc.google.auth_url(svc.google_state(c["id"]), google_callback_url(request))}
+
+    @app.put("/v1/calendar/google")
+    def calendar_google_settings(body: GoogleIn, c: dict = Depends(consultant)):
+        need_store()
+        if not svc.store.set_google_meet_for(c["id"], body.meet_for):
+            raise HTTPException(409, {"error": "not_connected", "message": "Connect Google Calendar first."})
+        return google_view(c)
+
+    @app.delete("/v1/calendar/google")
+    def calendar_google_disconnect(c: dict = Depends(consultant)):
+        """Forget the permission (revoked at Google too). Events already on the calendar stay."""
+        need_store()
+        svc.revoke_google(c["id"], svc.store.delete_google_connection(c["id"]))
+        return google_view(c)
+
+    @app.get("/v1/google/callback")
+    def google_callback(request: Request, bg: BackgroundTasks, code: str = "", state: str = "", error: str = ""):
+        """Google sends the consultant back here after the consent page."""
+        def page(title: str, text: str, status: int = 200) -> HTMLResponse:
+            import html
+            return HTMLResponse(
+                f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)}</title>
+<style>body{{font-family:system-ui,sans-serif;background:#FAF7FD;color:#1E1030;display:grid;place-items:center;
+min-height:100vh;margin:0;padding:24px}}main{{max-width:420px;background:#fff;border:1px solid #E6DDF0;
+border-radius:16px;padding:28px}}h1{{color:#3F0079;font-size:22px;margin:0 0 10px}}p{{line-height:1.5}}</style>
+</head><body><main><h1>{html.escape(title)}</h1><p>{html.escape(text)}</p></main></body></html>""",
+                status_code=status, headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex",
+                                             "Referrer-Policy": "no-referrer"})
+        cid = svc.google_state_owner(state) if svc.google_ready() else None
+        if error or not code or not cid:
+            return page("Google Calendar not connected",
+                        "Nothing was changed. You can try again from the YourCounselor app: Calendar → Booking settings.",
+                        400 if not error else 200)
+        try:
+            t = svc.google.exchange(code, google_callback_url(request))
+        except GoogleError:
+            return page("Google Calendar not connected",
+                        "Google did not give permission to add events to your calendar. Try again from the app and "
+                        "allow access to your calendar.", 400)
+        svc.store.save_google_connection(cid, t["email"], svc.vault.seal(cid, t["refresh_token"]))
+        bg.add_task(svc.sync_google)            # events for upcoming appointments
+        return page("Google Calendar connected",
+                    "New appointments now get a Google Calendar event and, as you chose, a Google Meet link. "
+                    "You can go back to the YourCounselor app.")
 
     @app.put("/v1/calendar/photo")
     def calendar_photo(body: PhotoIn, c: dict = Depends(consultant)):
@@ -514,6 +691,7 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         s = svc.store.get_settings(row["clinician_id"])
         return {"status": row["status"], "starts_at": _iso(row["starts_at"]), "ends_at": _iso(row["ends_at"]),
                 "tag_label": booking.tag_label(row.get("tag")),
+                "meet_url": row.get("meet_url") if row["status"] == "confirmed" else None,
                 "timezone": s["timezone"], "display_name": s["display_name"], "slug": s["slug"] if s["enabled"] else None,
                 "can_cancel": row["status"] in booking.ACTIVE and row["starts_at"] > datetime.now(UTC)}
 
@@ -621,6 +799,8 @@ def install(app: FastAPI, svc: BookingService, verified_clinician, features=None
         if not svc.cfg.cron_token or not hmac.compare_digest(x_cron_token, svc.cfg.cron_token):
             raise HTTPException(404, "not found")
         need_store()
+        google = svc.sync_google(limit=200)
         out = svc.deliver(svc.base_url(request), limit=200)
+        out["google"] = google
         out["purged"] = svc.store.purge_old()
         return out

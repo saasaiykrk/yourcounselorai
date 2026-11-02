@@ -35,6 +35,15 @@ abstract interface class CalendarRepository {
 
   /// [action]: confirm · reject · cancel · complete.
   Future<Appointment> act(String id, String action);
+
+  /// Google Calendar + Meet (each consultant's own Google account).
+  Future<GoogleConnection> google();
+
+  Future<Uri> googleConnectUrl();
+
+  Future<GoogleConnection> setGoogleMeetFor(String meetFor);
+
+  Future<GoogleConnection> disconnectGoogle();
 }
 
 /// "2026-10-13T18:00": a wall time in the consultant's timezone.
@@ -56,6 +65,18 @@ class ApiCalendarRepository implements CalendarRepository {
 
   @override
   Future<Uint8List?> photo() => _api.bookingPhoto();
+
+  @override
+  Future<GoogleConnection> google() => _api.googleConnection();
+
+  @override
+  Future<Uri> googleConnectUrl() => _api.googleConnectUrl();
+
+  @override
+  Future<GoogleConnection> setGoogleMeetFor(String meetFor) => _api.setGoogleMeetFor(meetFor);
+
+  @override
+  Future<GoogleConnection> disconnectGoogle() => _api.disconnectGoogle();
 
   @override
   Future<void> saveAvailability(List<WorkWindow> windows) => _api.saveAvailability(windows);
@@ -185,6 +206,38 @@ class PreviewCalendarRepository implements CalendarRepository {
 
   @override
   Future<Uint8List?> photo() async => _photo;
+
+  /// Preview: connecting pretends Google said yes (no browser).
+  GoogleConnection googleState = const GoogleConnection(available: true);
+  int connectRequests = 0;
+
+  @override
+  Future<GoogleConnection> google() async => googleState;
+
+  @override
+  Future<Uri> googleConnectUrl() async {
+    connectRequests++;
+    googleState = GoogleConnection(
+      available: true,
+      connected: true,
+      status: 'ok',
+      email: 'you@gmail.com',
+      meetFor: googleState.meetFor,
+    );
+    return Uri.parse('https://accounts.google.com/o/oauth2/v2/auth?preview=1');
+  }
+
+  @override
+  Future<GoogleConnection> setGoogleMeetFor(String meetFor) async => googleState = GoogleConnection(
+    available: true,
+    connected: googleState.connected,
+    status: googleState.status,
+    email: googleState.email,
+    meetFor: meetFor,
+  );
+
+  @override
+  Future<GoogleConnection> disconnectGoogle() async => googleState = const GoogleConnection(available: true);
 
   @override
   Future<void> saveAvailability(List<WorkWindow> windows) async => _windows = List.of(windows);

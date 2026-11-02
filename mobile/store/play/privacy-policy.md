@@ -43,6 +43,7 @@ We do not sell personal data. We do not show advertising in the app, and case in
 | Supabase (Mumbai, India) | Account and service data | Database and sign-in |
 | Razorpay | Payment details you enter at checkout | Payments |
 | [Email provider] | Client first name, email and appointment time | Booking confirmations and reminders |
+| Google Calendar and Google Meet (only for consultants who connect them) | The appointment time, the consultant's display name and the client's email | The consultant's calendar event, the Meet link and the client's invitation |
 
 We may disclose information if required by law.
 

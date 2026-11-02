@@ -31,6 +31,8 @@ OPTIONAL = {
     "RAZORPAY_KEY_SECRET": "",
     "RAZORPAY_WEBHOOK_SECRET": "",
     "FUNNEL_WEBHOOK_SECRET": "",      # POST /v1/webhooks/purchase (plans bought in a funnel); unset = switched off
+    "GOOGLE_OAUTH_CLIENT_ID": "",     # Google Calendar + Meet for bookings (OAuth web client); unset = not offered
+    "GOOGLE_OAUTH_CLIENT_SECRET": "", # secret: Secret Manager only
     "BYOK_ENCRYPTION_KEY": "",        # 32 random bytes, base64: `openssl rand -base64 32`
     "BYOK_ENCRYPTION_KEY_PREVIOUS": "",  # the old key during a rotation, so stored keys still open
     "BYOK_KEY_VERSION": "1",          # +1 on every rotation
@@ -70,6 +72,8 @@ class Config:
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
     funnel_webhook_secret: str = ""
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
     byok_encryption_key: str = ""
     byok_encryption_key_previous: str = ""
     byok_key_version: int = 1
@@ -160,6 +164,8 @@ def load_config() -> Config:
         razorpay_key_secret=g("RAZORPAY_KEY_SECRET"),
         razorpay_webhook_secret=g("RAZORPAY_WEBHOOK_SECRET"),
         funnel_webhook_secret=g("FUNNEL_WEBHOOK_SECRET"),
+        google_oauth_client_id=g("GOOGLE_OAUTH_CLIENT_ID"),
+        google_oauth_client_secret=g("GOOGLE_OAUTH_CLIENT_SECRET"),
         byok_encryption_key=g("BYOK_ENCRYPTION_KEY"),
         byok_encryption_key_previous=g("BYOK_ENCRYPTION_KEY_PREVIOUS"),
         byok_key_version=int(g("BYOK_KEY_VERSION") or "1"),

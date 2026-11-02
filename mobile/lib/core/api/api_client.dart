@@ -292,6 +292,19 @@ class ApiClient {
 
   Future<void> saveCalendarSettings(BookingSettings s) => _send('PUT', '/v1/calendar/settings', body: s.toJson());
 
+  Future<GoogleConnection> googleConnection() async =>
+      GoogleConnection.fromJson(await _send('GET', '/v1/calendar/google'));
+
+  /// Google's consent page for this consultant, to open in the browser.
+  Future<Uri> googleConnectUrl() async =>
+      Uri.parse((await _send('POST', '/v1/calendar/google/connect'))['url'] as String);
+
+  Future<GoogleConnection> setGoogleMeetFor(String meetFor) async =>
+      GoogleConnection.fromJson(await _send('PUT', '/v1/calendar/google', body: {'meet_for': meetFor}));
+
+  Future<GoogleConnection> disconnectGoogle() async =>
+      GoogleConnection.fromJson(await _send('DELETE', '/v1/calendar/google'));
+
   /// The booking page's photo: a JPEG, PNG or WebP of at most 400 KB (the server checks its bytes).
   Future<void> uploadBookingPhoto(Uint8List image) =>
       _send('PUT', '/v1/calendar/photo', body: {'image': base64Encode(image)});

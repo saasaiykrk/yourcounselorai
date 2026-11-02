@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'api/api_client.dart';
 import 'api/api_exceptions.dart';
@@ -99,6 +100,18 @@ final useOwnKeyProvider = NotifierProvider<OwnKeyChoice, bool>(OwnKeyChoice.new)
 
 final calendarRepositoryProvider = Provider<CalendarRepository>(
   (ref) => AppConfig.previewMode ? PreviewCalendarRepository() : ApiCalendarRepository(ref.watch(apiClientProvider)),
+);
+
+/// The consultant's Google Calendar connection (Booking settings). Re-read when the app comes back from the
+/// browser after Google's consent page.
+final googleConnectionProvider = FutureProvider.autoDispose<GoogleConnection>(
+  (ref) => ref.watch(calendarRepositoryProvider).google(),
+);
+
+/// Opens a web page outside the app (Google's consent page). Replaced in tests.
+final openExternalProvider = Provider<Future<bool> Function(Uri)>(
+  (ref) =>
+      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication),
 );
 
 /// Settings, booking link, hours, time off and counts. Re-read after any change.

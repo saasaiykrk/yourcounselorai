@@ -91,7 +91,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
           const _Section('What is deleted', [
             'Your sign-in and email address.',
             'Your name, mobile number, gender, age, registration number and verification level.',
-            'Your own AI key, if you added one.',
+            'Your own AI key, if you added one, and your Google Calendar connection.',
             "Your booking page, working hours, time off and appointments, including your clients' names "
                 'and emails.',
             'Your consult history and any running plan or credits.',

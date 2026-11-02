@@ -11,6 +11,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/surfaces.dart';
 import 'calendar_screen.dart';
+import 'google_calendar_card.dart';
 
 String _minutesLabel(int m) => m == 0
     ? 'None'
@@ -178,6 +179,8 @@ class _CalendarSettingsScreenState extends ConsumerState<CalendarSettingsScreen>
                   tone: Tone.check,
                   text: 'Online booking is not switched on for this server yet, so this can’t be turned on.',
                 ),
+              const SizedBox(height: 12),
+              const GoogleCalendarCard(),
               const SizedBox(height: 12),
               TextField(
                 controller: _name,

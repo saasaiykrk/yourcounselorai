@@ -233,7 +233,18 @@ def _reminder(c, row) -> None:
         _enqueue(c, row["id"], "reminder", "client", due)
 
 
+def _google_mark(c, appt_id) -> None:
+    """This appointment's Google event must be created, moved or deleted (BookingService.sync_google): when the
+    consultant has connected Google, or an event already exists (it must follow even after a disconnect)."""
+    c.execute("""update appointments a set google_sync='pending', google_attempts=0
+                 where a.id=%s and (a.google_event_id is not null
+                   or exists (select 1 from google_connections g where g.clinician_id=a.clinician_id and g.status='ok'))""",
+              (str(appt_id),))
+
+
 def _notify_new(c, row) -> None:
+    if row["status"] == "confirmed":
+        _google_mark(c, row["id"])
     if row["source"] != "public":                     # added by the consultant: tell the client, if an email was given
         if row["client_ct"] is not None:
             _enqueue(c, row["id"], "confirmed", "client")
@@ -295,6 +306,8 @@ def transition(appt_id, cid, action: str, by: str = "consultant") -> dict:
         row = c.execute("""update appointments set status=%s, cancelled_by=%s, pending_until=null, updated_at=now()
                            where id=%s returning *""",
                         (new, by if new in ("cancelled", "rejected") else None, str(appt_id))).fetchone()
+        if new in ("confirmed", "rejected", "cancelled"):
+            _google_mark(c, row["id"])
         if row["client_ct"] is not None and new in ("confirmed", "rejected", "cancelled"):
             _enqueue(c, row["id"], new, "client")
         if new == "confirmed":
@@ -344,6 +357,13 @@ def reschedule(appt_id, cid, settings: dict, new_start: datetime, new_id: str, s
                 (new_id, str(cid), new_start, new_start + slot, new_start + slot + buf, old["source"], ct, nonce, ver,
                  old["email_hash"], old["manage_hash"], old["consent_at"], str(appt_id), old.get("tag"))).fetchone()
             c.execute("update appointments set rescheduled_to=%s where id=%s", (new_id, str(appt_id)))
+            if old.get("google_event_id"):            # the same Google event moves with the appointment
+                c.execute("""update appointments set google_event_id=%s, meet_url=%s where id=%s""",
+                          (old["google_event_id"], old.get("meet_url"), new_id))
+                c.execute("update appointments set google_event_id=null, google_sync='done' where id=%s",
+                          (str(appt_id),))
+            _google_mark(c, new_id)
+            new = c.execute("select * from appointments where id=%s", (new_id,)).fetchone()
             c.execute("update booking_notifications set status='failed' where appointment_id=%s and kind='reminder' "
                       "and status='pending'", (str(appt_id),))
             if ct is not None:
@@ -376,11 +396,77 @@ def summary(cid, tz_name: str) -> dict:
 
 
 # --- notifications -------------------------------------------------------------------------------
+# --- Google Calendar + Meet (migration 020) -----------------------------------------------------------------
+def google_connection(cid) -> dict | None:
+    with _conn() as c:
+        return c.execute("select * from google_connections where clinician_id=%s", (str(cid),)).fetchone()
+
+
+def save_google_connection(cid, email: str, sealed) -> int:
+    """Connected (or reconnected): keeps the sealed refresh token, and queues an event for every upcoming
+    confirmed appointment that has none yet. Returns how many were queued."""
+    with _conn() as c, c.transaction():
+        c.execute("""insert into google_connections (clinician_id, google_email, ciphertext, nonce, key_version)
+                     values (%s,%s,%s,%s,%s)
+                     on conflict (clinician_id) do update set google_email=excluded.google_email,
+                       ciphertext=excluded.ciphertext, nonce=excluded.nonce, key_version=excluded.key_version,
+                       status='ok', last_error=null, connected_at=now(), updated_at=now()""",
+                  (str(cid), email, sealed.ciphertext, sealed.nonce, sealed.key_version))
+        return c.execute("""update appointments set google_sync='pending', google_attempts=0
+                            where clinician_id=%s and status='confirmed' and starts_at > now()
+                              and google_event_id is null returning id""", (str(cid),)).rowcount
+
+
+def set_google_meet_for(cid, meet_for: str) -> bool:
+    with _conn() as c:
+        return c.execute("update google_connections set meet_for=%s, updated_at=now() where clinician_id=%s",
+                         (meet_for, str(cid))).rowcount == 1
+
+
+def set_google_status(cid, status: str, error: str | None = None) -> None:
+    with _conn() as c:
+        c.execute("update google_connections set status=%s, last_error=%s, updated_at=now() where clinician_id=%s",
+                  (status, (error or "")[:200] or None, str(cid)))
+
+
+def delete_google_connection(cid) -> dict | None:
+    """Disconnected: forgets the token (the caller revokes it at Google first). Events already made stay."""
+    with _conn() as c:
+        return c.execute("delete from google_connections where clinician_id=%s returning *", (str(cid),)).fetchone()
+
+
+def google_due(limit: int = 50) -> list[dict]:
+    """Appointments whose Google event must change, for consultants whose connection works."""
+    with _conn() as c:
+        return c.execute(
+            """select a.id, a.clinician_id, a.starts_at, a.ends_at, a.status, a.tag, a.client_ct, a.client_nonce,
+                      a.google_event_id, a.meet_url, a.google_attempts, s.display_name, s.timezone,
+                      g.ciphertext, g.nonce as token_nonce, g.key_version, g.meet_for
+               from appointments a join google_connections g on g.clinician_id = a.clinician_id and g.status='ok'
+               join booking_settings s on s.clinician_id = a.clinician_id
+               where a.google_sync='pending' order by a.updated_at limit %s""", (limit,)).fetchall()
+
+
+def google_done(appt_id, event_id: str | None, meet_url: str | None) -> None:
+    with _conn() as c:
+        c.execute("""update appointments set google_event_id=%s, meet_url=%s, google_sync='done' where id=%s""",
+                  (event_id, meet_url, str(appt_id)))
+
+
+def google_failed(appt_id) -> None:
+    """One more failed try; after 5 the appointment stops retrying (shown as not synced)."""
+    with _conn() as c:
+        c.execute("""update appointments set google_attempts=google_attempts+1,
+                       google_sync=case when google_attempts+1 >= 5 then 'failed' else 'pending' end where id=%s""",
+                  (str(appt_id),))
+
+
 def due_notifications(limit: int = 50) -> list[dict]:
     with _conn() as c:
         return c.execute(
             """select n.id, n.kind, n.recipient, n.attempts, a.id as appointment_id, a.clinician_id, a.starts_at,
-                      a.ends_at, a.status, a.tag, a.client_ct, a.client_nonce, s.display_name, s.timezone, s.slug, u.email as clinician_email
+                      a.ends_at, a.status, a.tag, a.client_ct, a.client_nonce, a.meet_url, s.display_name, s.timezone,
+                      s.slug, u.email as clinician_email
                from booking_notifications n join appointments a on a.id = n.appointment_id
                join booking_settings s on s.clinician_id = a.clinician_id
                left join auth.users u on u.id = a.clinician_id

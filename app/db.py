@@ -75,7 +75,8 @@ def delete_account(cid) -> str:
                          where id=%s""", (str(cid),))
             c.execute("update conversations set hidden_at=now() where clinician_id=%s and hidden_at is null",
                       (str(cid),))
-            for table in ("byok_credentials", "appointments", "time_off", "availability_windows", "booking_settings"):
+            for table in ("byok_credentials", "google_connections", "appointments", "time_off",
+                          "availability_windows", "booking_settings"):
                 c.execute(f"delete from {table} where clinician_id=%s", (str(cid),))
             c.execute("update entitlements set status='cancelled' where clinician_id=%s and status='active'",
                       (str(cid),))
