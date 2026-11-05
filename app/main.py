@@ -61,7 +61,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
-from . import account_page, ai_admin_api, billing_api, booking_api, byok, db, deid, education, status_page
+from . import account_page, ai_admin_api, billing_api, booking_api, byok, db, deid, education, privacy_page, status_page
 from .ai_settings import AiStore, ModelRouter
 from .consultation import ConsultationEngine, ConsultationError, public_view
 from .dev_admin import DevAdminStore, DevConsultationStore, DevHistoryStore
@@ -512,6 +512,12 @@ def delete_account(body: DeleteAccountIn, user: dict = Depends(current_user)):
 def delete_account_page():
     """The public web link for account deletion (Google Play asks for one)."""
     return HTMLResponse(account_page.render(), headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_policy_page():
+    """The public privacy policy (Google Play and Google's OAuth verification link to it)."""
+    return HTMLResponse(privacy_page.render(), headers={"Cache-Control": "public, max-age=3600"})
 
 
 _dev_results: dict[tuple[str, str], dict] = {}   # DEV_MODE: replies by (clinician, request_id)

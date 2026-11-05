@@ -84,7 +84,7 @@ Encryption in transit: **Yes** (HTTPS everywhere). Users can ask for their data 
 ## Store settings
 - App category: **Medical**. Tags: Medical reference, Productivity.
 - Contact email: a support address you monitor (required). Website: optional.
-- Privacy policy URL: a public web page with `privacy-policy.md` (after the lawyer's review).
+- Privacy policy URL: https://app.yourcounselor.in/privacy (source: `app/privacy_policy.md`).
 
 ## Graphics checklist
 | Asset | File | Size |
