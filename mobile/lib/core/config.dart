@@ -48,7 +48,7 @@ abstract final class AppConfig {
   static const consentVersion = '2026-11-v5';
 
   /// Shown in Account; must match `version:` in pubspec.yaml (a test checks it).
-  static const appVersion = '1.0.1';
+  static const appVersion = '1.0.2';
 
   /// Demo builds only (--dart-define=ALLOW_SCREEN_CAPTURE=true, CI's "allow_screen_capture"): case screens
   /// no longer block screenshots and screen recording, for making demo videos. Never in a Play build.
