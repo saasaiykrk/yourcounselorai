@@ -9,7 +9,7 @@
 | Tags | Medical reference, Productivity |
 | Contact email | (owner to choose: a support address, e.g. support@<your domain>) |
 | Website | (optional) |
-| Privacy policy URL | (public page: see privacy-policy.md) |
+| Privacy policy URL | https://app.yourcounselor.in/privacy (source: `app/privacy_policy.md`) |
 | Account deletion URL | (required: a web page or form where users ask to delete their account; see play-console-answers.md) |
 
 ## Short description (max 80 characters)

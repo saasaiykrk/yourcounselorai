@@ -346,7 +346,8 @@ security assessment.
    `SMTP_PORT=465`, `SMTP_USERNAME=resend`, `SMTP_FROM=YourCounselor <noreply@yourcounselor.in>`, and the Resend API
    key as the `smtp-password` secret (see "Emails" above).
 5. **Verification** (to remove the "unverified app" screen and the 100-user limit): Google Auth Platform →
-   Verification centre → submit. Google asks for the home page, privacy policy and a short screen recording of
+   Verification centre → submit. Privacy policy URL: `https://app.yourcounselor.in/privacy` (section 4 covers
+   Google user data and the Limited Use statement). Google asks for the home page, privacy policy and a short screen recording of
    connecting and an appointment appearing with a Meet link. Review takes from days to a few weeks.
 
 ## Calendar and online booking (each consultant switches it on for themselves)
@@ -401,7 +402,7 @@ release that adds them is deployed; without it, every new booking fails.
    Even without this job, emails for each booking are sent straight away; only reminders and the 90-day
    clean-up need it.
 5. **Privacy text:** the booking page tells clients what is stored and for how long. The app's privacy pages
-   and `mobile/store/play/privacy-policy.md` cover client booking details (first name, email, appointment time;
+   and `app/privacy_policy.md` cover client booking details (first name, email, appointment time;
    encrypted; 90 days). Ask the data-protection lawyer to review them before inviting the public.
 
 How it is protected:
@@ -458,7 +459,7 @@ Rules that still apply:
   a CHANGELOG entry and the `clinician-reviewed` label (CI enforces the label for that file).
 - The privacy texts must name every AI provider that can be chosen. They name Anthropic and Google (in the app:
   Account → How we protect client data and Data Processing Agreement; for the store:
-  `mobile/store/play/privacy-policy.md`). Adding a provider means updating them, and the consent version in
+  `app/privacy_policy.md`). Adding a provider means updating them, and the consent version in
   `mobile/lib/core/config.dart`, first.
 - The key that is in use by the active model can't be removed unless the server has its own key for it.
 

@@ -63,6 +63,16 @@ const kPrivacyDoc = InfoDoc(
       'A client can cancel with the link in their confirmation email, or write to us to have their details '
           'deleted sooner.',
     ]),
+    InfoSection('Google Calendar (only if you connect it)', [
+      'We use the Google Calendar permission only to create, update and delete the events, with a Google Meet '
+          'link, for appointments booked through YourCounselor, and your Google email only to show which account '
+          'is connected. We never read your other calendar events.',
+      'Google user data is stored encrypted, never sold, never used for advertising or to train AI, and not '
+          'shared except to provide this feature, for security or when the law requires it.',
+      'YourCounselor\'s use and transfer of information received from Google APIs adheres to the Google API '
+          'Services User Data Policy, including the Limited Use requirements.',
+      'Disconnect at any time in Calendar → Booking settings; this revokes our access.',
+    ]),
     InfoSection('What is kept, and who can see it', [
       'Your consults (de-identified text and replies) are stored so you can see them in History.',
       'Only you can see your consults. A small number of administrators can open them for safety review, '
