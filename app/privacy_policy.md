@@ -2,7 +2,7 @@
 
 Last updated: 5 November 2026
 
-YourCounselor ("we", "us") is operated by [legal entity name], [registered address], India. This policy explains what the YourCounselor app, website and booking pages collect, why, and your choices. YourCounselor is a clinical reference and documentation aid for registered mental-health professionals. It is not intended for patients, the public or anyone under 18.
+YourCounselor ("we", "us") is operated by Fabeminds, 5/12, Vijay Vilas, Anandnagar, GB Road, Thane (MS), India. This policy explains what the YourCounselor app, website and booking pages collect, why, and your choices. YourCounselor is a clinical reference and documentation aid for registered mental-health professionals. It is not intended for patients, the public or anyone under 18.
 
 ## 1. Information we collect
 
@@ -81,8 +81,8 @@ To delete your account, use **Account → Delete account** in the app, or follow
 ## 8. Children
 YourCounselor is not for anyone under 18. We do not knowingly collect children's data from app users.
 
-## 9. Grievance Officer
-[Grievance Officer name], saas.ai.yk@gmail.com, [registered address]. We acknowledge every grievance and respond within the period the law requires.
+## 9. Questions and complaints
+Write to saas.ai.yk@gmail.com or to Fabeminds, 5/12, Vijay Vilas, Anandnagar, GB Road, Thane (MS), India. We acknowledge every complaint and respond within the period the law requires.
 
 ## 10. Changes
 We will post any change here and update the date above. Significant changes will be shown in the app.
