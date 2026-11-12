@@ -25,6 +25,14 @@ class PrivacyPageTests(unittest.TestCase):
         self.assertIn("do not use it for advertising", self.page)
         self.assertIn("revokes our access", self.page)
 
+    def test_google_user_data_is_kept_out_of_other_uses(self):
+        # Google's OAuth review: the policy must not read as using Google data beyond the feature itself.
+        self.assertIn("Google user data (from connecting Google Calendar) is not used for any purpose in this "
+                      "section", self.md)
+        self.assertIn("We never use the email address or any other data of a Google account you connect", self.md)
+        self.assertIn("We do not use it for marketing", self.md)
+        self.assertIn("never any Google user data", self.md)
+
     def test_markdown_becomes_safe_html(self):
         html = privacy_page.to_html("## A & B\n- **bold** <script>x</script>\n\n| a | b |\n|---|---|\n| 1 | 2 |")
         self.assertIn("<h2>A &amp; B</h2>", html)
