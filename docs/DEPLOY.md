@@ -346,7 +346,7 @@ security assessment.
    `SMTP_PORT=465`, `SMTP_USERNAME=resend`, `SMTP_FROM=YourCounselor <noreply@yourcounselor.in>`, and the Resend API
    key as the `smtp-password` secret (see "Emails" above).
 5. **Verification** (to remove the "unverified app" screen and the 100-user limit): Google Auth Platform →
-   Verification centre → submit. Privacy policy URL: `https://app.yourcounselor.in/privacy` (section 4 covers
+   Verification centre → submit. Privacy policy URL: `https://app.yourcounselor.in/privacy` (section 2 covers
    Google user data and the Limited Use statement). Google asks for the home page, privacy policy and a short screen recording of
    connecting and an appointment appearing with a Meet link. Review takes from days to a few weeks.
 
